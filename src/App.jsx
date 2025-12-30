@@ -1,81 +1,91 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { db } from './firebase';
 import { ref, onValue, update } from 'firebase/database';
 
+// 引入我們剛剛做的頁面
+import Dashboard from './pages/Dashboard';
+import Accounting from './pages/Accounting';
+import History from './pages/History';
+
 function App() {
-  const [data, setData] = useState({
-    ende: { income: 0, stockValue: 0, stockUnrealized: 0 },
-    ziheng: { income: 0, stockValue: 0, stockUnrealized: 0 },
-    joint: { totalFund: 0, location: "未設定" }
-  });
+  // 1. 設定目前月份 (預設為當下月份 YYYY-MM)
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const [month, setMonth] = useState(currentMonthStr);
+  
+  // 2. 資料庫抓回來的資料
+  const [data, setData] = useState({ joint: {}, ende: {}, ziheng: {} });
+  const [loading, setLoading] = useState(true);
 
+  // 3. 監聽 Firebase (根據選到的 month 改變路徑)
   useEffect(() => {
-    const dataRef = ref(db, '/financialData');
-    onValue(dataRef, (snapshot) => {
+    setLoading(true);
+    // 資料庫結構改成： /financial_v3/2025-12/...
+    const dataRef = ref(db, `/financial_v3/${month}`);
+    
+    // 即時監聽
+    const unsubscribe = onValue(dataRef, (snapshot) => {
       const val = snapshot.val();
-      if (val) setData(val);
+      if (val) {
+        setData(val);
+      } else {
+        // 如果這個月沒資料，就給空物件，避免壞掉
+        setData({ joint: {}, ende: {}, ziheng: {} });
+      }
+      setLoading(false);
     });
-  }, []);
 
-  const updateData = (path, value) => {
-    update(ref(db, '/financialData'), { [path]: value });
+    return () => unsubscribe(); // 關閉監聽
+  }, [month]); // 當 month 改變時，這段會重新執行
+
+  // 4. 更新資料的通用函式
+  const updateData = (subPath, value) => {
+    // 寫入路徑： /financial_v3/2025-12/ende/records/...
+    update(ref(db, `/financial_v3/${month}`), {
+      [subPath]: value
+    });
   };
 
-  const cardStyle = { border: '1px solid #ddd', padding: '20px', borderRadius: '12px', marginBottom: '20px', background: 'white', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' };
-  const inputStyle = { padding: '8px', margin: '5px 0', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' };
-
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', backgroundColor: '#f9f9f9', minHeight: '100vh' }}>
-      <h1 style={{ textAlign: 'center', color: '#333' }}>💰 恩得 & 子恆 財務管家</h1>
-      
-      {/* 共同基金 */}
-      <div style={{ ...cardStyle, borderLeft: '5px solid #2196F3' }}>
-        <h2 style={{ margin: '0 0 15px 0', color: '#1976D2' }}>🤝 共同基金 (Joint)</h2>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>
-          ${(data.joint?.totalFund || 0).toLocaleString()}
-        </div>
-        <label style={{display:'block', marginBottom:'5px', color:'#666'}}>存放位置：</label>
-        <input 
-          style={inputStyle}
-          value={data.joint?.location || ''} 
-          onChange={(e) => updateData('joint/location', e.target.value)}
-          placeholder="例如：玉山銀行"
-        />
-        <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-             <button style={{flex:1, padding:'10px', background:'#4CAF50', color:'white', border:'none', borderRadius:'5px', cursor:'pointer'}} onClick={() => updateData('joint/totalFund', Number(data.joint?.totalFund || 0) + 1000)}>+ 存 $1,000</button>
-             <button style={{flex:1, padding:'10px', background:'#f44336', color:'white', border:'none', borderRadius:'5px', cursor:'pointer'}} onClick={() => updateData('joint/totalFund', Number(data.joint?.totalFund || 0) - 1000)}>- 取 $1,000</button>
-        </div>
-      </div>
+    <BrowserRouter>
+      <div style={{ fontFamily: 'sans-serif', paddingBottom: '80px', background:'#f5f7fa', minHeight:'100vh' }}>
+        
+        {/* 頂部導航列 */}
+        <nav style={{ background: '#2c3e50', padding: '15px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position:'sticky', top:0, zIndex:100 }}>
+            <h1 style={{ margin: 0, fontSize: '1.2rem' }}>💰 ZnE 財務通 ({month})</h1>
+            {/* 切換月份按鈕 */}
+            <Link to="/history" style={{ color: 'white', textDecoration: 'none', fontSize: '0.9rem', border: '1px solid white', padding: '5px 10px', borderRadius: '4px' }}>
+                📅 切換月份
+            </Link>
+        </nav>
 
-      {/* 恩得 */}
-      <div style={cardStyle}>
-        <h3>👩 恩得 (En-De)</h3>
-        <label>本月收入：</label>
-        <input type="number" style={inputStyle} value={data.ende?.income || 0} onChange={(e) => updateData('ende/income', Number(e.target.value))} />
-        <label>股票市值：</label>
-        <input type="number" style={inputStyle} value={data.ende?.stockValue || 0} onChange={(e) => updateData('ende/stockValue', Number(e.target.value))} />
-        <label>未實現損益：</label>
-        <input type="number" style={inputStyle} value={data.ende?.stockUnrealized || 0} onChange={(e) => updateData('ende/stockUnrealized', Number(e.target.value))} />
-        <p style={{ fontWeight:'bold', color: (data.ende?.stockUnrealized || 0) >= 0 ? 'red' : 'green' }}>
-            {(data.ende?.stockUnrealized || 0) >= 0 ? '▲ 賺' : '▼ 賠'} {Math.abs(data.ende?.stockUnrealized || 0)}
-        </p>
-      </div>
+        {/* 路由設定：決定網址對應哪個頁面 */}
+        <Routes>
+          <Route path="/" element={<Dashboard data={data} month={month} loading={loading} />} />
+          <Route path="/accounting" element={<Accounting data={data} updateData={updateData} month={month} />} />
+          <Route path="/history" element={<History currentMonth={month} setMonth={setMonth} />} />
+        </Routes>
 
-      {/* 子恆 */}
-      <div style={cardStyle}>
-        <h3>👨 子恆 (Zi-Heng)</h3>
-        <label>本月收入：</label>
-        <input type="number" style={inputStyle} value={data.ziheng?.income || 0} onChange={(e) => updateData('ziheng/income', Number(e.target.value))} />
-        <label>股票市值：</label>
-        <input type="number" style={inputStyle} value={data.ziheng?.stockValue || 0} onChange={(e) => updateData('ziheng/stockValue', Number(e.target.value))} />
-        <label>未實現損益：</label>
-        <input type="number" style={inputStyle} value={data.ziheng?.stockUnrealized || 0} onChange={(e) => updateData('ziheng/stockUnrealized', Number(e.target.value))} />
-        <p style={{ fontWeight:'bold', color: (data.ziheng?.stockUnrealized || 0) >= 0 ? 'red' : 'green' }}>
-            {(data.ziheng?.stockUnrealized || 0) >= 0 ? '▲ 賺' : '▼ 賠'} {Math.abs(data.ziheng?.stockUnrealized || 0)}
-        </p>
+        {/* 底部導航列 (Tab Bar) */}
+        <BottomNav />
       </div>
-    </div>
+    </BrowserRouter>
   );
+}
+
+// 底部導航元件 (裝飾用，方便手機切換)
+function BottomNav() {
+    const location = useLocation();
+    const isActive = (path) => location.pathname === path ? '#2196F3' : '#999';
+    const navStyle = { flex: 1, textAlign: 'center', padding: '15px', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 'bold' };
+    
+    return (
+        <div style={{ position: 'fixed', bottom: 0, width: '100%', background: 'white', borderTop: '1px solid #ddd', display: 'flex', justifyContent: 'space-around' }}>
+            <Link to="/" style={{ ...navStyle, color: isActive('/') }}>📊 總覽</Link>
+            <Link to="/accounting" style={{ ...navStyle, color: isActive('/accounting') }}>✏️ 記帳</Link>
+            <Link to="/history" style={{ ...navStyle, color: isActive('/history') }}>📅 歷史</Link>
+        </div>
+    );
 }
 
 export default App;
