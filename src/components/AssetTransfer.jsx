@@ -16,6 +16,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   // 狀態
   const [incomeUser, setIncomeUser] = useState('userA');
   const [incomeAmount, setIncomeAmount] = useState('');
+  // ★ 新增：收入備註
+  const [incomeNote, setIncomeNote] = useState('');
 
   const [transSource, setTransSource] = useState('userA');
   const [transTarget, setTransTarget] = useState('jointCash');
@@ -33,8 +35,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     if (!val || val <= 0) return alert("請輸入有效金額");
     
     const payerName = incomeUser === 'userA' ? '恆恆🐶' : '得得🐕';
+    // ★ 如果沒填備註，預設顯示「薪資/收入」
+    const finalNote = incomeNote.trim() || '薪資/收入';
 
-    const confirmMsg = `【確認存入】\n\n日期：${txDate}\n對象：${payerName}\n金額：${formatMoney(val)}\n\n確定要執行嗎？`;
+    const confirmMsg = `【確認存入】\n\n日期：${txDate}\n對象：${payerName}\n來源：${finalNote}\n金額：${formatMoney(val)}\n\n確定要執行嗎？`;
     if (!window.confirm(confirmMsg)) return;
 
     const newAssets = { ...assets };
@@ -45,13 +49,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
       category: '個人收入',
       payer: payerName,
       total: val,
-      note: `薪資/獎金入帳`,
+      note: finalNote, // ★ 記錄自訂的來源
       month: txDate.slice(0, 7),
       date: txDate
     });
 
-    alert(`💰 已存入 ${formatMoney(val)} (日期: ${txDate})`);
+    alert(`💰 已存入 ${formatMoney(val)}`);
     setIncomeAmount('');
+    setIncomeNote(''); // 清空備註
   };
 
   // 2. 劃撥 (個人 -> 共同)
@@ -182,7 +187,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         }
 
         if (window.confirm("⚠️ 警告：匯入將會「覆蓋」目前所有的資料！\n\n確定要還原備份嗎？")) {
-            // 如果 App.jsx 有接上 Firebase，這裡會直接更新到雲端
             if (setAssets) {
                 setAssets(importedData);
                 alert("✅ 資料還原成功！");
@@ -226,7 +230,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
       {/* 存入個人 */}
       {activeTab === 'income' && (
         <div className="glass-card">
-          <h3>💰 新增個人所得</h3>
+          <h3>💰 領錢了！(新增收入)</h3>
+          
           <div style={{ marginBottom: '15px' }}>
             <label>存入誰的戶頭？</label>
             <select className="glass-input" value={incomeUser} onChange={(e)=>setIncomeUser(e.target.value)}>
@@ -234,6 +239,19 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
               <option value="userB">得得🐕</option>
             </select>
           </div>
+
+          {/* ★ 新增：備註欄位 */}
+          <div style={{ marginBottom: '15px' }}>
+            <label>備註 (來源)</label>
+            <input 
+                type="text" 
+                className="glass-input" 
+                value={incomeNote} 
+                onChange={(e)=>setIncomeNote(e.target.value)} 
+                placeholder="例如：薪資、股利、獎金..." 
+            />
+          </div>
+
           <div style={{ marginBottom: '15px' }}>
             <label>金額 {incomeAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(incomeAmount)})</span>}</label>
             <input 
@@ -249,7 +267,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 劃撥 */}
+      {/* 劃撥 (維持不變) */}
       {activeTab === 'transfer' && (
         <div className="glass-card">
           <h3>💸 上繳公庫 (個人 ➔ 共同)</h3>
@@ -293,7 +311,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 共同支出/變現 */}
+      {/* 共同支出/變現 (維持不變) */}
       {activeTab === 'withdraw' && (
         <div className="glass-card" style={{border:'1px solid #ffb3b3'}}>
           <h3>📤 共同資產變動</h3>
@@ -359,7 +377,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 資料管理區塊 (保留匯出匯入，移除救命按鈕) */}
+      {/* 資料管理區塊 */}
       <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
         <h3 style={{color:'#666', marginBottom:'15px'}}>💾 資料管理</h3>
         
