@@ -183,7 +183,7 @@ function App() {
   const Navbar = () => (
     <nav className="glass-nav">
       <div style={{ fontSize: '1.2rem', lineHeight: '1.2' }}> {/* 建議：加個 lineHeight 讓兩行不要黏太緊 */}
-        馬鈴薯管家 
+        🥔管家 
         <span style={{
             fontSize:'0.8rem', 
             opacity:0.6, 
