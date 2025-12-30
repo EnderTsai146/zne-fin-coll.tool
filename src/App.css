@@ -1,42 +1,193 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+/* =========================================
+   1. 核心變數與背景設定 (WWDC 風格)
+   ========================================= */
+   :root {
+    /* 定義 WWDC25 加強版色票 - 飽和度稍微調高 */
+    --apple-strong-purple: #d8b4fe;
+    --apple-strong-blue: #7fbafd;
+    --apple-strong-pink: #ffb3b3;
+    --apple-text-main: #1d1d1f;
+  }
+  
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    color: var(--apple-text-main);
+    
+    /* 背景底色：純白 + 珍珠光暈 */
+    background-color: #ffffff;
+    background-image: 
+        radial-gradient(circle at 15% 20%, rgba(216, 180, 254, 0.7) 0%, transparent 45%), /* 紫色光暈 */
+        radial-gradient(circle at 85% 25%, rgba(127, 186, 253, 0.7) 0%, transparent 45%), /* 藍色光暈 */
+        radial-gradient(circle at 50% 80%, rgba(255, 179, 179, 0.6) 0%, transparent 45%), /* 粉紅光暈 */
+        radial-gradient(circle at 80% 90%, rgba(253, 253, 150, 0.6) 0%, transparent 40%); /* 黃色光暈 */
+        
+    background-attachment: fixed;
+    background-size: 120% 120%;
+  }
+  
+  /* =========================================
+     2. 玻璃擬態元件 (Card, Input, Button)
+     ========================================= */
+  
+  /* 玻璃導航列 */
+  .glass-nav {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.75) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 25px;
+    font-weight: 600;
+    color: #1d1d1f;
+  }
+  
+  /* 玻璃卡片 */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(25px) saturate(200%); 
+    -webkit-backdrop-filter: blur(25px) saturate(200%);
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05);
+    padding: 30px;
+    margin-bottom: 25px;
+    color: var(--apple-text-main);
+  }
+  
+  /* 玻璃輸入框 */
+  .glass-input {
+    width: 100%;
+    padding: 14px 18px;
+    margin-bottom: 15px;
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 14px;
+    box-sizing: border-box;
+    font-size: 1rem;
+    color: var(--apple-text-main);
+    outline: none;
+    transition: all 0.3s ease;
+  }
+  
+  .glass-input:focus {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: var(--apple-strong-blue);
+    box-shadow: 0 0 0 4px rgba(127, 186, 253, 0.25);
+  }
+  
+  /* 玻璃按鈕 */
+  .glass-btn {
+    padding: 14px 24px;
+    border: none;
+    border-radius: 99px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, #8ec5fc 0%, #e0c3fc 50%, #ffc2c2 100%);
+    background-size: 200% auto;
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(142, 197, 252, 0.3);
+  }
+  
+  .glass-btn:hover {
+    background-position: right center;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(224, 195, 252, 0.45);
+  }
+  
+  .glass-btn.inactive {
+      filter: grayscale(0.5);
+  }
+  
+  /* =========================================
+     3. 標題與文字特效 (包含您要求的漸層優化)
+     ========================================= */
+  
+  /* 通用標題設定 */
+  h1, h2, h3, h4 {
+    color: var(--apple-text-main);
+    margin-top: 0;
+    font-weight: 700;
+  }
+  
+  /* ★ 重點修改：針對頁面大標題 (h1.page-title)
+     1. 顏色加深：使用稍深的藍紫粉漸層，讓字在白底上更清楚。
+     2. 增加陰影：使用 drop-shadow 來製造浮起來的立體感。
+  */
+
+/* ★ 重點修改：針對頁面大標題 */
+h1.page-title, .wwdc-text-gradient {
+  background: linear-gradient(
+    90deg, 
+    #5E9BF7 0%,   
+    #B78AF7 50%,  
+    #FF8A8A 100%  
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent; 
+  
+  /* 修改這裡：把陰影加深 (0.15 -> 0.5)，並稍微擴散一點 */
+  filter: drop-shadow(0 4px 2px rgba(0, 0, 0, 0.15));
+  
   text-align: center;
+  margin-bottom: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+  
+  /* =========================================
+     4. 您原本的 Vite 預設樣式 (保留在下方)
+     ========================================= */
+  
+  #root {
+    max-width: 1280px;
+    margin: 0 auto;
+    /* padding: 2rem; <-- 建議拿掉這個，不然導航列會被往內縮 */
+    text-align: center;
+    width: 100%; /* 確保滿版 */
   }
-  to {
-    transform: rotate(360deg);
+  
+  .logo {
+    height: 6em;
+    padding: 1.5em;
+    will-change: filter;
+    transition: filter 300ms;
   }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+  .logo:hover {
+    filter: drop-shadow(0 0 2em #646cffaa);
   }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
+  .logo.react:hover {
+    filter: drop-shadow(0 0 2em #61dafbaa);
+  }
+  
+  @keyframes logo-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  @media (prefers-reduced-motion: no-preference) {
+    a:nth-of-type(2) .logo {
+      animation: logo-spin infinite 20s linear;
+    }
+  }
+  
+  .card {
+    padding: 2em;
+  }
+  
+  .read-the-docs {
+    color: #888;
+  }

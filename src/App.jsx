@@ -1,91 +1,163 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { db } from './firebase';
-import { ref, onValue, update } from 'firebase/database';
-
-// 引入我們剛剛做的頁面
-import Dashboard from './pages/Dashboard';
-import Accounting from './pages/Accounting';
-import History from './pages/History';
+// src/App.jsx
+import React, { useState, useEffect } from 'react';
+import Login from './components/Login';
+import TotalOverview from './components/TotalOverview';
+import MonthlyView from './components/MonthlyView';
+import AssetTransfer from './components/AssetTransfer';
+import ExpenseEntry from './components/ExpenseEntry';
+import './index.css';
 
 function App() {
-  // 1. 設定目前月份 (預設為當下月份 YYYY-MM)
-  const currentMonthStr = new Date().toISOString().slice(0, 7);
-  const [month, setMonth] = useState(currentMonthStr);
-  
-  // 2. 資料庫抓回來的資料
-  const [data, setData] = useState({ joint: {}, ende: {}, ziheng: {} });
-  const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState(''); // 這裡儲存的是「恩得」或「子恆」
+  const [currentPage, setCurrentPage] = useState('overview');
 
-  // 3. 監聽 Firebase (根據選到的 month 改變路徑)
+  // 初始化資料
+  const [assets, setAssets] = useState(() => {
+    const saved = localStorage.getItem('myAppAssets_v2');
+    return saved ? JSON.parse(saved) : {
+      userA: 0, userB: 0, jointCash: 0,
+      jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
+      roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
+      monthlyExpenses: [] 
+    };
+  });
+
   useEffect(() => {
-    setLoading(true);
-    // 資料庫結構改成： /financial_v3/2025-12/...
-    const dataRef = ref(db, `/financial_v3/${month}`);
-    
-    // 即時監聽
-    const unsubscribe = onValue(dataRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(val);
-      } else {
-        // 如果這個月沒資料，就給空物件，避免壞掉
-        setData({ joint: {}, ende: {}, ziheng: {} });
-      }
-      setLoading(false);
-    });
+    localStorage.setItem('myAppAssets_v2', JSON.stringify(assets));
+  }, [assets]);
 
-    return () => unsubscribe(); // 關閉監聽
-  }, [month]); // 當 month 改變時，這段會重新執行
+  // --- 核心功能 1: 新增交易 (AssetTransfer) ---
+  const handleTransaction = (newAssets, historyRecord) => {
+    setAssets(prev => {
+      const timestamp = historyRecord.date 
+        ? `${historyRecord.date}T12:00:00.000Z` 
+        : new Date().toISOString();
 
-  // 4. 更新資料的通用函式
-  const updateData = (subPath, value) => {
-    // 寫入路徑： /financial_v3/2025-12/ende/records/...
-    update(ref(db, `/financial_v3/${month}`), {
-      [subPath]: value
+      return {
+        ...newAssets,
+        monthlyExpenses: [
+          ...prev.monthlyExpenses,
+          {
+            ...historyRecord,
+            // ★ 修正重點：加入真實操作者 (登入帳號)
+            operator: currentUser, 
+            timestamp: timestamp 
+          }
+        ]
+      };
     });
   };
 
-  return (
-    <BrowserRouter>
-      <div style={{ fontFamily: 'sans-serif', paddingBottom: '80px', background:'#f5f7fa', minHeight:'100vh' }}>
-        
-        {/* 頂部導航列 */}
-        <nav style={{ background: '#2c3e50', padding: '15px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position:'sticky', top:0, zIndex:100 }}>
-            <h1 style={{ margin: 0, fontSize: '1.2rem' }}>💰 ZnE 財務通 ({month})</h1>
-            {/* 切換月份按鈕 */}
-            <Link to="/history" style={{ color: 'white', textDecoration: 'none', fontSize: '0.9rem', border: '1px solid white', padding: '5px 10px', borderRadius: '4px' }}>
-                📅 切換月份
-            </Link>
-        </nav>
+  // --- 核心功能 2: 記帳 (ExpenseEntry) ---
+  const handleAddExpense = (date, expenseData, totalAmount, payer) => {
+    setAssets(prev => {
+      const payerKey = payer === 'heng' ? 'userA' : 'userB';
+      const payerName = payer === 'heng' ? '恆恆🐶' : '得得🐕';
 
-        {/* 路由設定：決定網址對應哪個頁面 */}
-        <Routes>
-          <Route path="/" element={<Dashboard data={data} month={month} loading={loading} />} />
-          <Route path="/accounting" element={<Accounting data={data} updateData={updateData} month={month} />} />
-          <Route path="/history" element={<History currentMonth={month} setMonth={setMonth} />} />
-        </Routes>
+      if (prev[payerKey] < totalAmount) {
+        alert(`⚠️ ${payerName} 的個人餘額不足！`);
+      }
 
-        {/* 底部導航列 (Tab Bar) */}
-        <BottomNav />
+      return {
+        ...prev,
+        [payerKey]: prev[payerKey] - totalAmount,
+        monthlyExpenses: [
+          ...prev.monthlyExpenses,
+          { 
+            date,
+            month: date.slice(0, 7),
+            type: 'expense', 
+            category: '個人支出',
+            details: expenseData, 
+            total: totalAmount, 
+            payer: payerName, // 這是「資金歸屬人」
+            operator: currentUser, // ★ 修正重點：這是「系統操作者」
+            note: '月結記帳',
+            timestamp: `${date}T12:00:00.000Z`
+          }
+        ]
+      };
+    });
+    alert("✅ 記帳完成！已從個人帳戶扣除支出。");
+    setCurrentPage('overview');
+  };
+
+  // --- 核心功能 3: 刪除紀錄 (Undo) ---
+  const handleDeleteTransaction = (indexToDelete) => {
+    setAssets(prev => {
+      const record = prev.monthlyExpenses[indexToDelete];
+      if (!record) return prev;
+
+      const newAssets = { ...prev };
+      const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
+
+      switch (record.type) {
+        case 'income': 
+          if (payerKey) newAssets[payerKey] -= record.total;
+          break;
+        case 'expense': 
+          if (payerKey) newAssets[payerKey] += record.total;
+          break;
+        case 'spend': 
+          newAssets.jointCash += record.total;
+          break;
+        case 'transfer': 
+           if (payerKey) newAssets[payerKey] += record.total;
+           if (record.note.includes('共同現金')) {
+             newAssets.jointCash -= record.total;
+           } else {
+             const typeMatch = record.note.split('-')[1]; 
+             if (typeMatch && newAssets.jointInvestments[typeMatch] !== undefined) {
+               newAssets.jointInvestments[typeMatch] -= record.total;
+             }
+           }
+           break;
+        case 'liquidate': 
+           newAssets.jointCash -= record.total;
+           if (record.note.includes('賣出')) {
+             const type = record.note.split(' ')[1]; 
+             if (type && newAssets.jointInvestments[type] !== undefined) {
+                newAssets.jointInvestments[type] += record.total; 
+             }
+           }
+           break;
+        default: break;
+      }
+
+      newAssets.monthlyExpenses = prev.monthlyExpenses.filter((_, i) => i !== indexToDelete);
+      return newAssets;
+    });
+    alert("🗑️ 已刪除紀錄，並自動復原/扣除相關金額！");
+  };
+
+  if (!isLoggedIn) {
+    return <Login onLogin={(name) => { setIsLoggedIn(true); setCurrentUser(name); }} />;
+  }
+
+  const Navbar = () => (
+    <nav className="glass-nav">
+      <div style={{ fontSize: '1.2rem' }}>雙人資產管家 <span style={{fontSize:'0.8rem', opacity:0.6}}>({currentUser})</span></div>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('overview')}>總覽</button>
+        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('monthly')}>歷史紀錄</button>
+        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('transfer')}>資產操作</button>
+        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('expense')}>記帳</button>
       </div>
-    </BrowserRouter>
+    </nav>
   );
-}
 
-// 底部導航元件 (裝飾用，方便手機切換)
-function BottomNav() {
-    const location = useLocation();
-    const isActive = (path) => location.pathname === path ? '#2196F3' : '#999';
-    const navStyle = { flex: 1, textAlign: 'center', padding: '15px', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 'bold' };
-    
-    return (
-        <div style={{ position: 'fixed', bottom: 0, width: '100%', background: 'white', borderTop: '1px solid #ddd', display: 'flex', justifyContent: 'space-around' }}>
-            <Link to="/" style={{ ...navStyle, color: isActive('/') }}>📊 總覽</Link>
-            <Link to="/accounting" style={{ ...navStyle, color: isActive('/accounting') }}>✏️ 記帳</Link>
-            <Link to="/history" style={{ ...navStyle, color: isActive('/history') }}>📅 歷史</Link>
-        </div>
-    );
+  return (
+    <div>
+      <Navbar />
+      <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+        {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={setAssets} />}
+        {currentPage === 'monthly' && <MonthlyView assets={assets} onDelete={handleDeleteTransaction} />} 
+        {currentPage === 'transfer' && <AssetTransfer assets={assets} onTransaction={handleTransaction} />}
+        {currentPage === 'expense' && <ExpenseEntry onAddExpense={handleAddExpense} />}
+      </div>
+    </div>
+  );
 }
 
 export default App;

@@ -54,23 +54,21 @@ body {
     color: var(--apple-text-main);
 }
 
-/* 3. 玻璃導航列 (您說的「醜醜的深灰色」就是這裡修正) */
 .glass-nav {
-    /* 強制背景為「高亮白玻璃」，絕對不會是灰色 */
-    background: rgba(255, 255, 255, 0.75) !important;
+    position: sticky;
+    top: 0;
+    z-index: 1000; /* 確保浮在所有內容上面 */
     
-    /* 磨砂效果 */
+    background: rgba(255, 255, 255, 0.65) !important; /* 透光白 */
     backdrop-filter: blur(20px) saturate(180%) !important;
     -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
     
-    /* 邊框 */
     border-bottom: 1px solid rgba(255, 255, 255, 0.5);
-    
-    /* 去掉陰影，改用光澤感 */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
-    
-    /* 確保文字是深色 */
-    color: var(--apple-text-main) !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 25px;
+    font-weight: 600;
 }
 
 /* 4. 玻璃輸入框 */
