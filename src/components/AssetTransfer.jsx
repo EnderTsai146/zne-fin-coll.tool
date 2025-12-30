@@ -226,7 +226,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
       {/* 存入個人 */}
       {activeTab === 'income' && (
         <div className="glass-card">
-          <h3>💰 領錢了！(新增收入)</h3>
+          <h3>💰 新增個人所得</h3>
           <div style={{ marginBottom: '15px' }}>
             <label>存入誰的戶頭？</label>
             <select className="glass-input" value={incomeUser} onChange={(e)=>setIncomeUser(e.target.value)}>

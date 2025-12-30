@@ -182,12 +182,21 @@ function App() {
 
   const Navbar = () => (
     <nav className="glass-nav">
-      <div style={{ fontSize: '1.2rem' }}>雙人資產管家 <span style={{fontSize:'0.8rem', opacity:0.6}}>({currentUser})</span></div>
+      <div style={{ fontSize: '1.2rem', lineHeight: '1.2' }}> {/* 建議：加個 lineHeight 讓兩行不要黏太緊 */}
+        馬鈴薯管家 
+        <span style={{
+            fontSize:'0.8rem', 
+            opacity:0.6, 
+            display: 'block'  // 關鍵在這裡：這會強制換行
+        }}>
+            (目前使用者：{currentUser})
+        </span>
+      </div>
       <div style={{ display: 'flex', gap: '10px' }}>
-        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('overview')}>總覽</button>
+        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('overview')}>資產總覽</button>
         <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('monthly')}>歷史紀錄</button>
         <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('transfer')}>資產操作</button>
-        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('expense')}>記帳</button>
+        <button className="glass-btn" style={{padding:'8px 12px', fontSize:'0.9rem'}} onClick={() => setCurrentPage('expense')}>記錄支出</button>
       </div>
     </nav>
   );
