@@ -1,24 +1,20 @@
-// Import the functions you need from the SDKs you need
+// src/firebase.js
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { getFirestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// 您的設定檔
 const firebaseConfig = {
-  apiKey: "AIzaSyBRtXnNk1dxLPRuJSRUboE5PdsB6rVS5Us",
-  authDomain: "zne-fin-d13e2.firebaseapp.com",
-  projectId: "zne-fin-d13e2",
-  storageBucket: "zne-fin-d13e2.firebasestorage.app",
-  messagingSenderId: "408036683766",
-  appId: "1:408036683766:web:17e054d1355a92a52261d7",
-  measurementId: "G-KJSGBV22BX"
+  apiKey: "AIzaSyBRtXnNk1dxLPRuJSRUboE5PdsB6rVS5Us",
+  authDomain: "zne-fin-d13e2.firebaseapp.com",
+  projectId: "zne-fin-d13e2",
+  storageBucket: "zne-fin-d13e2.firebasestorage.app",
+  messagingSenderId: "408036683766",
+  appId: "1:408036683766:web:17e054d1355a92a52261d7",
+  measurementId: "G-KJSGBV22BX"
 };
 
-// Initialize Firebase
+// 初始化 Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 
-import { getDatabase } from "firebase/database";
-export const db = getDatabase(app);
+// 匯出資料庫實例，讓其他檔案可以使用
+export const db = getFirestore(app);
