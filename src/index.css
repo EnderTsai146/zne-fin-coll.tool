@@ -1,68 +1,160 @@
+/* src/index.css */
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* 定義 WWDC25 加強版色票 - 飽和度稍微調高，讓漸層更明顯 */
+  --apple-strong-purple: #d8b4fe; /* 更明顯的紫 */
+  --apple-strong-blue: #7fbafd;   /* 更明顯的藍 */
+  --apple-strong-pink: #ffb3b3;   /* 更明顯的粉 */
+  --apple-strong-cyan: #a0e1fa;   /* 更明顯的青 */
+  --apple-strong-yellow: #fdfd96; /* 亮黃 */
+  
+  --apple-text-main: #1d1d1f;     /* 深灰字體 */
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
+/* 1. 整體背景：強化流動色彩 */
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    color: var(--apple-text-main);
+    padding-bottom: 80px;
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
+    /* 背景底色：純白 */
     background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+    
+    /* 關鍵修正：色塊加大、透明度提高 (0.4 -> 0.7)，位置更靠近中間 */
+    background-image: 
+        radial-gradient(circle at 15% 20%, rgba(216, 180, 254, 0.7) 0%, transparent 45%), /* 紫色光暈 */
+        radial-gradient(circle at 85% 25%, rgba(127, 186, 253, 0.7) 0%, transparent 45%), /* 藍色光暈 */
+        radial-gradient(circle at 50% 80%, rgba(255, 179, 179, 0.6) 0%, transparent 45%), /* 粉紅光暈 */
+        radial-gradient(circle at 80% 90%, rgba(253, 253, 150, 0.6) 0%, transparent 40%); /* 黃色光暈 */
+        
+    background-attachment: fixed; /* 讓背景固定，卡片滑動時會有透視感 */
+    background-size: 120% 120%;   /* 稍微放大背景，讓漸層過渡更平滑 */
+}
+  
+/* 2. 核心：玻璃卡片 (更透亮，讓背景色透出來) */
+.glass-card {
+    /* 背景改為「半透明白」，透明度調低一點 (0.65 -> 0.55) 讓背後鮮豔的色彩透出來 */
+    background: rgba(255, 255, 255, 0.55);
+    
+    /* 模糊度稍微降低，增加透視感 */
+    backdrop-filter: blur(25px) saturate(200%); 
+    -webkit-backdrop-filter: blur(25px) saturate(200%);
+    
+    border-radius: 24px;
+    /* 邊框改為白色半透明，像玻璃切面 */
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    
+    /* 陰影變得非常淡，只保留立體感 */
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05);
+    
+    padding: 30px;
+    margin-bottom: 25px;
+    color: var(--apple-text-main);
+}
+
+/* 3. 玻璃導航列 (您說的「醜醜的深灰色」就是這裡修正) */
+.glass-nav {
+    /* 強制背景為「高亮白玻璃」，絕對不會是灰色 */
+    background: rgba(255, 255, 255, 0.75) !important;
+    
+    /* 磨砂效果 */
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    
+    /* 邊框 */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+    
+    /* 去掉陰影，改用光澤感 */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+    
+    /* 確保文字是深色 */
+    color: var(--apple-text-main) !important;
+}
+
+/* 4. 玻璃輸入框 */
+.glass-input {
+    width: 100%;
+    padding: 14px 18px;
+    margin-bottom: 15px;
+    
+    /* 幾乎全透明，只留一點點白 */
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 14px;
+    
+    box-sizing: border-box;
+    font-size: 1rem;
+    color: var(--apple-text-main);
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.glass-input:focus {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: var(--apple-strong-blue);
+    box-shadow: 0 0 0 4px rgba(127, 186, 253, 0.25); /* 藍色光暈 */
+}
+
+/* 5. 漸層按鈕 (對比度加強) */
+.glass-btn {
+    padding: 14px 24px;
+    border: none;
+    border-radius: 99px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    
+    /* 使用更鮮豔的 WWDC 漸層色 */
+    background: linear-gradient(
+        135deg, 
+        #8ec5fc 0%, 
+        #e0c3fc 50%, 
+        #ffc2c2 100%
+    );
+    background-size: 200% auto;
+    
+    color: #fff;
+    /* 按鈕陰影帶顏色 */
+    box-shadow: 0 6px 20px rgba(142, 197, 252, 0.3);
+}
+
+.glass-btn:hover {
+    background-position: right center;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(224, 195, 252, 0.45);
+}
+
+/* 6. (新增) 漸層文字特效 - 讓主要標題也有 WWDC 風格 */
+h1 {
+    /* 字體本身套用漸層 */
+    background: linear-gradient(
+        90deg, 
+        #7FBAFD 0%, 
+        #D8B4FE 50%, 
+        #FFB3B3 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent; /* 文字透明，透出背景漸層 */
+    
+    /* 備用顏色 (如果瀏覽器不支援) */
+    text-fill-color: transparent;
+    display: inline-block; /* 確保漸層不會跑版 */
+}
+
+/* 其餘標題維持深灰 */
+h2, h3, h4 {
+    color: var(--apple-text-main) !important;
+    margin-top: 0;
+    font-weight: 600;
+}
+
+/* 修正：確保圖表標題也是深色 */
+.chart-container h2 {
+    color: var(--apple-text-main) !important;
+    text-fill-color: initial; /* 避免繼承到 h1 的漸層設定 */
+    background: none;
 }
