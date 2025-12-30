@@ -147,14 +147,14 @@ const AssetTransfer = ({ assets, onTransaction }) => {
     <div>
       <h1 className="page-title">資產操作</h1>
       
-      {/* 1. 分頁按鈕 (現在移到最上方) */}
+      {/* 1. 分頁按鈕 */}
       <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
         <button className={`glass-btn ${activeTab==='income'?'':'inactive'}`} onClick={()=>setActiveTab('income')} style={{flex:1}}>存入個人</button>
         <button className={`glass-btn ${activeTab==='transfer'?'':'inactive'}`} onClick={()=>setActiveTab('transfer')} style={{flex:1}}>轉入共同</button>
         <button className={`glass-btn ${activeTab==='withdraw'?'':'inactive'}`} onClick={()=>setActiveTab('withdraw')} style={{flex:1}}>共同支出</button>
       </div>
 
-      {/* 2. 交易日期 (現在移到按鈕下方，作為第二步驟) */}
+      {/* 2. 交易日期 */}
       <div className="glass-card" style={{ padding: '15px 20px', marginBottom: '20px', borderLeft: '5px solid #667eea', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <label style={{fontWeight:'bold', fontSize:'1.1rem'}}>📅 交易日期</label>
         <input 
@@ -180,8 +180,16 @@ const AssetTransfer = ({ assets, onTransaction }) => {
             </select>
           </div>
           <div style={{ marginBottom: '15px' }}>
+            {/* ★ inputMode="numeric" */}
             <label>金額 {incomeAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(incomeAmount)})</span>}</label>
-            <input type="number" className="glass-input" value={incomeAmount} onChange={(e)=>setIncomeAmount(e.target.value)} placeholder="輸入金額" />
+            <input 
+                type="number" 
+                inputMode="numeric" 
+                className="glass-input" 
+                value={incomeAmount} 
+                onChange={(e)=>setIncomeAmount(e.target.value)} 
+                placeholder="輸入金額" 
+            />
           </div>
           <button className="glass-btn" style={{width:'100%'}} onClick={handleAddIncome}>確認存入</button>
         </div>
@@ -217,8 +225,16 @@ const AssetTransfer = ({ assets, onTransaction }) => {
              </div>
           )}
           <div style={{ marginBottom: '15px' }}>
+            {/* ★ inputMode="numeric" */}
             <label>金額 {transAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(transAmount)})</span>}</label>
-            <input type="number" className="glass-input" value={transAmount} onChange={(e)=>setTransAmount(e.target.value)} placeholder="0" />
+            <input 
+                type="number" 
+                inputMode="numeric" 
+                className="glass-input" 
+                value={transAmount} 
+                onChange={(e)=>setTransAmount(e.target.value)} 
+                placeholder="0" 
+            />
           </div>
           <button className="glass-btn" style={{width:'100%'}} onClick={handleTransfer}>確認劃撥</button>
         </div>
@@ -273,8 +289,16 @@ const AssetTransfer = ({ assets, onTransaction }) => {
           )}
 
           <div style={{ marginBottom: '15px' }}>
+            {/* ★ inputMode="numeric" */}
             <label>3. 金額 {withdrawAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(withdrawAmount)})</span>}</label>
-            <input type="number" className="glass-input" value={withdrawAmount} onChange={(e)=>setWithdrawAmount(e.target.value)} placeholder="0" />
+            <input 
+                type="number" 
+                inputMode="numeric"
+                className="glass-input" 
+                value={withdrawAmount} 
+                onChange={(e)=>setWithdrawAmount(e.target.value)} 
+                placeholder="0" 
+            />
           </div>
           
           <button className="glass-btn" style={{width:'100%', background:'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', color:'#d63031'}} onClick={handleWithdraw}>

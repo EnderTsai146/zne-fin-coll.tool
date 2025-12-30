@@ -156,3 +156,20 @@ h2, h3, h4 {
     text-fill-color: initial; /* 避免繼承到 h1 的漸層設定 */
     background: none;
 }
+
+/* src/index.css (請加在最下方) */
+
+/* === 新增：總覽頁面的響應式網格 === */
+/* 預設 (電腦版)：左右兩欄並排 */
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* 當螢幕寬度小於 768px (手機/平板直向) 時：強制變為單欄上下排列 */
+@media (max-width: 768px) {
+  .overview-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
