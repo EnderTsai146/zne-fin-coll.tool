@@ -1,13 +1,17 @@
 // src/components/AssetTransfer.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
-const AssetTransfer = ({ assets, onTransaction }) => {
+// 接收 setAssets 以便進行「匯入還原」操作
+const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [activeTab, setActiveTab] = useState('income');
   
-  // 全域交易日期 (預設為今天 YYYY-MM-DD)
+  // 全域交易日期 (預設為今天)
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // 隱藏的檔案上傳欄位 (用於匯入)
+  const fileInputRef = useRef(null);
 
   // 狀態
   const [incomeUser, setIncomeUser] = useState('userA');
@@ -143,6 +147,57 @@ const AssetTransfer = ({ assets, onTransaction }) => {
     setWithdrawAmount('');
   };
 
+  // --- 資料匯出 (備份) ---
+  const handleExport = () => {
+    const fileName = `雙人資產備份_${new Date().toISOString().split('T')[0]}.json`;
+    const json = JSON.stringify(assets, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- 資料匯入 (還原) ---
+  const handleImportClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        
+        if (importedData.userA === undefined || importedData.monthlyExpenses === undefined) {
+            alert("❌ 檔案格式錯誤！這似乎不是本系統的備份檔。");
+            return;
+        }
+
+        if (window.confirm("⚠️ 警告：匯入將會「覆蓋」目前所有的資料！\n\n確定要還原備份嗎？")) {
+            // 如果 App.jsx 有接上 Firebase，這裡會直接更新到雲端
+            if (setAssets) {
+                setAssets(importedData);
+                alert("✅ 資料還原成功！");
+            } else {
+                alert("⚠️ 系統錯誤：無法寫入資料 (setAssets 未定義)");
+            }
+        }
+      } catch (error) {
+        alert("❌ 讀取失敗，檔案可能已損毀。");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   return (
     <div>
       <h1 className="page-title">資產操作</h1>
@@ -180,7 +235,6 @@ const AssetTransfer = ({ assets, onTransaction }) => {
             </select>
           </div>
           <div style={{ marginBottom: '15px' }}>
-            {/* ★ inputMode="numeric" */}
             <label>金額 {incomeAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(incomeAmount)})</span>}</label>
             <input 
                 type="number" 
@@ -225,7 +279,6 @@ const AssetTransfer = ({ assets, onTransaction }) => {
              </div>
           )}
           <div style={{ marginBottom: '15px' }}>
-            {/* ★ inputMode="numeric" */}
             <label>金額 {transAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(transAmount)})</span>}</label>
             <input 
                 type="number" 
@@ -289,7 +342,6 @@ const AssetTransfer = ({ assets, onTransaction }) => {
           )}
 
           <div style={{ marginBottom: '15px' }}>
-            {/* ★ inputMode="numeric" */}
             <label>3. 金額 {withdrawAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(withdrawAmount)})</span>}</label>
             <input 
                 type="number" 
@@ -306,6 +358,22 @@ const AssetTransfer = ({ assets, onTransaction }) => {
           </button>
         </div>
       )}
+
+      {/* 資料管理區塊 (保留匯出匯入，移除救命按鈕) */}
+      <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+        <h3 style={{color:'#666', marginBottom:'15px'}}>💾 資料管理</h3>
+        
+        <div style={{display:'flex', gap:'15px'}}>
+            <button className="glass-btn" style={{flex:1, background: '#1d1d1f', color:'white', fontSize:'0.9rem'}} onClick={handleExport}>
+                📥 匯出備份
+            </button>
+            <button className="glass-btn" style={{flex:1, background: 'rgba(255,255,255,0.8)', color:'#1d1d1f', border:'1px solid #ccc', fontSize:'0.9rem'}} onClick={handleImportClick}>
+                📤 匯入還原
+            </button>
+            <input type="file" ref={fileInputRef} style={{display:'none'}} accept=".json" onChange={handleFileChange} />
+        </div>
+      </div>
+
     </div>
   );
 };
