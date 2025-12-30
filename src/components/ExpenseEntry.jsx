@@ -29,7 +29,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
   return (
     <div className="glass-card">
       <h1 className="page-title" style={{fontSize:'1.8rem', marginBottom:'20px'}}>個人記帳</h1>
-      <p style={{ color: '#666', marginBottom: '20px', textAlign:'center' }}>請輸入支出總額，將從個人帳戶扣除</p>
+      <p style={{ color: '#666', marginBottom: '20px', textAlign:'center' }}>輸入支出金額後，將從個人帳戶扣除。請注意日期。</p>
 
       {/* ★ 修改重點：改用 Grid 佈局，強制一行顯示，比例為 6:4 */}
       <div style={{
@@ -45,7 +45,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
             <input 
                 type="date" 
                 className="glass-input" 
-                style={{minWidth: 0, padding: '12px 10px'}} // 微調內距
+                style={{minWidth: 0, padding: '12px 10px', width: '160px'}} // 微調內距
                 value={date} 
                 onChange={(e) => setDate(e.target.value)}
             />
@@ -55,7 +55,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
             <label style={{display:'block', marginBottom:'5px'}}>付款人</label>
             <select 
                 className="glass-input" 
-                style={{minWidth: 0, padding: '12px 10px'}} // 微調內距
+                style={{minWidth: 0, padding: '20px 10px'}} // 微調內距
                 value={payer} 
                 onChange={(e)=>setPayer(e.target.value)}
             >
