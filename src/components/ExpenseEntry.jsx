@@ -72,6 +72,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
         <div>
           <label>
             🍱 餐費 
+            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.food && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.food)})</span>}
           </label>
           <input 
@@ -87,6 +88,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
         <div>
           <label>
             🛍️ 購物
+            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.shopping && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.shopping)})</span>}
           </label>
           <input 
@@ -102,6 +104,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
         <div>
           <label>
             📱 固定費用
+            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.fixed && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.fixed)})</span>}
           </label>
           <input 
@@ -117,6 +120,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
         <div>
           <label>
             🧩 其他
+            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.other && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.other)})</span>}
           </label>
           <input 
