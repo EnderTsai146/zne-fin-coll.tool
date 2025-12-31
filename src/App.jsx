@@ -7,16 +7,19 @@ import AssetTransfer from './components/AssetTransfer';
 import ExpenseEntry from './components/ExpenseEntry';
 import './index.css';
 
-// ★ 引入 Firebase 相關功能
+// 引入 Firebase 相關功能
 import { db } from './firebase';
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
+
+// ★★★ 您提供的 Make.com Webhook 網址 ★★★
+const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/bl76wl9v2v6hxd1k5xdm5n1yjt34hs7l"; 
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
   const [currentPage, setCurrentPage] = useState('overview');
 
-  // ★ 修改 1: 預設值先給空或預設結構，等待雲端資料載入
+  // 預設值先給空或預設結構，等待雲端資料載入
   const [assets, setAssets] = useState({
     userA: 0, userB: 0, jointCash: 0,
     jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
@@ -24,7 +27,7 @@ function App() {
     monthlyExpenses: [] 
   });
 
-  // ★ 修改 2: 使用 useEffect 建立即時連線 (Real-time Sync)
+  // 使用 useEffect 建立即時連線 (Real-time Sync)
   useEffect(() => {
     // 指定資料庫路徑：finance (集合) -> data (文件)
     const docRef = doc(db, "finance", "data");
@@ -54,13 +57,27 @@ function App() {
     // eslint-disable-next-line
   }, []); // 只在啟動時執行一次
 
-  // ★ 輔助函式：將資料寫入雲端 (取代原本的 setAssets)
+  // 輔助函式：將資料寫入雲端
   const saveToCloud = (newAssets) => {
     const docRef = doc(db, "finance", "data");
     setDoc(docRef, newAssets)
       .catch((error) => {
         alert("⚠️ 連線錯誤，資料儲存失敗！\n" + error.message);
       });
+  };
+
+  // ★ 新增：發送 Line 通知的功能 (透過 Make.com)
+  const sendLineNotification = async (message) => {
+    try {
+      await fetch(MAKE_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: message })
+      });
+      console.log("Line 通知請求已發送");
+    } catch (error) {
+      console.error("Line 通知發送失敗", error);
+    }
   };
 
   // --- 核心功能 1: 新增交易 (AssetTransfer) ---
@@ -84,6 +101,10 @@ function App() {
 
     // 存到雲端 (畫面會自動更新)
     saveToCloud(finalAssets);
+
+    // ★ 觸發 Line 通知
+    const msg = `【資產變動】\n動作：${historyRecord.category}\n金額：$${historyRecord.total.toLocaleString()}\n操作者：${currentUser}\n備註：${historyRecord.note || '無'}`;
+    sendLineNotification(msg);
   };
 
   // --- 核心功能 2: 記帳 (ExpenseEntry) ---
@@ -118,6 +139,10 @@ function App() {
     saveToCloud(finalAssets);
     alert("✅ 記帳完成！已同步至雲端。");
     setCurrentPage('overview');
+
+    // ★ 觸發 Line 通知
+    const msg = `【個人記帳】\n日期：${date}\n金額：$${totalAmount.toLocaleString()}\n付款人：${payerName}\n操作者：${currentUser}`;
+    sendLineNotification(msg);
   };
 
   // --- 核心功能 3: 刪除紀錄 (Undo) ---
@@ -128,7 +153,7 @@ function App() {
     const newAssets = { ...assets };
     const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
 
-    // 復原金額邏輯 (跟之前一樣)
+    // 復原金額邏輯
     switch (record.type) {
       case 'income': 
         if (payerKey) newAssets[payerKey] -= record.total;
@@ -171,7 +196,6 @@ function App() {
   };
 
   // --- 特殊功能: 總覽頁面的 ROI 更新 ---
-  // TotalOverview 原本是呼叫 setAssets，現在要改為寫入雲端
   const handleAssetsUpdate = (updatedAssets) => {
     saveToCloud(updatedAssets);
   };
@@ -180,14 +204,15 @@ function App() {
     return <Login onLogin={(name) => { setIsLoggedIn(true); setCurrentUser(name); }} />;
   }
 
+  // ★ 您的自訂 Navbar (保留 Potato Steward 設計)
   const Navbar = () => (
     <nav className="glass-nav">
-      <div style={{ fontSize: '1.2rem', lineHeight: '1.2' }}> {/* 建議：加個 lineHeight 讓兩行不要黏太緊 */}
+      <div style={{ fontSize: '1.2rem', lineHeight: '1.2' }}> 
         🥔管家 
         <span style={{
             fontSize:'0.8rem', 
             opacity:0.6, 
-            display: 'block'  // 關鍵在這裡：這會強制換行
+            display: 'block' 
         }}>
             (目前使用者：{currentUser})
         </span>
@@ -205,16 +230,14 @@ function App() {
     <div>
       <Navbar />
       <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-        {/* TotalOverview 需要更新權限，我們傳入 handleAssetsUpdate */}
         {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
         
         {currentPage === 'monthly' && <MonthlyView assets={assets} onDelete={handleDeleteTransaction} />} 
         
-        {/* AssetTransfer 的匯入功能也需要寫入權限 */}
         {currentPage === 'transfer' && (
           <AssetTransfer 
             assets={assets} 
-            setAssets={handleAssetsUpdate} // 這裡傳入的是寫入雲端的函式
+            setAssets={handleAssetsUpdate} 
             onTransaction={handleTransaction} 
           />
         )}
