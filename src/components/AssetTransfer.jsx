@@ -13,23 +13,25 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   // 隱藏的檔案上傳欄位 (用於匯入)
   const fileInputRef = useRef(null);
 
-  // 狀態
+  // 狀態 - 個人收入
   const [incomeUser, setIncomeUser] = useState('userA');
   const [incomeAmount, setIncomeAmount] = useState('');
   const [incomeNote, setIncomeNote] = useState('');
 
+  // 狀態 - 劃撥
   const [transSource, setTransSource] = useState('userA');
   const [transTarget, setTransTarget] = useState('jointCash');
   const [transInvestType, setTransInvestType] = useState('stock');
   const [transAmount, setTransAmount] = useState('');
 
-  // 共同支出相關狀態
+  // 狀態 - 共同支出/變現
   const [withdrawType, setWithdrawType] = useState('spend');
   const [withdrawSource, setWithdrawSource] = useState('jointCash');
   const [withdrawInvestSource, setWithdrawInvestSource] = useState('stock');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  // ★ 新增：共同支出類別
   const [spendCategory, setSpendCategory] = useState('餐費');
+  // ★ 新增：共同支出備註 (細項)
+  const [spendNote, setSpendNote] = useState('');
 
   // 1. 新增個人收入
   const handleAddIncome = () => {
@@ -108,8 +110,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     if (withdrawType === 'spend') {
         if (newAssets.jointCash < val) return alert("❌ 共同現金不足！");
 
-        // ★ 修改確認訊息，加入類別
-        const confirmMsg = `【確認共同支出】\n\n日期：${txDate}\n來源：共同現金\n類別：${spendCategory}\n金額：${formatMoney(val)}\n\n確定要扣款嗎？`;
+        // ★ 組合最終備註：類別 + 細項
+        const finalNote = spendNote.trim() 
+            ? `${spendCategory} - ${spendNote.trim()}` 
+            : spendCategory;
+
+        const confirmMsg = `【確認共同支出】\n\n日期：${txDate}\n來源：共同現金\n內容：${finalNote}\n金額：${formatMoney(val)}\n\n確定要扣款嗎？`;
         if (!window.confirm(confirmMsg)) return;
 
         newAssets.jointCash -= val;
@@ -119,11 +125,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
           category: '共同支出',
           payer: '共同帳戶',
           total: val,
-          note: spendCategory, // ★ 將選擇的類別記錄在備註中
+          note: finalNote, // 存入組合好的備註
           month: selectedMonth,
           date: txDate
         });
         alert(`💸 已支出 ${formatMoney(val)} (${spendCategory})`);
+        
+        // 清空欄位
+        setSpendNote('');
     } 
     // 情境 B: 投資變現
     else {
@@ -337,7 +346,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
             </select>
           </div>
 
-          {/* ★ 新增：當選擇「直接花費」時，顯示類別選單 */}
+          {/* 當選擇「直接花費」時，顯示類別選單 + 備註 */}
           {withdrawType === 'spend' && (
             <>
               <div style={{ marginBottom: '15px' }}>
@@ -348,6 +357,18 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                   <option value="固定費用">固定費用</option>
                   <option value="其他">其他</option>
                 </select>
+              </div>
+
+              {/* ★ 新增：備註輸入框 */}
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>備註 (細項)</label>
+                <input 
+                    type="text" 
+                    className="glass-input" 
+                    value={spendNote} 
+                    onChange={(e)=>setSpendNote(e.target.value)} 
+                    placeholder="例如：麥當勞、衛生紙..." 
+                />
               </div>
 
               <div style={{ marginBottom: '15px' }}>
