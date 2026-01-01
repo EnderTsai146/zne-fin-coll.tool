@@ -16,7 +16,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   // 狀態
   const [incomeUser, setIncomeUser] = useState('userA');
   const [incomeAmount, setIncomeAmount] = useState('');
-  // ★ 新增：收入備註
   const [incomeNote, setIncomeNote] = useState('');
 
   const [transSource, setTransSource] = useState('userA');
@@ -24,10 +23,13 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [transInvestType, setTransInvestType] = useState('stock');
   const [transAmount, setTransAmount] = useState('');
 
+  // 共同支出相關狀態
   const [withdrawType, setWithdrawType] = useState('spend');
   const [withdrawSource, setWithdrawSource] = useState('jointCash');
   const [withdrawInvestSource, setWithdrawInvestSource] = useState('stock');
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  // ★ 新增：共同支出類別
+  const [spendCategory, setSpendCategory] = useState('餐費');
 
   // 1. 新增個人收入
   const handleAddIncome = () => {
@@ -35,7 +37,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     if (!val || val <= 0) return alert("請輸入有效金額");
     
     const payerName = incomeUser === 'userA' ? '恆恆🐶' : '得得🐕';
-    // ★ 如果沒填備註，預設顯示「薪資/收入」
     const finalNote = incomeNote.trim() || '薪資/收入';
 
     const confirmMsg = `【確認存入】\n\n日期：${txDate}\n對象：${payerName}\n來源：${finalNote}\n金額：${formatMoney(val)}\n\n確定要執行嗎？`;
@@ -49,14 +50,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
       category: '個人收入',
       payer: payerName,
       total: val,
-      note: finalNote, // ★ 記錄自訂的來源
+      note: finalNote,
       month: txDate.slice(0, 7),
       date: txDate
     });
 
     alert(`💰 已存入 ${formatMoney(val)}`);
     setIncomeAmount('');
-    setIncomeNote(''); // 清空備註
+    setIncomeNote('');
   };
 
   // 2. 劃撥 (個人 -> 共同)
@@ -107,7 +108,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     if (withdrawType === 'spend') {
         if (newAssets.jointCash < val) return alert("❌ 共同現金不足！");
 
-        const confirmMsg = `【確認共同支出】\n\n日期：${txDate}\n來源：共同現金\n金額：${formatMoney(val)}\n\n確定要扣款嗎？`;
+        // ★ 修改確認訊息，加入類別
+        const confirmMsg = `【確認共同支出】\n\n日期：${txDate}\n來源：共同現金\n類別：${spendCategory}\n金額：${formatMoney(val)}\n\n確定要扣款嗎？`;
         if (!window.confirm(confirmMsg)) return;
 
         newAssets.jointCash -= val;
@@ -117,11 +119,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
           category: '共同支出',
           payer: '共同帳戶',
           total: val,
-          note: '直接花費',
+          note: spendCategory, // ★ 將選擇的類別記錄在備註中
           month: selectedMonth,
           date: txDate
         });
-        alert(`💸 已支出 ${formatMoney(val)}`);
+        alert(`💸 已支出 ${formatMoney(val)} (${spendCategory})`);
     } 
     // 情境 B: 投資變現
     else {
@@ -240,7 +242,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
             </select>
           </div>
 
-          {/* ★ 新增：備註欄位 */}
           <div style={{ marginBottom: '15px' }}>
             <label>備註 (來源)</label>
             <input 
@@ -267,7 +268,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 劃撥 (維持不變) */}
+      {/* 劃撥 */}
       {activeTab === 'transfer' && (
         <div className="glass-card">
           <h3>💸 上繳公庫 (個人 ➔ 共同)</h3>
@@ -311,7 +312,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 共同支出/變現 (維持不變) */}
+      {/* 共同支出/變現 */}
       {activeTab === 'withdraw' && (
         <div className="glass-card" style={{border:'1px solid #ffb3b3'}}>
           <h3>📤 共同資產變動</h3>
@@ -336,13 +337,26 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
             </select>
           </div>
 
+          {/* ★ 新增：當選擇「直接花費」時，顯示類別選單 */}
           {withdrawType === 'spend' && (
+            <>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>2. 扣款來源</label>
+                <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>2. 支出類別</label>
+                <select className="glass-input" value={spendCategory} onChange={(e) => setSpendCategory(e.target.value)}>
+                  <option value="餐費">餐費</option>
+                  <option value="購物">購物</option>
+                  <option value="固定費用">固定費用</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>3. 扣款來源</label>
                 <select className="glass-input" value={withdrawSource} onChange={(e) => setWithdrawSource(e.target.value)}>
                   <option value="jointCash">共同現金</option>
                 </select>
               </div>
+            </>
           )}
 
           {(withdrawType === 'liquidate' || withdrawSource === 'jointInvest') && (
@@ -360,7 +374,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
           )}
 
           <div style={{ marginBottom: '15px' }}>
-            <label>3. 金額 {withdrawAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(withdrawAmount)})</span>}</label>
+            <label>{withdrawType === 'spend' ? '4. 金額' : '3. 金額'} {withdrawAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(withdrawAmount)})</span>}</label>
             <input 
                 type="number" 
                 inputMode="numeric"
