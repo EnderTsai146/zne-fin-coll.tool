@@ -222,8 +222,15 @@ function App() {
       <Navbar />
       <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
         {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
-        {currentPage === 'monthly' && <MonthlyView assets={assets} onDelete={handleDeleteTransaction} />} 
-        {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
+{currentPage === 'monthly' && (
+  <MonthlyView 
+    assets={assets} 
+    setAssets={handleAssetsUpdate} // ★ 新增這一行：賦予寫入權限
+    onDelete={handleDeleteTransaction} 
+    sendLineNotification={sendLineNotification}
+    currentUser={operatorName}
+  />
+)}        {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
         {currentPage === 'expense' && <ExpenseEntry onAddExpense={handleAddExpense} />}
       </div>
     </div>
