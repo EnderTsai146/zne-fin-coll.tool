@@ -6,15 +6,14 @@ import { getAuth } from "firebase/auth";
 
 // 您的 Firebase 設定 (這部分不用動，維持原本的即可)
 const firebaseConfig = {
-  // ... 請保留您原本的 apiKey 等設定 ...
-  // 如果您原本的程式碼這裡是一堆環境變數 (import.meta.env...)，請直接保留原本的內容
-  // 重點是要加上下面的 export const auth
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: "AIzaSyBRtXnNk1dxLPRuJSRUboE5PdsB6rVS5Us",
+  authDomain: "zne-fin-d13e2.firebaseapp.com",
+  databaseURL: "https://zne-fin-d13e2-default-rtdb.firebaseio.com",
+  projectId: "zne-fin-d13e2",
+  storageBucket: "zne-fin-d13e2.firebasestorage.app",
+  messagingSenderId: "408036683766",
+  appId: "1:408036683766:web:17e054d1355a92a52261d7",
+  measurementId: "G-KJSGBV22BX"
 };
 
 const app = initializeApp(firebaseConfig);
