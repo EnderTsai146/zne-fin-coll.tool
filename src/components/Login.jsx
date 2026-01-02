@@ -10,13 +10,12 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
-    e.preventDefault(); // 防止表單重新整理
+    e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // 登入成功後，Firebase 會自動通知 App.jsx，這裡不用做轉址
     } catch (err) {
       console.error("登入失敗", err);
       setError('❌ 帳號或密碼錯誤');
@@ -25,15 +24,27 @@ const Login = () => {
   };
 
   return (
-    <div className="login-container">
-      <div className="glass-card login-box">
-        <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🥔</div>
-        <h2 style={{ marginBottom: '20px', color: '#444' }}>馬鈴薯管家</h2>
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh',
+      padding: '20px', // 關鍵：增加內距，防止手機版貼邊
+      boxSizing: 'border-box'
+    }}>
+      <div className="glass-card" style={{
+        width: '100%',
+        maxWidth: '400px', // 限制最大寬度，電腦版不會太寬
+        padding: '40px 30px',
+        textAlign: 'center',
+        margin: '0 auto' // 確保水平置中
+      }}>
+        <div style={{ fontSize: '3.5rem', marginBottom: '10px' }}>🥔</div>
+        <h2 style={{ marginBottom: '30px', color: '#444', letterSpacing: '2px' }}>馬鈴薯管家</h2>
         
-        {/* 使用 form 標籤是讓瀏覽器跳出「儲存密碼」的關鍵 */}
         <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '15px', textAlign: 'left' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Email</label>
+          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+            <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold', fontSize: '0.9rem' }}>Email</label>
             <input
               type="email"
               className="glass-input"
@@ -41,13 +52,13 @@ const Login = () => {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="請輸入 Email"
               required
-              // ★ 關鍵：告訴手機這是帳號欄位
               autoComplete="username"
+              style={{ width: '100%' }} // 確保填滿
             />
           </div>
 
-          <div style={{ marginBottom: '25px', textAlign: 'left' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>密碼</label>
+          <div style={{ marginBottom: '30px', textAlign: 'left' }}>
+            <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold', fontSize: '0.9rem' }}>密碼</label>
             <input
               type="password"
               className="glass-input"
@@ -55,20 +66,20 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="請輸入密碼"
               required
-              // ★ 關鍵：告訴手機這是密碼欄位
               autoComplete="current-password"
+              style={{ width: '100%' }} // 確保填滿
             />
           </div>
 
-          {error && <p style={{ color: 'red', marginBottom: '15px' }}>{error}</p>}
+          {error && <div style={{ color: '#ff6b6b', marginBottom: '20px', background: 'rgba(255,0,0,0.1)', padding: '10px', borderRadius: '8px', fontSize: '0.9rem' }}>{error}</div>}
 
           <button 
             type="submit" 
             className="glass-btn" 
-            style={{ width: '100%', padding: '12px', fontSize: '1rem' }}
+            style={{ width: '100%', padding: '14px', fontSize: '1.1rem', fontWeight: 'bold', marginTop: '10px' }}
             disabled={loading}
           >
-            {loading ? '登入中...' : '登入'}
+            {loading ? '登入中...' : '登入系統'}
           </button>
         </form>
       </div>

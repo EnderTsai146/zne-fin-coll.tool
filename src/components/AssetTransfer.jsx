@@ -30,8 +30,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [withdrawInvestSource, setWithdrawInvestSource] = useState('stock');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [spendCategory, setSpendCategory] = useState('餐費');
-  // ★ 新增：共同支出備註 (細項)
   const [spendNote, setSpendNote] = useState('');
+  
+  // ★ 新增：代墊人狀態 (預設為共同帳戶直接付)
+  const [advancedBy, setAdvancedBy] = useState('jointCash');
 
   // 1. 新增個人收入
   const handleAddIncome = () => {
@@ -106,33 +108,47 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     const newAssets = { ...assets };
     const selectedMonth = txDate.slice(0, 7);
 
-    // 情境 A: 共同現金 -> 花掉
+    // 情境 A: 共同支出 (花費)
     if (withdrawType === 'spend') {
-        if (newAssets.jointCash < val) return alert("❌ 共同現金不足！");
+        if (newAssets.jointCash < val) return alert("❌ 共同現金不足！(帳面餘額不足)");
 
-        // ★ 組合最終備註：類別 + 細項
+        // 組合最終備註：類別 + 細項
         const finalNote = spendNote.trim() 
             ? `${spendCategory} - ${spendNote.trim()}` 
             : spendCategory;
+        
+        // 判斷付款方式名稱
+        let paymentMethodName = "共同帳戶直接付";
+        if (advancedBy === 'userA') paymentMethodName = "恆恆先墊 (User A)";
+        if (advancedBy === 'userB') paymentMethodName = "得得先墊 (User B)";
 
-        const confirmMsg = `【確認共同支出】\n\n日期：${txDate}\n來源：共同現金\n內容：${finalNote}\n金額：${formatMoney(val)}\n\n確定要扣款嗎？`;
+        const confirmMsg = `【確認共同支出】\n\n日期：${txDate}\n項目：${finalNote}\n金額：${formatMoney(val)}\n付款：${paymentMethodName}\n\n確定要記錄嗎？`;
         if (!window.confirm(confirmMsg)) return;
 
+        // 無論是誰墊的，共同帳戶的「淨值」都要減少 (代表這筆錢花掉了)
         newAssets.jointCash -= val;
         
+        // ★ 關鍵：如果是墊付，isSettled 為 false；如果是直接付，則為 true
+        const isSettled = advancedBy === 'jointCash';
+
         onTransaction(newAssets, {
           type: 'spend',
           category: '共同支出',
           payer: '共同帳戶',
           total: val,
-          note: finalNote, // 存入組合好的備註
+          note: finalNote,
           month: selectedMonth,
-          date: txDate
+          date: txDate,
+          // ★ 新增這兩個欄位來追蹤代墊
+          advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
+          isSettled: isSettled 
         });
-        alert(`💸 已支出 ${formatMoney(val)} (${spendCategory})`);
+
+        alert(`💸 已支出 ${formatMoney(val)} (${spendCategory})\n付款方式：${paymentMethodName}`);
         
         // 清空欄位
         setSpendNote('');
+        setWithdrawAmount('');
     } 
     // 情境 B: 投資變現
     else {
@@ -159,8 +175,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
             date: txDate
         });
         alert(`🔄 已將 ${formatMoney(val)} 變現至共同現金！`);
+        setWithdrawAmount('');
     }
-    setWithdrawAmount('');
   };
 
   // --- 資料匯出 (備份) ---
@@ -191,19 +207,13 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     reader.onload = (event) => {
       try {
         const importedData = JSON.parse(event.target.result);
-        
-        if (importedData.userA === undefined || importedData.monthlyExpenses === undefined) {
-            alert("❌ 檔案格式錯誤！這似乎不是本系統的備份檔。");
+        if (importedData.userA === undefined) {
+            alert("❌ 檔案格式錯誤！");
             return;
         }
-
         if (window.confirm("⚠️ 警告：匯入將會「覆蓋」目前所有的資料！\n\n確定要還原備份嗎？")) {
-            if (setAssets) {
-                setAssets(importedData);
-                alert("✅ 資料還原成功！");
-            } else {
-                alert("⚠️ 系統錯誤：無法寫入資料 (setAssets 未定義)");
-            }
+            setAssets(importedData);
+            alert("✅ 資料還原成功！");
         }
       } catch (error) {
         alert("❌ 讀取失敗，檔案可能已損毀。");
@@ -236,13 +246,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         />
       </div>
 
-      {/* 3. 操作區塊 */}
+      {/* 操作區塊 */}
       
       {/* 存入個人 */}
       {activeTab === 'income' && (
         <div className="glass-card">
           <h3>💰 領錢了！(新增收入)</h3>
-          
           <div style={{ marginBottom: '15px' }}>
             <label>存入誰的戶頭？</label>
             <select className="glass-input" value={incomeUser} onChange={(e)=>setIncomeUser(e.target.value)}>
@@ -250,28 +259,13 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
               <option value="userB">得得🐕</option>
             </select>
           </div>
-
           <div style={{ marginBottom: '15px' }}>
             <label>備註 (來源)</label>
-            <input 
-                type="text" 
-                className="glass-input" 
-                value={incomeNote} 
-                onChange={(e)=>setIncomeNote(e.target.value)} 
-                placeholder="例如：薪資、股利、獎金..." 
-            />
+            <input type="text" className="glass-input" value={incomeNote} onChange={(e)=>setIncomeNote(e.target.value)} placeholder="例如：薪資、股利..." />
           </div>
-
           <div style={{ marginBottom: '15px' }}>
-            <label>金額 {incomeAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(incomeAmount)})</span>}</label>
-            <input 
-                type="number" 
-                inputMode="numeric" 
-                className="glass-input" 
-                value={incomeAmount} 
-                onChange={(e)=>setIncomeAmount(e.target.value)} 
-                placeholder="輸入金額" 
-            />
+            <label>金額</label>
+            <input type="number" inputMode="numeric" className="glass-input" value={incomeAmount} onChange={(e)=>setIncomeAmount(e.target.value)} placeholder="輸入金額" />
           </div>
           <button className="glass-btn" style={{width:'100%'}} onClick={handleAddIncome}>確認存入</button>
         </div>
@@ -307,15 +301,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
              </div>
           )}
           <div style={{ marginBottom: '15px' }}>
-            <label>金額 {transAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(transAmount)})</span>}</label>
-            <input 
-                type="number" 
-                inputMode="numeric" 
-                className="glass-input" 
-                value={transAmount} 
-                onChange={(e)=>setTransAmount(e.target.value)} 
-                placeholder="0" 
-            />
+            <label>金額</label>
+            <input type="number" inputMode="numeric" className="glass-input" value={transAmount} onChange={(e)=>setTransAmount(e.target.value)} placeholder="0" />
           </div>
           <button className="glass-btn" style={{width:'100%'}} onClick={handleTransfer}>確認劃撥</button>
         </div>
@@ -334,11 +321,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                 onChange={(e) => {
                     const newType = e.target.value;
                     setWithdrawType(newType);
-                    if (newType === 'liquidate') {
-                        setWithdrawSource('jointInvest');
-                    } else {
-                        setWithdrawSource('jointCash');
-                    }
+                    if (newType === 'liquidate') setWithdrawSource('jointInvest');
+                    else setWithdrawSource('jointCash');
                 }}
             >
               <option value="spend">💸 直接花費 (從現金支出)</option>
@@ -346,9 +330,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
             </select>
           </div>
 
-          {/* 當選擇「直接花費」時，顯示類別選單 + 備註 */}
+          {/* 當選擇「直接花費」時，顯示完整選項 */}
           {withdrawType === 'spend' && (
             <>
+              {/* 類別 */}
               <div style={{ marginBottom: '15px' }}>
                 <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>2. 支出類別</label>
                 <select className="glass-input" value={spendCategory} onChange={(e) => setSpendCategory(e.target.value)}>
@@ -359,7 +344,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                 </select>
               </div>
 
-              {/* ★ 新增：備註輸入框 */}
+              {/* 備註 */}
               <div style={{ marginBottom: '15px' }}>
                 <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>備註 (細項)</label>
                 <input 
@@ -371,11 +356,24 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                 />
               </div>
 
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>3. 扣款來源</label>
-                <select className="glass-input" value={withdrawSource} onChange={(e) => setWithdrawSource(e.target.value)}>
-                  <option value="jointCash">共同現金</option>
+              {/* ★ 新增：實際付款人 (代墊設定) */}
+              <div style={{ marginBottom: '15px', padding:'10px', background:'rgba(255, 230, 0, 0.15)', borderRadius:'8px', border:'1px dashed #f1c40f' }}>
+                <label style={{display:'block', marginBottom:'5px', fontWeight:'bold', color:'#b7791f'}}>
+                    3. 實際付款人 (誰出的錢？)
+                </label>
+                <select 
+                    className="glass-input" 
+                    value={advancedBy} 
+                    onChange={(e) => setAdvancedBy(e.target.value)}
+                    style={{border:'1px solid #f1c40f'}}
+                >
+                  <option value="jointCash">🏫 共同帳戶直接付 (不記債)</option>
+                  <option value="userA">🐶 恆恆先墊 (記為未結清)</option>
+                  <option value="userB">🐕 得得先墊 (記為未結清)</option>
                 </select>
+                <div style={{fontSize:'0.8rem', color:'#888', marginTop:'5px'}}>
+                    * 若選擇「先墊」，系統會記錄這筆款項尚未從共同帳戶撥款。
+                </div>
               </div>
             </>
           )}
@@ -412,21 +410,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 資料管理區塊 */}
       <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
         <h3 style={{color:'#666', marginBottom:'15px'}}>💾 資料管理</h3>
-        
         <div style={{display:'flex', gap:'15px'}}>
-            <button className="glass-btn" style={{flex:1, background: '#1d1d1f', color:'white', fontSize:'0.9rem'}} onClick={handleExport}>
-                📥 匯出備份
-            </button>
-            <button className="glass-btn" style={{flex:1, background: 'rgba(255,255,255,0.8)', color:'#1d1d1f', border:'1px solid #ccc', fontSize:'0.9rem'}} onClick={handleImportClick}>
-                📤 匯入還原
-            </button>
+            <button className="glass-btn" style={{flex:1, background: '#1d1d1f', color:'white', fontSize:'0.9rem'}} onClick={handleExport}>📥 匯出備份</button>
+            <button className="glass-btn" style={{flex:1, background: 'rgba(255,255,255,0.8)', color:'#1d1d1f', border:'1px solid #ccc', fontSize:'0.9rem'}} onClick={handleImportClick}>📤 匯入還原</button>
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept=".json" onChange={handleFileChange} />
         </div>
       </div>
-
     </div>
   );
 };
