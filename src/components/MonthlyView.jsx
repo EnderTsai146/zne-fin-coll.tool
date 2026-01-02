@@ -1,31 +1,80 @@
 // src/components/MonthlyView.jsx
 import React, { useState, useMemo } from 'react';
-// 引入 Chart.js 相關套件
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-import { Pie } from 'react-chartjs-2';
+// 引入 Chart.js 相關套件 (新增 Bar Chart)
+import { 
+  Chart as ChartJS, 
+  ArcElement, 
+  Tooltip, 
+  Legend, 
+  CategoryScale, 
+  LinearScale, 
+  BarElement 
+} from 'chart.js';
+import { Pie, Bar } from 'react-chartjs-2';
 
 // 註冊圖表元件
-ChartJS.register(ArcElement, Tooltip, Legend);
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
-const MonthlyView = ({ assets, onDelete }) => {
+const MonthlyView = ({ assets, onDelete, setAssets }) => {
   const history = assets.monthlyExpenses || [];
   
   // --- 狀態管理 ---
-  const [viewMode, setViewMode] = useState('list'); // 'list' 或 'chart'
+  const [viewMode, setViewMode] = useState('chart'); // 預設改為圖表模式 (戰情室)
   const [searchTerm, setSearchTerm] = useState('');
-  // 預設選擇當前月份 (格式 YYYY-MM)
+  // 預設選擇當前月份
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  
+  // 控制結算清單視窗
+  const [showSettlementModal, setShowSettlementModal] = useState(false);
+  const [settlementTarget, setSettlementTarget] = useState(null); // 'userA' or 'userB'
 
   // --- 輔助函式 ---
   const getTypeColor = (type) => {
     if (type === 'income') return '#2ecc71'; 
     if (type === 'expense') return '#ff6b6b'; 
-    if (type === 'spend') return '#ff9f43'; // 共同支出
+    if (type === 'spend') return '#ff9f43'; 
     if (type === 'transfer') return '#3498db'; 
     if (type === 'liquidate') return '#f1c40f'; 
     return '#666';
+  };
+
+  // --- 核心邏輯：代墊款結清 ---
+  const handleSettle = (targetUser) => {
+    const targetName = targetUser === 'userA' ? '恆恆' : '得得';
+    const debtAmount = calculateDebt(targetUser);
+    
+    if (debtAmount === 0) return alert("目前沒有未結清的款項喔！");
+
+    const confirmMsg = `【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這代表共同帳戶已經撥款給他了)`;
+    if (!window.confirm(confirmMsg)) return;
+
+    // 更新資料庫
+    const newHistory = history.map(record => {
+        // 找到所有該人代墊 且 尚未結清 的紀錄
+        if (record.advancedBy === targetUser && record.isSettled === false) {
+            return { ...record, isSettled: true }; // 標記為已結清
+        }
+        return record;
+    });
+
+    // 寫入雲端
+    setAssets({ ...assets, monthlyExpenses: newHistory });
+    alert("✅ 結清完成！帳目已歸零。");
+    setShowSettlementModal(false);
+  };
+
+  // 計算某人目前累積的未結代墊款 (不分月份，算總帳)
+  const calculateDebt = (userKey) => {
+    return history
+        .filter(r => r.advancedBy === userKey && r.isSettled === false)
+        .reduce((sum, r) => sum + Number(r.total), 0);
+  };
+
+  // 取得某人的未結清清單 (用於彈出視窗)
+  const getDebtList = (userKey) => {
+    return history.filter(r => r.advancedBy === userKey && r.isSettled === false);
   };
 
   const handleDeleteClick = (originalIndex, record) => {
@@ -35,141 +84,204 @@ const MonthlyView = ({ assets, onDelete }) => {
     }
   };
 
-  // 加上原始索引以確保刪除正確
-  const historyWithIndex = history.map((record, index) => ({ ...record, originalIndex: index }));
+  // --- 數據統計 (Dashboard) ---
+  const dashboardData = useMemo(() => {
+    // 1. 篩選當月資料
+    const monthRecords = history.filter(r => r.month === selectedMonth);
 
-  // --- 篩選邏輯 (列表模式用) ---
-  const filteredHistory = historyWithIndex.filter(record => {
-    const term = searchTerm.toLowerCase();
-    const matchAll = 
-        (record.date?.includes(term)) ||
-        (record.month?.includes(term)) ||
-        (record.payer?.includes(term)) ||
-        (record.operator?.includes(term)) ||
-        (record.category?.includes(term)) ||
-        (record.note?.toLowerCase().includes(term));
-    return matchAll;
-  });
+    // 2. 計算 KPI
+    let totalIncome = 0;
+    let totalExpense = 0; // 包含個人 + 共同
+    let dailyData = {};   // 用於長條圖 (Day 1 ~ Day 31)
 
-  // --- 統計邏輯 (圖表模式用) ---
-  const chartData = useMemo(() => {
-    // 1. 初始化累計物件
-    const stats = {
-        '餐費': 0,
-        '購物': 0,
-        '固定費用': 0,
-        '其他': 0,
-        '總支出': 0
-    };
+    // 初始化分類統計
+    const catStats = { '餐費':0, '購物':0, '固定費用':0, '其他':0 };
 
-    // 2. 篩選出「選定月份」且為「支出性質」的紀錄
-    const targetRecords = history.filter(r => 
-        r.month === selectedMonth && (r.type === 'expense' || r.type === 'spend')
-    );
-
-    // 3. 開始分類累加
-    targetRecords.forEach(record => {
-        // 情境 A: 個人支出 (原本就有 details 細項)
-        if (record.type === 'expense' && record.details) {
-            stats['餐費'] += Number(record.details.food || 0);
-            stats['購物'] += Number(record.details.shopping || 0);
-            stats['固定費用'] += Number(record.details.fixed || 0);
-            stats['其他'] += Number(record.details.other || 0);
-            stats['總支出'] += Number(record.total || 0);
+    monthRecords.forEach(r => {
+        const day = parseInt(r.date.split('-')[2]); // 取得日期 (1~31)
+        
+        // 收入
+        if (r.type === 'income') {
+            totalIncome += r.total;
         }
-        // 情境 B: 共同支出 (透過 note 判斷類別)
-        else if (record.type === 'spend') {
-            const note = record.note || '';
-            const val = Number(record.total || 0);
-            stats['總支出'] += val;
+        // 支出 (個人 expense + 共同 spend)
+        else if (r.type === 'expense' || r.type === 'spend') {
+            totalExpense += r.total;
 
-            if (note.includes('餐費')) stats['餐費'] += val;
-            else if (note.includes('購物')) stats['購物'] += val;
-            else if (note.includes('固定')) stats['固定費用'] += val;
-            else stats['其他'] += val; // 沒寫或歸類為其他
+            // 每日支出累加
+            dailyData[day] = (dailyData[day] || 0) + r.total;
+
+            // 分類累加
+            if (r.type === 'expense' && r.details) {
+                catStats['餐費'] += Number(r.details.food || 0);
+                catStats['購物'] += Number(r.details.shopping || 0);
+                catStats['固定費用'] += Number(r.details.fixed || 0);
+                catStats['其他'] += Number(r.details.other || 0);
+            } else if (r.type === 'spend') {
+                const note = r.note || '';
+                if (note.includes('餐費')) catStats['餐費'] += r.total;
+                else if (note.includes('購物')) catStats['購物'] += r.total;
+                else if (note.includes('固定')) catStats['固定費用'] += r.total;
+                else catStats['其他'] += r.total;
+            }
         }
     });
 
-    return {
-        labels: ['餐費', '購物', '固定費用', '其他'],
-        datasets: [
-            {
-                data: [stats['餐費'], stats['購物'], stats['固定費用'], stats['其他']],
-                backgroundColor: [
-                    '#ff9f43', // 餐費 (橘)
-                    '#54a0ff', // 購物 (藍)
-                    '#ff6b6b', // 固定 (紅)
-                    '#c8d6e5', // 其他 (灰)
-                ],
-                borderWidth: 1,
-            },
-        ],
-        total: stats['總支出']
+    // 3. 準備圓餅圖資料
+    const pieData = {
+        labels: Object.keys(catStats),
+        datasets: [{
+            data: Object.values(catStats),
+            backgroundColor: ['#ff9f43', '#54a0ff', '#ff6b6b', '#c8d6e5'],
+            borderWidth: 1,
+        }],
     };
+
+    // 4. 準備長條圖資料 (補齊當月所有天數)
+    const daysInMonth = new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1], 0).getDate();
+    const barLabels = Array.from({length: daysInMonth}, (_, i) => i + 1);
+    const barValues = barLabels.map(day => dailyData[day] || 0);
+
+    const barChartData = {
+        labels: barLabels,
+        datasets: [{
+            label: '每日支出',
+            data: barValues,
+            backgroundColor: '#17c9b2',
+            borderRadius: 4,
+        }]
+    };
+
+    return { totalIncome, totalExpense, pieData, barChartData };
   }, [history, selectedMonth]);
+
+  // --- 搜尋邏輯 ---
+  const historyWithIndex = history.map((record, index) => ({ ...record, originalIndex: index }));
+  const filteredHistory = historyWithIndex.filter(record => {
+    const term = searchTerm.toLowerCase();
+    return (
+        record.date?.includes(term) ||
+        record.month?.includes(term) ||
+        record.payer?.includes(term) ||
+        record.category?.includes(term) ||
+        record.note?.toLowerCase().includes(term) ||
+        (record.advancedBy && "代墊".includes(term))
+    );
+  });
 
   return (
     <div>
        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-         <h1 className="page-title" style={{margin:0}}>歷史紀錄</h1>
-         
-         {/* 檢視模式切換按鈕 */}
+         <h1 className="page-title" style={{margin:0}}>財務戰情室</h1>
          <div style={{background:'rgba(255,255,255,0.3)', borderRadius:'20px', padding:'4px', display:'flex'}}>
-            <button 
-                onClick={() => setViewMode('list')}
-                style={{
-                    background: viewMode === 'list' ? '#fff' : 'transparent',
-                    border:'none', borderRadius:'16px', padding:'6px 12px', cursor:'pointer', fontWeight:'bold',
-                    color: viewMode === 'list' ? '#333' : '#666', boxShadow: viewMode === 'list' ? '0 2px 5px rgba(0,0,0,0.1)' : 'none'
-                }}
-            >
-                清單
-            </button>
-            <button 
-                onClick={() => setViewMode('chart')}
-                style={{
-                    background: viewMode === 'chart' ? '#fff' : 'transparent',
-                    border:'none', borderRadius:'16px', padding:'6px 12px', cursor:'pointer', fontWeight:'bold',
-                    color: viewMode === 'chart' ? '#333' : '#666', boxShadow: viewMode === 'chart' ? '0 2px 5px rgba(0,0,0,0.1)' : 'none'
-                }}
-            >
-                圖表
-            </button>
+            {['chart', 'list'].map(mode => (
+                <button 
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    style={{
+                        background: viewMode === mode ? '#fff' : 'transparent',
+                        border:'none', borderRadius:'16px', padding:'6px 12px', cursor:'pointer', fontWeight:'bold',
+                        color: viewMode === mode ? '#333' : '#666', boxShadow: viewMode === mode ? '0 2px 5px rgba(0,0,0,0.1)' : 'none'
+                    }}
+                >
+                    {mode === 'chart' ? '儀表板' : '流水帳'}
+                </button>
+            ))}
          </div>
        </div>
        
-       {/* === 圖表模式 === */}
+       {/* === 戰情室儀表板 === */}
        {viewMode === 'chart' && (
-         <div className="glass-card" style={{animation: 'fadeIn 0.5s'}}>
-            <div style={{marginBottom:'20px', textAlign:'center'}}>
-                <label style={{marginRight:'10px', fontWeight:'bold', color:'#555'}}>選擇月份：</label>
-                <input 
-                    type="month" 
-                    className="glass-input" 
-                    style={{width:'auto', display:'inline-block', margin:0}}
-                    value={selectedMonth} 
-                    onChange={(e) => setSelectedMonth(e.target.value)} 
-                />
+         <div style={{animation: 'fadeIn 0.5s'}}>
+            
+            {/* 1. 月份選擇器 */}
+            <div className="glass-card" style={{padding:'10px', textAlign:'center', marginBottom:'15px', display:'flex', justifyContent:'center', alignItems:'center', gap:'10px'}}>
+                <label style={{fontWeight:'bold', color:'#555'}}>分析月份：</label>
+                <input type="month" className="glass-input" style={{width:'auto', margin:0, padding:'5px 10px'}} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
             </div>
 
-            {chartData.total === 0 ? (
-                <div style={{textAlign:'center', padding:'40px', color:'#888'}}>
-                    🦕 這個月還沒有任何支出紀錄喔！
+            {/* 2. KPI 指標卡 */}
+            <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
+                <div className="glass-card" style={{flex:1, padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)'}}>
+                    <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月收入</div>
+                    <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#06c755'}}>{formatMoney(dashboardData.totalIncome)}</div>
+                </div>
+                <div className="glass-card" style={{flex:1, padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'}}>
+                    <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月支出</div>
+                    <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#ef454d'}}>{formatMoney(dashboardData.totalExpense)}</div>
+                </div>
+            </div>
+
+            {/* 3. 代墊款管理中心 (重點功能) */}
+            <div className="glass-card" style={{marginBottom:'15px', borderLeft:'5px solid #f1c40f'}}>
+                <h3 style={{marginTop:0, fontSize:'1rem', color:'#b7791f', display:'flex', alignItems:'center'}}>
+                    🤝 代墊款結算中心 <span style={{fontSize:'0.7rem', marginLeft:'5px', background:'#f1c40f', color:'white', padding:'2px 5px', borderRadius:'4px'}}>All Time</span>
+                </h3>
+                
+                {['userA', 'userB'].map(user => {
+                    const debt = calculateDebt(user);
+                    const name = user === 'userA' ? '恆恆' : '得得';
+                    return (
+                        <div key={user} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 0', borderBottom: '1px dashed #eee'}}>
+                            <div>
+                                <div style={{fontWeight:'bold', color:'#555'}}>{name} 墊付未結</div>
+                                {debt > 0 ? (
+                                    <div style={{fontSize:'0.8rem', color:'#888', textDecoration:'underline', cursor:'pointer'}} onClick={() => { setSettlementTarget(user); setShowSettlementModal(true); }}>
+                                        查看明細
+                                    </div>
+                                ) : (
+                                    <div style={{fontSize:'0.8rem', color:'#2ecc71'}}>✨ 已全數結清</div>
+                                )}
+                            </div>
+                            <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                                <span style={{fontSize:'1.2rem', fontWeight:'bold', color: debt>0 ? '#e67e22' : '#ccc'}}>{formatMoney(debt)}</span>
+                                {debt > 0 && (
+                                    <button 
+                                        className="glass-btn" 
+                                        style={{padding:'5px 10px', fontSize:'0.8rem', background:'#2ecc71', color:'white', border:'none'}}
+                                        onClick={() => handleSettle(user)}
+                                    >
+                                        結清
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* 4. 圖表區 */}
+            {dashboardData.totalExpense === 0 ? (
+                <div className="glass-card" style={{textAlign:'center', padding:'30px', color:'#888'}}>
+                    🦕 這個月還沒有支出紀錄喔！
                 </div>
             ) : (
                 <>
-                    <div style={{height:'300px', display:'flex', justifyContent:'center'}}>
-                        <Pie data={chartData} options={{ maintainAspectRatio: false }} />
+                    <div className="glass-card" style={{marginBottom:'15px'}}>
+                        <h4 style={{margin:'0 0 10px 0', textAlign:'center', color:'#666'}}>支出結構</h4>
+                        <div style={{height:'250px', display:'flex', justifyContent:'center'}}>
+                            <Pie data={dashboardData.pieData} options={{ maintainAspectRatio: false }} />
+                        </div>
                     </div>
-                    <div style={{textAlign:'center', marginTop:'20px', fontSize:'1.2rem', fontWeight:'bold', color:'#444'}}>
-                        本月總支出：{formatMoney(chartData.total)}
+                    <div className="glass-card">
+                        <h4 style={{margin:'0 0 10px 0', textAlign:'center', color:'#666'}}>每日支出趨勢</h4>
+                        <div style={{height:'200px'}}>
+                            <Bar 
+                                data={dashboardData.barChartData} 
+                                options={{ 
+                                    maintainAspectRatio: false,
+                                    plugins: { legend: { display: false } },
+                                    scales: { y: { beginAtZero: true } }
+                                }} 
+                            />
+                        </div>
                     </div>
                 </>
             )}
          </div>
        )}
 
-       {/* === 列表模式 (原本的內容) === */}
+       {/* === 流水帳清單 === */}
        {viewMode === 'list' && (
          <>
             <div className="glass-card" style={{padding:'15px', display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px'}}>
@@ -178,7 +290,7 @@ const MonthlyView = ({ assets, onDelete }) => {
                     type="text" 
                     className="glass-input" 
                     style={{margin:0, border:'none', background:'transparent'}}
-                    placeholder="搜尋操作者、帳戶、項目..." 
+                    placeholder="搜尋項目、代墊、金額..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -201,20 +313,31 @@ const MonthlyView = ({ assets, onDelete }) => {
                             width: '30px', height: '30px', cursor: 'pointer', color: 'red',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: 10
                         }}
-                        title="刪除"
                     >
                         🗑️
                     </button>
 
-                    {/* 資訊區塊 */}
-                    <div style={{ paddingBottom: '10px' }}>
-                        <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px'}}>
+                    {/* 主要資訊 */}
+                    <div style={{ paddingBottom: '5px' }}>
+                        <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px', flexWrap:'wrap'}}>
                             <span style={{fontWeight:'bold', fontSize:'1.1rem', fontFamily:'monospace', color:'#444'}}>
                                 {record.date || record.month} 
                             </span>
                             <span style={{fontSize:'0.8rem', color:'white', background: getTypeColor(record.type), padding:'2px 8px', borderRadius:'10px', fontWeight:'600'}}>
                                 {record.category}
                             </span>
+                            {/* ★ 代墊款標籤 (重點) */}
+                            {record.advancedBy && (
+                                <span style={{
+                                    fontSize:'0.75rem', 
+                                    border: record.isSettled ? '1px solid #2ecc71' : '1px solid #f39c12',
+                                    color: record.isSettled ? '#2ecc71' : '#f39c12',
+                                    padding:'1px 6px', borderRadius:'10px', background:'#fff', fontWeight:'bold'
+                                }}>
+                                    {record.advancedBy === 'userA' ? '恆恆' : '得得'}墊付 
+                                    {record.isSettled ? ' (已結)' : ' (未結)'}
+                                </span>
+                            )}
                         </div>
 
                         <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '40px'}}>
@@ -227,39 +350,36 @@ const MonthlyView = ({ assets, onDelete }) => {
                             </span>
                         </div>
                     </div>
-
-                    {/* 詳細細項顯示 */}
-                    {record.type === 'expense' && record.details && (
-                        <div style={{fontSize:'0.9rem', color:'#666', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px', marginBottom:'10px', background:'rgba(255,255,255,0.4)', padding:'8px', borderRadius:'8px'}}>
-                        <span>🍱 餐費: {formatMoney(record.details.food)}</span>
-                        <span>🛍️ 購物: {formatMoney(record.details.shopping)}</span>
-                        <span>📱 固定: {formatMoney(record.details.fixed)}</span>
-                        <span>🧩 其他: {formatMoney(record.details.other)}</span>
-                        </div>
-                    )}
-
-                    {/* 底部資訊列 */}
-                    <div style={{
-                        marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(0,0,0,0.05)', 
-                        display:'flex', justifyContent:'space-between', alignItems: 'center', fontSize: '0.85rem', color: '#888'
-                    }}>
-                        <div style={{display:'flex', alignItems:'center', gap:'5px'}}>
-                            <span>💳 歸屬帳戶：</span>
-                            <span style={{fontWeight:'bold', color:'#333', background:'rgba(0,0,0,0.03)', padding:'2px 6px', borderRadius:'4px'}}>
-                                {record.payer}
-                            </span>
-                        </div>
-                        <div style={{display:'flex', alignItems:'center', gap:'5px'}}>
-                            <span>👨‍💻 操作者：</span>
-                            <span style={{fontWeight:'bold', color:'#1967d2', background:'#e8f0fe', padding:'2px 6px', borderRadius:'4px'}}>
-                                {record.operator || '未知'}
-                            </span>
-                        </div>
-                    </div>
                 </div>
                 ))
             )}
          </>
+       )}
+
+       {/* === 明細彈出視窗 === */}
+       {showSettlementModal && settlementTarget && (
+         <div style={{
+             position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000,
+             display:'flex', justifyContent:'center', alignItems:'center', padding:'20px'
+         }} onClick={() => setShowSettlementModal(false)}>
+             <div className="glass-card" style={{width:'100%', maxWidth:'400px', maxHeight:'80vh', overflowY:'auto', background:'white'}} onClick={e => e.stopPropagation()}>
+                 <h3 style={{marginTop:0, borderBottom:'1px solid #eee', paddingBottom:'10px'}}>
+                    {settlementTarget === 'userA' ? '恆恆' : '得得'} 的代墊明細
+                 </h3>
+                 <div style={{marginBottom:'20px'}}>
+                     {getDebtList(settlementTarget).map((r, idx) => (
+                         <div key={idx} style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px dashed #eee', fontSize:'0.9rem'}}>
+                             <div>
+                                 <span style={{color:'#888', marginRight:'10px'}}>{r.date}</span>
+                                 <span>{r.note}</span>
+                             </div>
+                             <div style={{fontWeight:'bold'}}>{formatMoney(r.total)}</div>
+                         </div>
+                     ))}
+                 </div>
+                 <button className="glass-btn" style={{width:'100%', background:'#666'}} onClick={() => setShowSettlementModal(false)}>關閉</button>
+             </div>
+         </div>
        )}
     </div>
   );
