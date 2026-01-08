@@ -6,6 +6,9 @@ const formatMoney = (num) => "$" + Number(num).toLocaleString();
 const ExpenseEntry = ({ onAddExpense }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [payer, setPayer] = useState('heng'); 
+  // ★ 新增：備註狀態
+  const [note, setNote] = useState('');
+  
   const [expenses, setExpenses] = useState({
     food: '', shopping: '', fixed: '', other: ''
   });
@@ -20,42 +23,50 @@ const ExpenseEntry = ({ onAddExpense }) => {
 
     const payerName = payer === 'heng' ? '恆恆🐶' : '得得🐕';
     
-    const confirmMsg = `【確認記帳】\n\n日期：${date}\n付款人：${payerName}\n總金額：${formatMoney(total)}\n\n確定要扣款嗎？`;
+    // ★ 處理備註：如果有填就用填的，沒填就預設為「個人支出」
+    const finalNote = note.trim() || '個人支出';
+
+    const confirmMsg = `【確認記帳】\n\n日期：${date}\n付款人：${payerName}\n備註：${finalNote}\n總金額：${formatMoney(total)}\n\n確定要扣款嗎？`;
     if (!window.confirm(confirmMsg)) return;
     
-    onAddExpense(date, expenses, total, payer);
+    // ★ 將 finalNote 作為第 5 個參數傳出去
+    onAddExpense(date, expenses, total, payer, finalNote);
+    
+    // 清空金額與備註 (保留日期與付款人設定，方便連續記帳)
+    setExpenses({ food: '', shopping: '', fixed: '', other: '' });
+    setNote('');
   };
 
   return (
     <div className="glass-card">
-      <h1 className="page-title" style={{fontSize:'1.8rem', marginBottom:'20px'}}>個人記帳</h1>
-      <p style={{ color: '#666', marginBottom: '20px', textAlign:'center' }}>輸入支出金額後，將從個人帳戶扣除。請注意日期。</p>
+      <h1 className="page-title" style={{fontSize:'1.8rem', marginBottom:'10px'}}>個人日記帳</h1>
+      <p style={{ color: '#666', marginBottom: '20px', textAlign:'center', fontSize:'0.9rem' }}>
+        隨手記一筆，輕鬆掌握開銷。
+      </p>
 
-      {/* ★ 修改重點：改用 Grid 佈局，強制一行顯示，比例為 6:4 */}
+      {/* 第一區塊：日期與對象 */}
       <div style={{
           display: 'grid', 
-          gridTemplateColumns: '6fr 4fr', // 左邊日期佔 60%，右邊人名佔 40%
-          gap: '10px', // 間距縮小一點，爭取空間
-          marginBottom: '20px'
+          gridTemplateColumns: '6fr 4fr', 
+          gap: '10px', 
+          marginBottom: '15px'
       }}>
-        
         <div>
-            <label style={{display:'block', marginBottom:'5px'}}>交易日期</label>
-            {/* 為了讓日期在手機上不要太肥，這裡可以稍微把 padding 改小一點點 (原本是 class 定義的 14px) */}
+            <label style={{display:'block', marginBottom:'5px', fontWeight:'bold', color:'#555'}}>交易日期</label>
             <input 
                 type="date" 
                 className="glass-input" 
-                style={{minWidth: 0, padding: '12px 10px', width: '160px'}} // 微調內距
+                style={{minWidth: 0, padding: '12px 10px', width: '100%'}} 
                 value={date} 
                 onChange={(e) => setDate(e.target.value)}
             />
         </div>
         
         <div>
-            <label style={{display:'block', marginBottom:'5px'}}>付款人</label>
+            <label style={{display:'block', marginBottom:'5px', fontWeight:'bold', color:'#555'}}>付款人</label>
             <select 
                 className="glass-input" 
-                style={{minWidth: 0, padding: '20px 10px'}} // 微調內距
+                style={{minWidth: 0, padding: '13px 10px', width: '100%'}} 
                 value={payer} 
                 onChange={(e)=>setPayer(e.target.value)}
             >
@@ -65,14 +76,25 @@ const ExpenseEntry = ({ onAddExpense }) => {
         </div>
       </div>
 
+      {/* ★ 新增：備註輸入框 (放在金額輸入之前，符合直覺) */}
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{display:'block', marginBottom:'5px', fontWeight:'bold', color:'#555'}}>備註 (項目)</label>
+        <input 
+            type="text" 
+            className="glass-input" 
+            placeholder="例如：午餐、全聯、加油..." 
+            value={note} 
+            onChange={(e) => setNote(e.target.value)} 
+        />
+      </div>
+
       <hr style={{ border: '0', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '20px 0' }} />
 
+      {/* 金額輸入區塊 */}
       <div style={{ display: 'grid', gap: '15px' }}>
-        
         <div>
           <label>
             🍱 餐費 
-            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.food && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.food)})</span>}
           </label>
           <input 
@@ -88,7 +110,6 @@ const ExpenseEntry = ({ onAddExpense }) => {
         <div>
           <label>
             🛍️ 購物
-            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.shopping && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.shopping)})</span>}
           </label>
           <input 
@@ -104,7 +125,6 @@ const ExpenseEntry = ({ onAddExpense }) => {
         <div>
           <label>
             📱 固定費用
-            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.fixed && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.fixed)})</span>}
           </label>
           <input 
@@ -120,7 +140,6 @@ const ExpenseEntry = ({ onAddExpense }) => {
         <div>
           <label>
             🧩 其他
-            <label style={{ display: 'block', marginBottom: '8px' }}></label>
             {expenses.other && <span style={{color:'#666', fontSize:'0.9rem', marginLeft:'8px'}}>({formatMoney(expenses.other)})</span>}
           </label>
           <input 
@@ -134,6 +153,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
         </div>
       </div>
 
+      {/* 總結區塊 */}
       <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.5)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>總支出：</span>
         <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ff6b6b' }}>
@@ -142,7 +162,7 @@ const ExpenseEntry = ({ onAddExpense }) => {
       </div>
 
       <button className="glass-btn" style={{ width: '100%', marginTop: '20px', background: '#ff7675' }} onClick={handleSubmit}>
-        確認扣款
+        確認記帳
       </button>
     </div>
   );

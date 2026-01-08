@@ -19,7 +19,13 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   const history = assets.monthlyExpenses || [];
   
   const [viewMode, setViewMode] = useState('chart');
-  const [searchTerm, setSearchTerm] = useState('');
+  
+  // --- 新增：流水帳專用的篩選狀態 ---
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 7)); // 預設本月
+  const [filterType, setFilterType] = useState('all');   // all, income, expense
+  const [filterUser, setFilterUser] = useState('all');   // all, joint, userA, userB
+
+  // Chart 模式專用的月份 (保留原本邏輯)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
   const [showSettlementModal, setShowSettlementModal] = useState(false);
@@ -91,7 +97,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   const dashboardData = useMemo(() => {
     const monthRecords = history.filter(r => r.month === selectedMonth);
 
-    // ★ 修改：拆分統計數據結構
     const stats = {
         income: { total: 0, userA: 0, userB: 0 },
         expense: { total: 0, joint: 0, userA: 0, userB: 0 }
@@ -114,7 +119,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
             stats.expense.total += r.total;
             dailyData[day] = (dailyData[day] || 0) + r.total;
 
-            // 區分共同 vs 個人
             if (r.type === 'spend') {
                 stats.expense.joint += r.total;
             } else if (r.type === 'expense') {
@@ -122,7 +126,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 else if (r.payer.includes('得得')) stats.expense.userB += r.total;
             }
 
-            // 圓餅圖分類統計
             if (r.type === 'expense' && r.details) {
                 catStats['餐費'] += Number(r.details.food || 0);
                 catStats['購物'] += Number(r.details.shopping || 0);
@@ -164,18 +167,39 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return { stats, pieData, barChartData };
   }, [history, selectedMonth]);
 
-  // --- 搜尋邏輯 ---
+  // --- ★ 新增：進階篩選邏輯 (流水帳用) ---
   const historyWithIndex = history.map((record, index) => ({ ...record, originalIndex: index }));
   const filteredHistory = historyWithIndex.filter(record => {
-    const term = searchTerm.toLowerCase();
-    return (
-        record.date?.includes(term) ||
-        record.month?.includes(term) ||
-        record.payer?.includes(term) ||
-        record.category?.includes(term) ||
-        record.note?.toLowerCase().includes(term) ||
-        (record.advancedBy && "代墊".includes(term))
-    );
+    // 1. 月份篩選
+    const recordMonth = record.month || record.date.slice(0, 7);
+    if (recordMonth !== filterDate) return false;
+
+    // 2. 類型篩選
+    if (filterType === 'income') {
+        if (record.type !== 'income') return false;
+    } else if (filterType === 'expense') {
+        // 包含 個人支出(expense) 和 共同支出(spend)
+        if (record.type !== 'expense' && record.type !== 'spend') return false;
+    }
+
+    // 3. 對象篩選 (Who)
+    if (filterUser !== 'all') {
+        const payer = record.payer || '';
+        // 共同
+        if (filterUser === 'joint') {
+            if (record.type !== 'spend' && record.category !== '共同支出') return false;
+        }
+        // 恆恆
+        else if (filterUser === 'userA') {
+            if (!payer.includes('恆恆') && !payer.includes('userA')) return false;
+        }
+        // 得得
+        else if (filterUser === 'userB') {
+            if (!payer.includes('得得') && !payer.includes('userB')) return false;
+        }
+    }
+
+    return true;
   });
 
   return (
@@ -207,9 +231,8 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 <input type="month" className="glass-input" style={{width:'auto', margin:0, padding:'5px 10px'}} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
             </div>
 
-            {/* ★ 修改：分欄顯示收入與支出詳情 */}
+            {/* 收入與支出卡片 */}
             <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
-                {/* 收入卡片 */}
                 <div className="glass-card" style={{flex:1, padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)'}}>
                     <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月總收入</div>
                     <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#06c755', marginBottom:'5px'}}>{formatMoney(dashboardData.stats.income.total)}</div>
@@ -219,7 +242,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                     </div>
                 </div>
 
-                {/* 支出卡片 */}
                 <div className="glass-card" style={{flex:1, padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'}}>
                     <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月總支出</div>
                     <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#ef454d', marginBottom:'5px'}}>{formatMoney(dashboardData.stats.expense.total)}</div>
@@ -230,11 +252,11 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 </div>
             </div>
 
+            {/* 代墊款中心 */}
             <div className="glass-card" style={{marginBottom:'15px', borderLeft:'5px solid #f1c40f'}}>
                 <h3 style={{marginTop:0, fontSize:'1rem', color:'#b7791f', display:'flex', alignItems:'center'}}>
                     🤝 代墊款結算中心 <span style={{fontSize:'0.7rem', marginLeft:'5px', background:'#f1c40f', color:'white', padding:'2px 5px', borderRadius:'4px'}}>All Time</span>
                 </h3>
-                
                 {['userA', 'userB'].map(user => {
                     const debt = calculateDebt(user);
                     const name = user === 'userA' ? '恆恆' : '得得';
@@ -253,11 +275,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                             <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
                                 <span style={{fontSize:'1.2rem', fontWeight:'bold', color: debt>0 ? '#e67e22' : '#ccc'}}>{formatMoney(debt)}</span>
                                 {debt > 0 && (
-                                    <button 
-                                        className="glass-btn" 
-                                        style={{padding:'5px 10px', fontSize:'0.8rem', background:'#2ecc71', color:'white', border:'none'}}
-                                        onClick={() => handleSettle(user)}
-                                    >
+                                    <button className="glass-btn" style={{padding:'5px 10px', fontSize:'0.8rem', background:'#2ecc71', color:'white', border:'none'}} onClick={() => handleSettle(user)}>
                                         結清
                                     </button>
                                 )}
@@ -282,14 +300,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                     <div className="glass-card">
                         <h4 style={{margin:'0 0 10px 0', textAlign:'center', color:'#666'}}>每日支出趨勢</h4>
                         <div style={{height:'200px'}}>
-                            <Bar 
-                                data={dashboardData.barChartData} 
-                                options={{ 
-                                    maintainAspectRatio: false,
-                                    plugins: { legend: { display: false } },
-                                    scales: { y: { beginAtZero: true } }
-                                }} 
-                            />
+                            <Bar data={dashboardData.barChartData} options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }} />
                         </div>
                     </div>
                 </>
@@ -297,24 +308,52 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
          </div>
        )}
 
-       {/* 流水帳清單 */}
+       {/* ★ 流水帳清單 (更新：篩選器 + 顯示優化) */}
        {viewMode === 'list' && (
          <>
-            <div className="glass-card" style={{padding:'15px', display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px'}}>
-                <span style={{fontSize:'1.2rem'}}>🔍</span>
-                <input 
-                    type="text" 
-                    className="glass-input" 
-                    style={{margin:0, border:'none', background:'transparent'}}
-                    placeholder="搜尋項目、代墊、金額..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            {/* 1. 篩選工具列 */}
+            <div className="glass-card" style={{padding:'15px', marginBottom:'20px'}}>
+                <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
+                    {/* 月份選擇 */}
+                    <input 
+                        type="month" 
+                        className="glass-input" 
+                        style={{flex:'2', minWidth:'120px', margin:0, padding:'8px'}} 
+                        value={filterDate}
+                        onChange={(e) => setFilterDate(e.target.value)}
+                    />
+                    
+                    {/* 類型選擇 */}
+                    <select 
+                        className="glass-input" 
+                        style={{flex:'1', minWidth:'80px', margin:0, padding:'8px'}}
+                        value={filterType}
+                        onChange={(e) => setFilterType(e.target.value)}
+                    >
+                        <option value="all">全部類型</option>
+                        <option value="expense">支出 (共+個)</option>
+                        <option value="income">收入</option>
+                    </select>
+                    
+                    {/* 對象選擇 */}
+                    <select 
+                        className="glass-input" 
+                        style={{flex:'1', minWidth:'80px', margin:0, padding:'8px'}}
+                        value={filterUser}
+                        onChange={(e) => setFilterUser(e.target.value)}
+                    >
+                        <option value="all">所有人</option>
+                        <option value="joint">共同帳戶</option>
+                        <option value="userA">恆恆</option>
+                        <option value="userB">得得</option>
+                    </select>
+                </div>
             </div>
 
+            {/* 2. 列表內容 */}
             {filteredHistory.length === 0 ? (
                 <div className="glass-card" style={{textAlign:'center', color: '#888'}}>
-                <p>找不到相關紀錄。</p>
+                    <p>📭 沒有符合篩選條件的紀錄</p>
                 </div>
             ) : (
                 [...filteredHistory].reverse().map((record) => (
@@ -332,6 +371,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                     </button>
 
                     <div style={{ paddingBottom: '5px' }}>
+                        {/* 標頭：日期 / 類別 / 代墊狀態 */}
                         <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px', flexWrap:'wrap'}}>
                             <span style={{fontWeight:'bold', fontSize:'1.1rem', fontFamily:'monospace', color:'#444'}}>
                                 {record.date || record.month} 
@@ -352,9 +392,11 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                             )}
                         </div>
 
-                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '40px'}}>
+                        {/* 主內容：項目名稱 / 金額 */}
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '40px', marginBottom:'5px'}}>
                             <span style={{fontSize:'1.1rem', color:'#1d1d1f', fontWeight:'700'}}>
-                                {record.note}
+                                {/* ★ 這裡修改了：如果是 "月結記帳" 就顯示 "日記帳" */}
+                                {record.note === '月結記帳' ? '日記帳' : record.note}
                             </span>
                             <span style={{fontSize:'1.6rem', fontWeight:'800', color: (record.type==='income' || record.type==='liquidate') ? '#2ecc71' : '#1d1d1f'}}>
                                 {(record.type === 'income' || record.type === 'liquidate') ? '+' : '-'}
@@ -362,7 +404,18 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                             </span>
                         </div>
 
-                        {/* ★ 修正：將個人支出的細項顯示加回來了 */}
+                        {/* ★ 新增：明確顯示「誰花的/誰賺的」 */}
+                        <div style={{fontSize:'0.85rem', color:'#888', display:'flex', alignItems:'center', gap:'5px', marginTop:'5px'}}>
+                            {record.payer === '共同帳戶' ? (
+                                <span style={{background:'#eee', padding:'2px 6px', borderRadius:'4px'}}>🏫 共同帳戶</span>
+                            ) : (
+                                <span style={{background:'#e8f0fe', color:'#1967d2', padding:'2px 6px', borderRadius:'4px'}}>
+                                    👤 {record.payer}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* 個人支出的詳細分類 */}
                         {record.type === 'expense' && record.details && (
                             <div style={{
                                 marginTop: '10px',
