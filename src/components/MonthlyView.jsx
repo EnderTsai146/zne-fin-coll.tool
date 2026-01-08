@@ -15,7 +15,6 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
-// ★ 接收 sendLineNotification 和 currentUser
 const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, currentUser }) => {
   const history = assets.monthlyExpenses || [];
   
@@ -46,7 +45,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return history.filter(r => r.advancedBy === userKey && r.isSettled === false);
   };
 
-  // --- 核心邏輯：代墊款結清 (含通知) ---
+  // --- 核心邏輯：代墊款結清 ---
   const handleSettle = (targetUser) => {
     const targetName = targetUser === 'userA' ? '恆恆' : '得得';
     const debtAmount = calculateDebt(targetUser);
@@ -56,7 +55,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     const confirmMsg = `【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這代表共同帳戶已經撥款給他了)`;
     if (!window.confirm(confirmMsg)) return;
 
-    // 1. 更新資料庫
     const newHistory = history.map(record => {
         if (record.advancedBy === targetUser && record.isSettled === false) {
             return { ...record, isSettled: true }; 
@@ -66,7 +64,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
 
     setAssets({ ...assets, monthlyExpenses: newHistory });
     
-    // 2. ★ 發送 LINE 通知 (新增這段)
     if (sendLineNotification) {
         sendLineNotification({
             title: "代墊款結清",
@@ -74,7 +71,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
             category: "帳務結算",
             note: `共同帳戶已撥款給 ${targetName}，帳務已歸零。`,
             date: new Date().toISOString().split('T')[0],
-            color: "#2ecc71", // 綠色代表完成
+            color: "#2ecc71",
             operator: currentUser || "系統"
         });
     }
@@ -94,21 +91,38 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   const dashboardData = useMemo(() => {
     const monthRecords = history.filter(r => r.month === selectedMonth);
 
-    let totalIncome = 0;
-    let totalExpense = 0; 
+    // ★ 修改：拆分統計數據結構
+    const stats = {
+        income: { total: 0, userA: 0, userB: 0 },
+        expense: { total: 0, joint: 0, userA: 0, userB: 0 }
+    };
+    
     let dailyData = {};  
     const catStats = { '餐費':0, '購物':0, '固定費用':0, '其他':0 };
 
     monthRecords.forEach(r => {
         const day = parseInt(r.date.split('-')[2]); 
         
+        // 1. 收入統計
         if (r.type === 'income') {
-            totalIncome += r.total;
+            stats.income.total += r.total;
+            if (r.payer.includes('恆恆')) stats.income.userA += r.total;
+            else if (r.payer.includes('得得')) stats.income.userB += r.total;
         }
+        // 2. 支出統計
         else if (r.type === 'expense' || r.type === 'spend') {
-            totalExpense += r.total;
+            stats.expense.total += r.total;
             dailyData[day] = (dailyData[day] || 0) + r.total;
 
+            // 區分共同 vs 個人
+            if (r.type === 'spend') {
+                stats.expense.joint += r.total;
+            } else if (r.type === 'expense') {
+                if (r.payer.includes('恆恆')) stats.expense.userA += r.total;
+                else if (r.payer.includes('得得')) stats.expense.userB += r.total;
+            }
+
+            // 圓餅圖分類統計
             if (r.type === 'expense' && r.details) {
                 catStats['餐費'] += Number(r.details.food || 0);
                 catStats['購物'] += Number(r.details.shopping || 0);
@@ -147,7 +161,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
         }]
     };
 
-    return { totalIncome, totalExpense, pieData, barChartData };
+    return { stats, pieData, barChartData };
   }, [history, selectedMonth]);
 
   // --- 搜尋邏輯 ---
@@ -193,14 +207,26 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 <input type="month" className="glass-input" style={{width:'auto', margin:0, padding:'5px 10px'}} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
             </div>
 
+            {/* ★ 修改：分欄顯示收入與支出詳情 */}
             <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
+                {/* 收入卡片 */}
                 <div className="glass-card" style={{flex:1, padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)'}}>
-                    <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月收入</div>
-                    <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#06c755'}}>{formatMoney(dashboardData.totalIncome)}</div>
+                    <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月總收入</div>
+                    <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#06c755', marginBottom:'5px'}}>{formatMoney(dashboardData.stats.income.total)}</div>
+                    <div style={{fontSize:'0.75rem', color:'#444', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'5px'}}>
+                        恆: {formatMoney(dashboardData.stats.income.userA)} <br/> 
+                        得: {formatMoney(dashboardData.stats.income.userB)}
+                    </div>
                 </div>
+
+                {/* 支出卡片 */}
                 <div className="glass-card" style={{flex:1, padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'}}>
-                    <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月支出</div>
-                    <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#ef454d'}}>{formatMoney(dashboardData.totalExpense)}</div>
+                    <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月總支出</div>
+                    <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#ef454d', marginBottom:'5px'}}>{formatMoney(dashboardData.stats.expense.total)}</div>
+                    <div style={{fontSize:'0.75rem', color:'#444', borderTop:'1px solid rgba(0,0,0,0.1)', paddingTop:'5px'}}>
+                        共: {formatMoney(dashboardData.stats.expense.joint)} <br/>
+                        恆: {formatMoney(dashboardData.stats.expense.userA)} | 得: {formatMoney(dashboardData.stats.expense.userB)}
+                    </div>
                 </div>
             </div>
 
@@ -241,7 +267,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 })}
             </div>
 
-            {dashboardData.totalExpense === 0 ? (
+            {dashboardData.stats.expense.total === 0 ? (
                 <div className="glass-card" style={{textAlign:'center', padding:'30px', color:'#888'}}>
                     🦕 這個月還沒有支出紀錄喔！
                 </div>
@@ -335,6 +361,26 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                                 {formatMoney(record.total)}
                             </span>
                         </div>
+
+                        {/* ★ 修正：將個人支出的細項顯示加回來了 */}
+                        {record.type === 'expense' && record.details && (
+                            <div style={{
+                                marginTop: '10px',
+                                fontSize:'0.9rem', 
+                                color:'#666', 
+                                display:'grid', 
+                                gridTemplateColumns:'1fr 1fr', 
+                                gap:'5px', 
+                                background:'rgba(255,255,255,0.4)', 
+                                padding:'8px', 
+                                borderRadius:'8px'
+                            }}>
+                                <span>🍱 餐費: {formatMoney(record.details.food || 0)}</span>
+                                <span>🛍️ 購物: {formatMoney(record.details.shopping || 0)}</span>
+                                <span>📱 固定: {formatMoney(record.details.fixed || 0)}</span>
+                                <span>🧩 其他: {formatMoney(record.details.other || 0)}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
                 ))
