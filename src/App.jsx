@@ -94,10 +94,14 @@ function App() {
     let color = "#17c9b2"; 
     let title = "資產變動";
     
+    // ★ 新增了投資專用的顏色與標題
     if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
     else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
     else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
-    else if (historyRecord.type === 'liquidate') { color = "#f1c40f"; title = "投資變現"; }
+    else if (historyRecord.type === 'liquidate' || historyRecord.type === 'joint_invest_sell') { color = "#f1c40f"; title = "投資變現"; }
+    else if (historyRecord.type === 'joint_invest_buy') { color = "#8e44ad"; title = "買入投資"; }
+    else if (historyRecord.type === 'personal_invest_profit') { color = "#e67e22"; title = "個人投資獲利"; }
+    else if (historyRecord.type === 'personal_invest_loss') { color = "#7f8c8d"; title = "個人投資虧損"; }
 
     const finalAssets = {
       ...newAssets,
@@ -163,6 +167,64 @@ function App() {
     });
   };
 
+// ★ 新增：共同支出邏輯 (從操作頁面獨立出來)
+  const handleAddJointExpense = (date, category, amount, advancedBy, note) => {
+    const val = Number(amount);
+    const newAssets = { ...assets };
+    
+    // 判斷付款方式名稱
+    let paymentMethodName = "共同帳戶直接付";
+    if (advancedBy === 'userA') paymentMethodName = "恆恆先墊 (User A)";
+    if (advancedBy === 'userB') paymentMethodName = "得得先墊 (User B)";
+
+    // 如果是共同帳戶直接扣款，檢查餘額並扣款
+    if (advancedBy === 'jointCash') {
+      if (newAssets.jointCash < val) {
+        alert("❌ 共同現金不足！(帳面餘額不足)");
+        return;
+      }
+      newAssets.jointCash -= val;
+    }
+
+    // 組合最終備註
+    const finalNote = note.trim() ? `${category} - ${note.trim()}` : category;
+    const isSettled = advancedBy === 'jointCash';
+
+    const finalAssets = {
+      ...newAssets,
+      monthlyExpenses: [
+        ...newAssets.monthlyExpenses,
+        {
+          date, 
+          month: date.slice(0, 7), 
+          type: 'spend', 
+          category: '共同支出',
+          payer: '共同帳戶', 
+          total: val, 
+          note: finalNote, 
+          operator: operatorName,
+          advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
+          isSettled: isSettled,
+          timestamp: `${date}T12:00:00.000Z`
+        }
+      ]
+    };
+
+    saveToCloud(finalAssets);
+    alert(`💸 已記錄共同支出 ${formatMoney(val)} \n付款方式：${paymentMethodName}`);
+    setCurrentPage('overview'); // 記帳完跳回總覽
+
+    sendLineNotification({
+      title: "共同支出",
+      amount: `$${val.toLocaleString()}`,
+      category: "共同支出",
+      note: finalNote,
+      date: date,
+      color: "#ef454d", 
+      operator: operatorName
+    });
+  };
+
   const handleDeleteTransaction = (indexToDelete) => {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
@@ -182,12 +244,21 @@ function App() {
          }
          break;
       case 'liquidate': 
+      case 'joint_invest_sell': 
          newAssets.jointCash -= record.total;
-         if (record.note.includes('賣出')) {
-           const type = record.note.split(' ')[1]; 
-           if (type && newAssets.jointInvestments[type] !== undefined) newAssets.jointInvestments[type] += record.total; 
+         const sellType = record.investType || (record.note && record.note.split(' ')[1]); 
+         if (sellType && newAssets.jointInvestments[sellType] !== undefined) newAssets.jointInvestments[sellType] += record.total; 
+         break;
+      case 'joint_invest_buy':
+         newAssets.jointCash += record.total;
+         if (record.investType && newAssets.jointInvestments[record.investType] !== undefined) {
+             newAssets.jointInvestments[record.investType] -= record.total;
          }
          break;
+      case 'personal_invest_profit':
+         if (payerKey) newAssets[payerKey] -= record.total; break;
+      case 'personal_invest_loss':
+         if (payerKey) newAssets[payerKey] += record.total; break;
       default: break;
     }
     newAssets.monthlyExpenses = assets.monthlyExpenses.filter((_, i) => i !== indexToDelete);
@@ -234,7 +305,7 @@ function App() {
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
         
         {/* ★ 更新：傳遞新的 handleAddExpense */}
-        {currentPage === 'expense' && <ExpenseEntry onAddExpense={handleAddExpense} />}
+        {currentPage === 'expense' && <ExpenseEntry onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
       </div>
     </div>
   );

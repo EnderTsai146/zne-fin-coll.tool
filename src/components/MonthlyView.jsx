@@ -20,27 +20,28 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   
   const [viewMode, setViewMode] = useState('chart');
   
-  // --- 新增：流水帳專用的篩選狀態 ---
   const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 7)); // 預設本月
-  const [filterType, setFilterType] = useState('all');   // all, income, expense
+  const [filterType, setFilterType] = useState('all');   // all, income, expense, invest
   const [filterUser, setFilterUser] = useState('all');   // all, joint, userA, userB
 
-  // Chart 模式專用的月份 (保留原本邏輯)
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [settlementTarget, setSettlementTarget] = useState(null); 
 
+  // ★ 1. 新增：處理投資類型的專屬顏色
   const getTypeColor = (type) => {
     if (type === 'income') return '#2ecc71'; 
     if (type === 'expense') return '#ff6b6b'; 
     if (type === 'spend') return '#ff9f43'; 
     if (type === 'transfer') return '#3498db'; 
-    if (type === 'liquidate') return '#f1c40f'; 
+    if (type === 'liquidate' || type === 'joint_invest_sell') return '#f1c40f'; // 黃色 (變現)
+    if (type === 'joint_invest_buy') return '#8e44ad'; // 紫色 (買入)
+    if (type === 'personal_invest_profit') return '#e67e22'; // 橘色 (獲利)
+    if (type === 'personal_invest_loss') return '#7f8c8d'; // 灰色 (虧損)
     return '#666';
   };
 
-  // --- 計算債務 ---
   const calculateDebt = (userKey) => {
     return history
         .filter(r => r.advancedBy === userKey && r.isSettled === false)
@@ -51,7 +52,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return history.filter(r => r.advancedBy === userKey && r.isSettled === false);
   };
 
-  // --- 核心邏輯：代墊款結清 ---
   const handleSettle = (targetUser) => {
     const targetName = targetUser === 'userA' ? '恆恆' : '得得';
     const debtAmount = calculateDebt(targetUser);
@@ -94,6 +94,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   };
 
   // --- 數據統計 (Dashboard) ---
+  // ★ 2. 這裡原本的邏輯只有抓 income 和 expense/spend，所以新的投資標籤會自動被排除，完美解決你的痛點！
   const dashboardData = useMemo(() => {
     const monthRecords = history.filter(r => r.month === selectedMonth);
 
@@ -108,13 +109,11 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     monthRecords.forEach(r => {
         const day = parseInt(r.date.split('-')[2]); 
         
-        // 1. 收入統計
         if (r.type === 'income') {
             stats.income.total += r.total;
             if (r.payer.includes('恆恆')) stats.income.userA += r.total;
             else if (r.payer.includes('得得')) stats.income.userB += r.total;
         }
-        // 2. 支出統計
         else if (r.type === 'expense' || r.type === 'spend') {
             stats.expense.total += r.total;
             dailyData[day] = (dailyData[day] || 0) + r.total;
@@ -167,33 +166,30 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return { stats, pieData, barChartData };
   }, [history, selectedMonth]);
 
-  // --- ★ 新增：進階篩選邏輯 (流水帳用) ---
+  // --- 進階篩選邏輯 (流水帳用) ---
   const historyWithIndex = history.map((record, index) => ({ ...record, originalIndex: index }));
   const filteredHistory = historyWithIndex.filter(record => {
-    // 1. 月份篩選
     const recordMonth = record.month || record.date.slice(0, 7);
     if (recordMonth !== filterDate) return false;
 
-    // 2. 類型篩選
+    // ★ 3. 新增：支援篩選「投資」紀錄
     if (filterType === 'income') {
         if (record.type !== 'income') return false;
     } else if (filterType === 'expense') {
-        // 包含 個人支出(expense) 和 共同支出(spend)
         if (record.type !== 'expense' && record.type !== 'spend') return false;
+    } else if (filterType === 'invest') {
+        const investTypes = ['liquidate', 'joint_invest_buy', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_loss'];
+        if (!investTypes.includes(record.type)) return false;
     }
 
-    // 3. 對象篩選 (Who)
     if (filterUser !== 'all') {
         const payer = record.payer || '';
-        // 共同
         if (filterUser === 'joint') {
-            if (record.type !== 'spend' && record.category !== '共同支出') return false;
+            if (record.type !== 'spend' && record.category !== '共同支出' && !record.type.includes('joint_invest')) return false;
         }
-        // 恆恆
         else if (filterUser === 'userA') {
             if (!payer.includes('恆恆') && !payer.includes('userA')) return false;
         }
-        // 得得
         else if (filterUser === 'userB') {
             if (!payer.includes('得得') && !payer.includes('userB')) return false;
         }
@@ -223,7 +219,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
          </div>
        </div>
        
-       {/* 戰情室儀表板 */}
        {viewMode === 'chart' && (
          <div style={{animation: 'fadeIn 0.5s'}}>
             <div className="glass-card" style={{padding:'10px', textAlign:'center', marginBottom:'15px', display:'flex', justifyContent:'center', alignItems:'center', gap:'10px'}}>
@@ -231,7 +226,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 <input type="month" className="glass-input" style={{width:'auto', margin:0, padding:'5px 10px'}} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
             </div>
 
-            {/* 收入與支出卡片 */}
             <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
                 <div className="glass-card" style={{flex:1, padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)'}}>
                     <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>本月總收入</div>
@@ -252,7 +246,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 </div>
             </div>
 
-            {/* 代墊款中心 */}
             <div className="glass-card" style={{marginBottom:'15px', borderLeft:'5px solid #f1c40f'}}>
                 <h3 style={{marginTop:0, fontSize:'1rem', color:'#b7791f', display:'flex', alignItems:'center'}}>
                     🤝 代墊款結算中心 <span style={{fontSize:'0.7rem', marginLeft:'5px', background:'#f1c40f', color:'white', padding:'2px 5px', borderRadius:'4px'}}>All Time</span>
@@ -308,13 +301,10 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
          </div>
        )}
 
-       {/* ★ 流水帳清單 (更新：篩選器 + 顯示優化) */}
        {viewMode === 'list' && (
          <>
-            {/* 1. 篩選工具列 */}
             <div className="glass-card" style={{padding:'15px', marginBottom:'20px'}}>
                 <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
-                    {/* 月份選擇 */}
                     <input 
                         type="month" 
                         className="glass-input" 
@@ -323,7 +313,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                         onChange={(e) => setFilterDate(e.target.value)}
                     />
                     
-                    {/* 類型選擇 */}
                     <select 
                         className="glass-input" 
                         style={{flex:'1', minWidth:'80px', margin:0, padding:'8px'}}
@@ -333,9 +322,9 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                         <option value="all">全部類型</option>
                         <option value="expense">支出 (共+個)</option>
                         <option value="income">收入</option>
+                        <option value="invest">投資 (買賣/損益)</option>
                     </select>
                     
-                    {/* 對象選擇 */}
                     <select 
                         className="glass-input" 
                         style={{flex:'1', minWidth:'80px', margin:0, padding:'8px'}}
@@ -350,98 +339,97 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 </div>
             </div>
 
-            {/* 2. 列表內容 */}
             {filteredHistory.length === 0 ? (
                 <div className="glass-card" style={{textAlign:'center', color: '#888'}}>
                     <p>📭 沒有符合篩選條件的紀錄</p>
                 </div>
             ) : (
-                [...filteredHistory].reverse().map((record) => (
-                <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${getTypeColor(record.type)}`, position: 'relative', paddingBottom: '10px' }}>
-                    <button 
-                        onClick={() => handleDeleteClick(record.originalIndex, record)}
-                        style={{
-                            position: 'absolute', top: '15px', right: '15px',
-                            background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%',
-                            width: '30px', height: '30px', cursor: 'pointer', color: 'red',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: 10
-                        }}
-                    >
-                        🗑️
-                    </button>
+                [...filteredHistory].reverse().map((record) => {
+                  // ★ 4. 新增：聰明判斷正負號
+                  const isPositive = ['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit'].includes(record.type);
+                  const showSign = isPositive ? '+' : '-';
+                  const amountColor = isPositive ? '#2ecc71' : '#1d1d1f';
 
-                    <div style={{ paddingBottom: '5px' }}>
-                        {/* 標頭：日期 / 類別 / 代墊狀態 */}
-                        <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px', flexWrap:'wrap'}}>
-                            <span style={{fontWeight:'bold', fontSize:'1.1rem', fontFamily:'monospace', color:'#444'}}>
-                                {record.date || record.month} 
-                            </span>
-                            <span style={{fontSize:'0.8rem', color:'white', background: getTypeColor(record.type), padding:'2px 8px', borderRadius:'10px', fontWeight:'600'}}>
-                                {record.category}
-                            </span>
-                            {record.advancedBy && (
-                                <span style={{
-                                    fontSize:'0.75rem', 
-                                    border: record.isSettled ? '1px solid #2ecc71' : '1px solid #f39c12',
-                                    color: record.isSettled ? '#2ecc71' : '#f39c12',
-                                    padding:'1px 6px', borderRadius:'10px', background:'#fff', fontWeight:'bold'
-                                }}>
-                                    {record.advancedBy === 'userA' ? '恆恆' : '得得'}墊付 
-                                    {record.isSettled ? ' (已結)' : ' (未結)'}
+                  return (
+                    <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${getTypeColor(record.type)}`, position: 'relative', paddingBottom: '10px' }}>
+                        <button 
+                            onClick={() => handleDeleteClick(record.originalIndex, record)}
+                            style={{
+                                position: 'absolute', top: '15px', right: '15px',
+                                background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%',
+                                width: '30px', height: '30px', cursor: 'pointer', color: 'red',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: 10
+                            }}
+                        >
+                            🗑️
+                        </button>
+
+                        <div style={{ paddingBottom: '5px' }}>
+                            <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px', flexWrap:'wrap'}}>
+                                <span style={{fontWeight:'bold', fontSize:'1.1rem', fontFamily:'monospace', color:'#444'}}>
+                                    {record.date || record.month} 
                                 </span>
-                            )}
-                        </div>
-
-                        {/* 主內容：項目名稱 / 金額 */}
-                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '40px', marginBottom:'5px'}}>
-                            <span style={{fontSize:'1.1rem', color:'#1d1d1f', fontWeight:'700'}}>
-                                {/* ★ 這裡修改了：如果是 "月結記帳" 就顯示 "日記帳" */}
-                                {record.note === '月結記帳' ? '日記帳' : record.note}
-                            </span>
-                            <span style={{fontSize:'1.6rem', fontWeight:'800', color: (record.type==='income' || record.type==='liquidate') ? '#2ecc71' : '#1d1d1f'}}>
-                                {(record.type === 'income' || record.type === 'liquidate') ? '+' : '-'}
-                                {formatMoney(record.total)}
-                            </span>
-                        </div>
-
-                        {/* ★ 新增：明確顯示「誰花的/誰賺的」 */}
-                        <div style={{fontSize:'0.85rem', color:'#888', display:'flex', alignItems:'center', gap:'5px', marginTop:'5px'}}>
-                            {record.payer === '共同帳戶' ? (
-                                <span style={{background:'#eee', padding:'2px 6px', borderRadius:'4px'}}>🏫 共同帳戶</span>
-                            ) : (
-                                <span style={{background:'#e8f0fe', color:'#1967d2', padding:'2px 6px', borderRadius:'4px'}}>
-                                    👤 {record.payer}
+                                <span style={{fontSize:'0.8rem', color:'white', background: getTypeColor(record.type), padding:'2px 8px', borderRadius:'10px', fontWeight:'600'}}>
+                                    {record.category}
                                 </span>
-                            )}
-                        </div>
-
-                        {/* 個人支出的詳細分類 */}
-                        {record.type === 'expense' && record.details && (
-                            <div style={{
-                                marginTop: '10px',
-                                fontSize:'0.9rem', 
-                                color:'#666', 
-                                display:'grid', 
-                                gridTemplateColumns:'1fr 1fr', 
-                                gap:'5px', 
-                                background:'rgba(255,255,255,0.4)', 
-                                padding:'8px', 
-                                borderRadius:'8px'
-                            }}>
-                                <span>🍱 餐費: {formatMoney(record.details.food || 0)}</span>
-                                <span>🛍️ 購物: {formatMoney(record.details.shopping || 0)}</span>
-                                <span>📱 固定: {formatMoney(record.details.fixed || 0)}</span>
-                                <span>🧩 其他: {formatMoney(record.details.other || 0)}</span>
+                                {record.advancedBy && (
+                                    <span style={{
+                                        fontSize:'0.75rem', 
+                                        border: record.isSettled ? '1px solid #2ecc71' : '1px solid #f39c12',
+                                        color: record.isSettled ? '#2ecc71' : '#f39c12',
+                                        padding:'1px 6px', borderRadius:'10px', background:'#fff', fontWeight:'bold'
+                                    }}>
+                                        {record.advancedBy === 'userA' ? '恆恆' : '得得'}墊付 
+                                        {record.isSettled ? ' (已結)' : ' (未結)'}
+                                    </span>
+                                )}
                             </div>
-                        )}
+
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '40px', marginBottom:'5px'}}>
+                                <span style={{fontSize:'1.1rem', color:'#1d1d1f', fontWeight:'700'}}>
+                                    {record.note === '月結記帳' ? '日記帳' : record.note}
+                                </span>
+                                <span style={{fontSize:'1.6rem', fontWeight:'800', color: amountColor}}>
+                                    {showSign}{formatMoney(record.total)}
+                                </span>
+                            </div>
+
+                            <div style={{fontSize:'0.85rem', color:'#888', display:'flex', alignItems:'center', gap:'5px', marginTop:'5px'}}>
+                                {record.payer === '共同帳戶' ? (
+                                    <span style={{background:'#eee', padding:'2px 6px', borderRadius:'4px'}}>🏫 共同帳戶</span>
+                                ) : (
+                                    <span style={{background:'#e8f0fe', color:'#1967d2', padding:'2px 6px', borderRadius:'4px'}}>
+                                        👤 {record.payer}
+                                    </span>
+                                )}
+                            </div>
+
+                            {record.type === 'expense' && record.details && (
+                                <div style={{
+                                    marginTop: '10px',
+                                    fontSize:'0.9rem', 
+                                    color:'#666', 
+                                    display:'grid', 
+                                    gridTemplateColumns:'1fr 1fr', 
+                                    gap:'5px', 
+                                    background:'rgba(255,255,255,0.4)', 
+                                    padding:'8px', 
+                                    borderRadius:'8px'
+                                }}>
+                                    <span>🍱 餐費: {formatMoney(record.details.food || 0)}</span>
+                                    <span>🛍️ 購物: {formatMoney(record.details.shopping || 0)}</span>
+                                    <span>📱 固定: {formatMoney(record.details.fixed || 0)}</span>
+                                    <span>🧩 其他: {formatMoney(record.details.other || 0)}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-                ))
+                  );
+                })
             )}
          </>
        )}
 
-       {/* 明細彈出視窗 */}
        {showSettlementModal && settlementTarget && (
          <div style={{
              position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000,
