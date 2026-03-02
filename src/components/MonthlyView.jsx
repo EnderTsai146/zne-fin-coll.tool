@@ -52,37 +52,46 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return history.filter(r => r.advancedBy === userKey && r.isSettled === false);
   };
 
+// ★ 修正：真實發生資金流動 (共同現金 -> 個人)
   const handleSettle = (targetUser) => {
     const targetName = targetUser === 'userA' ? '恆恆' : '得得';
     const debtAmount = calculateDebt(targetUser);
     
     if (debtAmount === 0) return alert("目前沒有未結清的款項喔！");
+    if (assets.jointCash < debtAmount) return alert(`❌ 共同現金餘額不足以結清 (需 $${debtAmount.toLocaleString()})！`);
 
-    const confirmMsg = `【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這代表共同帳戶已經撥款給他了)`;
+    const confirmMsg = `【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這將會從「共同現金」扣除該金額，並加回「${targetName}」的個人帳戶)`;
     if (!window.confirm(confirmMsg)) return;
 
-    const newHistory = history.map(record => {
+    // 執行轉帳
+    const newAssets = { ...assets };
+    newAssets.jointCash -= debtAmount;
+    newAssets[targetUser] += debtAmount;
+
+    // 更新狀態
+    const newHistory = newAssets.monthlyExpenses.map(record => {
         if (record.advancedBy === targetUser && record.isSettled === false) {
             return { ...record, isSettled: true }; 
         }
         return record;
     });
+    newAssets.monthlyExpenses = newHistory;
 
-    setAssets({ ...assets, monthlyExpenses: newHistory });
+    setAssets(newAssets); // 這會同時觸發雲端存檔
     
     if (sendLineNotification) {
         sendLineNotification({
-            title: "代墊款結清",
+            title: "✅ 代墊款結清",
             amount: `$${debtAmount.toLocaleString()}`,
             category: "帳務結算",
-            note: `共同帳戶已撥款給 ${targetName}，帳務已歸零。`,
+            note: `共同帳戶已實際撥款給 ${targetName}。`,
             date: new Date().toISOString().split('T')[0],
             color: "#2ecc71",
             operator: currentUser || "系統"
         });
     }
 
-    alert("✅ 結清完成！已發送通知。");
+    alert("✅ 結清完成！資金已轉移，並發送通知。");
     setShowSettlementModal(false);
   };
 

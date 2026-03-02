@@ -53,15 +53,18 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     const confirmMsg = `【確認個人資金變動】\n\n日期：${txDate}\n對象：${userName}\n類型：${recordCategory}\n金額：${formatMoney(val)}\n\n確定要執行嗎？`;
     if (!window.confirm(confirmMsg)) return;
 
-    onTransaction(newAssets, {
-      type: recordType,
-      category: recordCategory,
-      payer: userName,
-      total: val,
-      note: finalNote,
-      month: txDate.slice(0, 7),
-      date: txDate
-    });
+onTransaction(newAssets, {
+            type: 'joint_invest_sell',
+            category: '投資變現',
+            payer: '共同帳戶',
+            investType: investType,
+            total: val,
+            principal: principalToDeduct, // ★ 新增這行：記錄原始本金，未來撤銷時才不會退錯錢
+            note: `賣出 ${label} (轉回現金)`,
+            month: txDate.slice(0, 7),
+            date: txDate
+        });
+        alert(`🔄 成功變現 ${formatMoney(val)} 至共同現金！`);
 
     alert(`✅ 已記錄 ${recordCategory}：${formatMoney(val)}`);
     setPersonalAmount('');

@@ -167,26 +167,25 @@ function App() {
     });
   };
 
-// ★ 新增：共同支出邏輯 (從操作頁面獨立出來)
+// ★ 修正：共同支出邏輯 (修復代墊沒扣個人餘額的問題)
   const handleAddJointExpense = (date, category, amount, advancedBy, note) => {
     const val = Number(amount);
     const newAssets = { ...assets };
     
-    // 判斷付款方式名稱
     let paymentMethodName = "共同帳戶直接付";
-    if (advancedBy === 'userA') paymentMethodName = "恆恆先墊 (User A)";
-    if (advancedBy === 'userB') paymentMethodName = "得得先墊 (User B)";
-
-    // 如果是共同帳戶直接扣款，檢查餘額並扣款
     if (advancedBy === 'jointCash') {
-      if (newAssets.jointCash < val) {
-        alert("❌ 共同現金不足！(帳面餘額不足)");
-        return;
-      }
+      if (newAssets.jointCash < val) return alert("❌ 共同現金不足！(帳面餘額不足)");
       newAssets.jointCash -= val;
+    } else if (advancedBy === 'userA') {
+      if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足以代墊！");
+      newAssets.userA -= val; 
+      paymentMethodName = "恆恆先墊 (User A)";
+    } else if (advancedBy === 'userB') {
+      if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足以代墊！");
+      newAssets.userB -= val; 
+      paymentMethodName = "得得先墊 (User B)";
     }
 
-    // 組合最終備註
     const finalNote = note.trim() ? `${category} - ${note.trim()}` : category;
     const isSettled = advancedBy === 'jointCash';
 
@@ -195,36 +194,25 @@ function App() {
       monthlyExpenses: [
         ...newAssets.monthlyExpenses,
         {
-          date, 
-          month: date.slice(0, 7), 
-          type: 'spend', 
-          category: '共同支出',
-          payer: '共同帳戶', 
-          total: val, 
-          note: finalNote, 
-          operator: operatorName,
+          date, month: date.slice(0, 7), type: 'spend', category: '共同支出',
+          payer: '共同帳戶', total: val, note: finalNote, operator: operatorName,
           advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
-          isSettled: isSettled,
-          timestamp: `${date}T12:00:00.000Z`
+          isSettled: isSettled, timestamp: `${date}T12:00:00.000Z`
         }
       ]
     };
 
     saveToCloud(finalAssets);
     alert(`💸 已記錄共同支出 ${formatMoney(val)} \n付款方式：${paymentMethodName}`);
-    setCurrentPage('overview'); // 記帳完跳回總覽
+    setCurrentPage('overview'); 
 
     sendLineNotification({
-      title: "共同支出",
-      amount: `$${val.toLocaleString()}`,
-      category: "共同支出",
-      note: finalNote,
-      date: date,
-      color: "#ef454d", 
-      operator: operatorName
+      title: "共同支出", amount: `$${val.toLocaleString()}`, category: "共同支出",
+      note: finalNote, date: date, color: "#ef454d", operator: operatorName
     });
   };
 
+  // ★ 修正：刪除邏輯 (修復退款對象與投資本金計算，並新增 Line 通知)
   const handleDeleteTransaction = (indexToDelete) => {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
@@ -232,22 +220,30 @@ function App() {
     const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
 
     switch (record.type) {
-      case 'income': if (payerKey) newAssets[payerKey] -= record.total; break;
-      case 'expense': if (payerKey) newAssets[payerKey] += record.total; break;
-      case 'spend': newAssets.jointCash += record.total; break;
-      case 'transfer': 
-         if (payerKey) newAssets[payerKey] += record.total;
-         if (record.note.includes('共同現金')) newAssets.jointCash -= record.total;
-         else {
-           const typeMatch = record.note.split('-')[1]; 
-           if (typeMatch && newAssets.jointInvestments[typeMatch] !== undefined) newAssets.jointInvestments[typeMatch] -= record.total;
+      case 'income':
+      case 'personal_invest_profit':
+         if (payerKey) newAssets[payerKey] -= record.total; break;
+      case 'expense':
+      case 'personal_invest_loss':
+         if (payerKey) newAssets[payerKey] += record.total; break;
+      case 'spend':
+         if (record.advancedBy === 'jointCash' || !record.advancedBy) {
+             newAssets.jointCash += record.total;
+         } else {
+             if (record.isSettled) {
+                 newAssets.jointCash += record.total;
+             } else {
+                 newAssets[record.advancedBy] += record.total;
+             }
          }
          break;
-      case 'liquidate': 
-      case 'joint_invest_sell': 
-         newAssets.jointCash -= record.total;
-         const sellType = record.investType || (record.note && record.note.split(' ')[1]); 
-         if (sellType && newAssets.jointInvestments[sellType] !== undefined) newAssets.jointInvestments[sellType] += record.total; 
+      case 'transfer': 
+         if (payerKey) newAssets[payerKey] += record.total;
+         if (record.note && record.note.includes('共同現金')) {
+             newAssets.jointCash -= record.total;
+         } else {
+             newAssets.jointCash -= record.total; // 預防舊資料格式
+         }
          break;
       case 'joint_invest_buy':
          newAssets.jointCash += record.total;
@@ -255,15 +251,30 @@ function App() {
              newAssets.jointInvestments[record.investType] -= record.total;
          }
          break;
-      case 'personal_invest_profit':
-         if (payerKey) newAssets[payerKey] -= record.total; break;
-      case 'personal_invest_loss':
-         if (payerKey) newAssets[payerKey] += record.total; break;
+      case 'liquidate': 
+      case 'joint_invest_sell': 
+         newAssets.jointCash -= record.total;
+         const sellType = record.investType || (record.note && record.note.split(' ')[1]); 
+         if (sellType && newAssets.jointInvestments[sellType] !== undefined) {
+             newAssets.jointInvestments[sellType] += (record.principal || record.total); 
+         }
+         break;
       default: break;
     }
     newAssets.monthlyExpenses = assets.monthlyExpenses.filter((_, i) => i !== indexToDelete);
     saveToCloud(newAssets);
-    alert("🗑️ 已刪除並同步雲端！");
+    
+    sendLineNotification({
+      title: "🗑️ 刪除/撤銷紀錄",
+      amount: `$${record.total.toLocaleString()}`,
+      category: record.category,
+      note: `已撤銷: ${record.note}`,
+      date: new Date().toISOString().split('T')[0],
+      color: "#666666", 
+      operator: operatorName
+    });
+
+    alert("🗑️ 已刪除，金額已正確復原歸位！");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
@@ -309,6 +320,6 @@ function App() {
       </div>
     </div>
   );
-}
+};
 
 export default App;
