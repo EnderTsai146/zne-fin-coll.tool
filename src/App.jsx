@@ -14,8 +14,8 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 // ★★★ 請檢查您的設定 ★★★
 // ==========================================
 const USER_MAPPING = {
-  "您的email@example.com": "恆恆🐶",   
-  "另一半的email@example.com": "得得🐕" 
+  "hzh940317@gmail.com": "恆恆🐶",   
+  "ender.tsai@gmail.com": "得得🐕" 
 };
 
 const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/bl76wl9v2v6hxd1k5xdm5n1yjt34hs7l"; 
@@ -94,7 +94,6 @@ function App() {
     let color = "#17c9b2"; 
     let title = "資產變動";
     
-    // ★ 新增了投資專用的顏色與標題
     if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
     else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
     else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
@@ -106,12 +105,11 @@ function App() {
     const finalAssets = {
       ...newAssets,
       monthlyExpenses: [
-        ...assets.monthlyExpenses,
+        ...(assets.monthlyExpenses || []),
         { ...historyRecord, operator: operatorName, timestamp: timestamp }
       ]
     };
     saveToCloud(finalAssets);
-
     setCurrentPage('overview');
 
     sendLineNotification({
@@ -125,101 +123,91 @@ function App() {
     });
   };
 
-  // ★ 修改：個人日記帳邏輯 (新增 note 參數)
   const handleAddExpense = (date, expenseData, totalAmount, payer, note) => {
     const payerKey = payer === 'heng' ? 'userA' : 'userB';
     const payerName = payer === 'heng' ? '恆恆🐶' : '得得🐕';
 
     if (assets[payerKey] < totalAmount) alert(`⚠️ ${payerName} 的個人餘額不足！`);
 
-    // 如果使用者沒填備註，預設給「日記帳」
     const finalNote = note || '日記帳';
 
     const finalAssets = {
       ...assets,
       [payerKey]: assets[payerKey] - totalAmount,
       monthlyExpenses: [
-        ...assets.monthlyExpenses,
+        ...(assets.monthlyExpenses || []),
         { 
-          date, 
-          month: date.slice(0, 7), 
-          type: 'expense', 
-          category: '個人支出',
-          details: expenseData, 
-          total: totalAmount, 
-          payer: payerName, 
-          operator: operatorName, 
-          note: finalNote, // ★ 這裡現在會存入您輸入的備註
-          timestamp: `${date}T12:00:00.000Z`
+          date, month: date.slice(0, 7), type: 'expense', category: '個人支出',
+          details: expenseData, total: totalAmount, payer: payerName, 
+          operator: operatorName, note: finalNote, timestamp: `${date}T12:00:00.000Z`
         }
       ]
     };
     saveToCloud(finalAssets);
     alert("✅ 記帳完成！");
-    setCurrentPage('overview'); // 記完帳自動跳轉回總覽，方便看餘額
-
-    sendLineNotification({
-      title: "個人日記帳",
-      amount: `$${totalAmount.toLocaleString()}`,
-      category: "個人支出",
-      note: finalNote, // ★ Line 通知也會顯示備註 (例如：午餐)
-      date: date,
-      color: "#ef454d", 
-      operator: operatorName
-    });
-  };
-
-// ★ 修正：共同支出邏輯 (修復代墊沒扣個人餘額的問題)
-  const handleAddJointExpense = (date, category, amount, advancedBy, note) => {
-    const val = Number(amount);
-    const newAssets = { ...assets };
-    
-    let paymentMethodName = "共同帳戶直接付";
-    if (advancedBy === 'jointCash') {
-      if (newAssets.jointCash < val) return alert("❌ 共同現金不足！(帳面餘額不足)");
-      newAssets.jointCash -= val;
-    } else if (advancedBy === 'userA') {
-      if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足以代墊！");
-      newAssets.userA -= val; 
-      paymentMethodName = "恆恆先墊 (User A)";
-    } else if (advancedBy === 'userB') {
-      if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足以代墊！");
-      newAssets.userB -= val; 
-      paymentMethodName = "得得先墊 (User B)";
-    }
-
-    const finalNote = note.trim() ? `${category} - ${note.trim()}` : category;
-    const isSettled = advancedBy === 'jointCash';
-
-    const finalAssets = {
-      ...newAssets,
-      monthlyExpenses: [
-        ...newAssets.monthlyExpenses,
-        {
-          date, month: date.slice(0, 7), type: 'spend', category: '共同支出',
-          payer: '共同帳戶', total: val, note: finalNote, operator: operatorName,
-          advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
-          isSettled: isSettled, timestamp: `${date}T12:00:00.000Z`
-        }
-      ]
-    };
-
-    saveToCloud(finalAssets);
-    
-    // ★ 修復：改用內建的 toLocaleString()，這樣程式就不會在這裡崩潰了！
-    alert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
-    
-    // ★ 現在這行終於可以順利執行了
     setCurrentPage('overview'); 
 
-    // ★ Line 通知也終於可以順利發送了
     sendLineNotification({
-      title: "共同支出", amount: `$${val.toLocaleString()}`, category: "共同支出",
+      title: "個人日記帳", amount: `$${totalAmount.toLocaleString()}`, category: "個人支出",
       note: finalNote, date: date, color: "#ef454d", operator: operatorName
     });
   };
 
-  // ★ 修正：刪除邏輯 (修復退款對象與投資本金計算，並新增 Line 通知)
+  // ★ 修正：加入防呆機制，確保任何情況下都不會當機
+  const handleAddJointExpense = (date, category, amount, advancedBy, note) => {
+    try {
+        const val = Number(amount) || 0;
+        const newAssets = { ...assets };
+        
+        let paymentMethodName = "共同帳戶直接付";
+        if (advancedBy === 'jointCash') {
+          if (newAssets.jointCash < val) return alert("❌ 共同現金不足！(帳面餘額不足)");
+          newAssets.jointCash -= val;
+        } else if (advancedBy === 'userA') {
+          if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足以代墊！");
+          newAssets.userA -= val; 
+          paymentMethodName = "恆恆先墊 (User A)";
+        } else if (advancedBy === 'userB') {
+          if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足以代墊！");
+          newAssets.userB -= val; 
+          paymentMethodName = "得得先墊 (User B)";
+        }
+
+        // 🛡️ 防呆：確保 note 絕對不會引發錯誤
+        const safeNote = note ? String(note).trim() : '';
+        const finalNote = safeNote ? `${category} - ${safeNote}` : category;
+        const isSettled = advancedBy === 'jointCash';
+
+        const finalAssets = {
+          ...newAssets,
+          monthlyExpenses: [
+            ...(newAssets.monthlyExpenses || []),
+            {
+              date, month: date.slice(0, 7), type: 'spend', category: '共同支出',
+              payer: '共同帳戶', total: val, note: finalNote, operator: operatorName,
+              advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
+              isSettled: isSettled, timestamp: `${date}T12:00:00.000Z`
+            }
+          ]
+        };
+
+        saveToCloud(finalAssets);
+        alert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
+        
+        // 確保跳轉
+        setCurrentPage('overview'); 
+
+        // 確保發送通知
+        sendLineNotification({
+          title: "共同支出", amount: `$${val.toLocaleString()}`, category: "共同支出",
+          note: finalNote, date: date, color: "#ef454d", operator: operatorName
+        });
+    } catch (err) {
+        console.error("系統錯誤：", err);
+        alert("❌ 發生預期外的錯誤，請檢查主控台！");
+    }
+  };
+
   const handleDeleteTransaction = (indexToDelete) => {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
@@ -249,7 +237,7 @@ function App() {
          if (record.note && record.note.includes('共同現金')) {
              newAssets.jointCash -= record.total;
          } else {
-             newAssets.jointCash -= record.total; // 預防舊資料格式
+             newAssets.jointCash -= record.total; 
          }
          break;
       case 'joint_invest_buy':
@@ -307,7 +295,8 @@ function App() {
   return (
     <div>
       <Navbar />
-      <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+      {/* ★ 補回了過場動畫標籤 (key 與 className) */}
+      <div key={currentPage} className="page-transition-enter" style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
         {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
         
         {currentPage === 'monthly' && (
@@ -322,7 +311,6 @@ function App() {
         
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
         
-        {/* ★ 更新：傳遞新的 handleAddExpense */}
         {currentPage === 'expense' && <ExpenseEntry onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
       </div>
     </div>
