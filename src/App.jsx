@@ -112,6 +112,8 @@ function App() {
     };
     saveToCloud(finalAssets);
 
+    setCurrentPage('overview');
+
     sendLineNotification({
       title: title,
       amount: `$${historyRecord.total.toLocaleString()}`,
@@ -203,9 +205,14 @@ function App() {
     };
 
     saveToCloud(finalAssets);
-    alert(`💸 已記錄共同支出 ${formatMoney(val)} \n付款方式：${paymentMethodName}`);
+    
+    // ★ 修復：改用內建的 toLocaleString()，這樣程式就不會在這裡崩潰了！
+    alert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
+    
+    // ★ 現在這行終於可以順利執行了
     setCurrentPage('overview'); 
 
+    // ★ Line 通知也終於可以順利發送了
     sendLineNotification({
       title: "共同支出", amount: `$${val.toLocaleString()}`, category: "共同支出",
       note: finalNote, date: date, color: "#ef454d", operator: operatorName
