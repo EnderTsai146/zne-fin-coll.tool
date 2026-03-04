@@ -5,11 +5,14 @@ const TotalOverview = ({ assets, setAssets }) => {
   const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
   const roi = assets.roi || { stock: 0, fund: 0, deposit: 0, other: 0 };
   const history = assets.monthlyExpenses || [];
+  
+  // 🛡️ 防呆機制：確保舊資料也有投資欄位
+  const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const [ledgerModal, setLedgerModal] = useState(null); // 'jointCash', 'userA', 'userB'
 
   const getEstValue = (type) => {
-    const principal = assets.jointInvestments[type];
+    const principal = safeInvestments[type] || 0;
     const rate = roi[type] || 0;
     return principal * (1 + rate / 100);
   };
@@ -21,11 +24,15 @@ const TotalOverview = ({ assets, setAssets }) => {
     setAssets(newAssets);
   };
 
-  const totalJointInvestPrincipal = Object.values(assets.jointInvestments).reduce((a, b) => a + b, 0);
+  const totalJointInvestPrincipal = Object.values(safeInvestments).reduce((a, b) => a + b, 0);
   const totalEstValue = getEstValue('stock') + getEstValue('fund') + getEstValue('deposit') + getEstValue('other');
-  const totalAssets = assets.userA + assets.userB + assets.jointCash + totalEstValue;
+  
+  // ★ 修復白畫面元兇：補上遺漏的未實現損益計算變數！
+  const totalUnrealizedPL = totalEstValue - totalJointInvestPrincipal;
+  
+  const totalAssets = (assets.userA || 0) + (assets.userB || 0) + (assets.jointCash || 0) + totalEstValue;
 
-  // ★ 新增：根據「資金快照」動態產生分類帳 (Ledger)
+  // ★ 根據「資金快照」動態產生分類帳 (Ledger)
   const getLedgerRecords = (accountKey) => {
     let records = [];
     history.forEach(r => {
@@ -74,12 +81,11 @@ const TotalOverview = ({ assets, setAssets }) => {
           <div>
             <div style={{fontSize:'1rem', fontWeight:'bold', color:'#555', display:'flex', alignItems:'center', gap:'10px'}}>
               共同現金
-              {/* ★ 新增詳情按鈕 */}
               <button className="glass-btn" style={{padding:'2px 8px', fontSize:'0.75rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('jointCash')}>
                  🔍 詳情
               </button>
             </div>
-            <div style={{fontSize:'1.8rem', fontWeight:'bold', color:'#17c9b2'}}>{formatMoney(assets.jointCash)}</div>
+            <div style={{fontSize:'1.8rem', fontWeight:'bold', color:'#17c9b2'}}>{formatMoney(assets.jointCash || 0)}</div>
           </div>
         </div>
 
@@ -128,7 +134,7 @@ const TotalOverview = ({ assets, setAssets }) => {
                   恆恆🐶
                   <button className="glass-btn" style={{padding:'2px 6px', fontSize:'0.7rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('userA')}>🔍</button>
               </div>
-              <div style={{fontSize:'1.5rem', color:'#667eea'}}>{formatMoney(assets.userA)}</div>
+              <div style={{fontSize:'1.5rem', color:'#667eea'}}>{formatMoney(assets.userA || 0)}</div>
           </div>
           <div style={{width:'1px', background:'#ddd'}}></div>
           <div style={{textAlign:'center', width:'48%'}}>
@@ -136,7 +142,7 @@ const TotalOverview = ({ assets, setAssets }) => {
                   得得🐕
                   <button className="glass-btn" style={{padding:'2px 6px', fontSize:'0.7rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('userB')}>🔍</button>
               </div>
-              <div style={{fontSize:'1.5rem', color:'#764ba2'}}>{formatMoney(assets.userB)}</div>
+              <div style={{fontSize:'1.5rem', color:'#764ba2'}}>{formatMoney(assets.userB || 0)}</div>
           </div>
         </div>
       </div>
