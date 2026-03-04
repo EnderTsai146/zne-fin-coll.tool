@@ -62,12 +62,24 @@ function App() {
     setDoc(docRef, newAssets).catch((err) => alert("連線錯誤：" + err.message));
   };
 
+  // ★ 升級重點：替 Line 發送器裝上終極過濾防護罩
   const sendLineNotification = async (data) => {
     try {
+      // 🛡️ 防呆清洗：確保所有傳給 Make.com 的資料都是字串，並替換掉會弄壞 JSON 的特殊符號
+      const safeData = {
+        title: String(data.title || "系統通知").replace(/"/g, '＂').replace(/\n/g, ' '),
+        amount: String(data.amount || "$0").replace(/"/g, '＂'),
+        category: String(data.category || "未分類").replace(/"/g, '＂').replace(/\n/g, ' '),
+        note: String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' '), 
+        date: String(data.date || new Date().toISOString().split('T')[0]),
+        color: String(data.color || "#666666"),
+        operator: String(data.operator || operatorName || "系統").replace(/"/g, '＂')
+      };
+
       await fetch(MAKE_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
+        body: JSON.stringify(safeData)
       });
     } catch (error) {
       console.error("Line 通知發送失敗", error);
@@ -78,7 +90,6 @@ function App() {
     if(window.confirm("確定要登出嗎？")) signOut(auth);
   };
 
-  // ★ 新增：產生「交易前後資金快照」的小工具
   const getSnapshot = (currentAssets) => ({
     userA: currentAssets.userA,
     userB: currentAssets.userB,
@@ -87,7 +98,7 @@ function App() {
   });
 
   const handleTransaction = (newAssets, historyRecord) => {
-    const timestamp = historyRecord.date ? `${historyRecord.date}T12:00:00.000Z` : new Date().toISOString();
+    const timestamp = new Date().toISOString(); 
     let color = "#17c9b2"; let title = "資產變動";
     
     if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
@@ -98,7 +109,6 @@ function App() {
     else if (historyRecord.type === 'personal_invest_profit') { color = "#e67e22"; title = "個人投資獲利"; }
     else if (historyRecord.type === 'personal_invest_loss') { color = "#7f8c8d"; title = "個人投資虧損"; }
 
-    // ★ 紀錄快照
     const snapshotBefore = getSnapshot(assets);
     const snapshotAfter = getSnapshot(newAssets);
 
@@ -110,7 +120,7 @@ function App() {
           ...historyRecord, 
           operator: operatorName, 
           timestamp: timestamp,
-          auditTrail: { before: snapshotBefore, after: snapshotAfter } // 存入快照
+          auditTrail: { before: snapshotBefore, after: snapshotAfter } 
         }
       ]
     };
@@ -118,7 +128,9 @@ function App() {
     setCurrentPage('overview');
 
     sendLineNotification({
-      title: title, amount: `$${historyRecord.total.toLocaleString()}`, category: historyRecord.category,
+      title: title, 
+      amount: `$${(Number(historyRecord.total) || 0).toLocaleString()}`, // 🛡️ 加上 Number 轉換防呆
+      category: historyRecord.category,
       note: historyRecord.note || '無', date: historyRecord.date, color: color, operator: operatorName
     });
   };
@@ -130,10 +142,10 @@ function App() {
     if (assets[payerKey] < totalAmount) alert(`⚠️ ${payerName} 的個人餘額不足！`);
 
     const finalNote = note || '日記帳';
-    const snapshotBefore = getSnapshot(assets); // ★ 快照前
+    const snapshotBefore = getSnapshot(assets); 
     
     const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
-    const snapshotAfter = getSnapshot(newAssetsTemp); // ★ 快照後
+    const snapshotAfter = getSnapshot(newAssetsTemp); 
 
     const finalAssets = {
       ...newAssetsTemp,
@@ -142,8 +154,9 @@ function App() {
         { 
           date, month: date.slice(0, 7), type: 'expense', category: '個人支出',
           details: expenseData, total: totalAmount, payer: payerName, 
-          operator: operatorName, note: finalNote, timestamp: `${date}T12:00:00.000Z`,
-          auditTrail: { before: snapshotBefore, after: snapshotAfter } // 存入快照
+          operator: operatorName, note: finalNote, 
+          timestamp: new Date().toISOString(), 
+          auditTrail: { before: snapshotBefore, after: snapshotAfter } 
         }
       ]
     };
@@ -161,7 +174,7 @@ function App() {
     try {
         const val = Number(amount) || 0;
         const newAssets = { ...assets };
-        const snapshotBefore = getSnapshot(assets); // ★ 快照前
+        const snapshotBefore = getSnapshot(assets); 
         
         let paymentMethodName = "共同帳戶直接付";
         if (advancedBy === 'jointCash') {
@@ -177,7 +190,7 @@ function App() {
           paymentMethodName = "得得先墊 (User B)";
         }
 
-        const snapshotAfter = getSnapshot(newAssets); // ★ 快照後
+        const snapshotAfter = getSnapshot(newAssets); 
 
         const safeNote = note ? String(note).trim() : '';
         const finalNote = safeNote ? `${category} - ${safeNote}` : category;
@@ -191,8 +204,9 @@ function App() {
               date, month: date.slice(0, 7), type: 'spend', category: '共同支出',
               payer: '共同帳戶', total: val, note: finalNote, operator: operatorName,
               advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
-              isSettled: isSettled, timestamp: `${date}T12:00:00.000Z`,
-              auditTrail: { before: snapshotBefore, after: snapshotAfter } // 存入快照
+              isSettled: isSettled, 
+              timestamp: new Date().toISOString(), 
+              auditTrail: { before: snapshotBefore, after: snapshotAfter } 
             }
           ]
         };
@@ -211,15 +225,12 @@ function App() {
     }
   };
 
-  // ★ 全面升級：支援備註與軟刪除的作廢邏輯
   const handleDeleteTransaction = (indexToDelete) => {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
     
-    // 防呆：已經刪除過的不能再刪
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
 
-    // ★ 跳出視窗要求填寫刪除原因
     const reason = window.prompt("⚠️ 準備作廢此紀錄，請輸入刪除原因（必填）：");
     if (!reason || !reason.trim()) {
         return alert("❌ 必須輸入刪除原因才能作廢紀錄喔！");
@@ -229,7 +240,6 @@ function App() {
     const newAssets = { ...assets };
     const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
 
-    // 執行退款邏輯 (保持不變)
     switch (record.type) {
       case 'income':
       case 'personal_invest_profit':
@@ -269,7 +279,6 @@ function App() {
 
     const snapshotAfter = getSnapshot(newAssets);
 
-    // ★ 軟刪除：不移除資料，而是更新狀態並存入作廢原因與退款快照
     newAssets.monthlyExpenses = assets.monthlyExpenses.map((r, i) => 
         i === indexToDelete 
             ? { 
@@ -286,7 +295,7 @@ function App() {
     
     sendLineNotification({
       title: "🗑️ 刪除/作廢紀錄",
-      amount: `$${record.total.toLocaleString()}`,
+      amount: `$${(Number(record.total) || 0).toLocaleString()}`, // 🛡️ 加上 Number 轉換防呆
       category: record.category,
       note: `已作廢: ${record.note} (原因: ${reason.trim()})`,
       date: new Date().toISOString().split('T')[0],
@@ -339,6 +348,6 @@ function App() {
       </div>
     </div>
   );
-};
+}
 
 export default App;
