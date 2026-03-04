@@ -1,14 +1,6 @@
 // src/components/MonthlyView.jsx
 import React, { useState, useMemo } from 'react';
-import { 
-  Chart as ChartJS, 
-  ArcElement, 
-  Tooltip, 
-  Legend, 
-  CategoryScale, 
-  LinearScale, 
-  BarElement 
-} from 'chart.js';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
@@ -19,17 +11,14 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   const history = assets.monthlyExpenses || [];
   
   const [viewMode, setViewMode] = useState('chart');
-  
   const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 7)); 
   const [filterType, setFilterType] = useState('all');   
   const [filterUser, setFilterUser] = useState('all');   
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [settlementTarget, setSettlementTarget] = useState(null); 
 
-  // ★ 預算狀態管理
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [tempBudget, setTempBudget] = useState(assets.monthlyBudget || 40000);
   const currentBudget = assets.monthlyBudget || 40000;
@@ -51,12 +40,13 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return '#666';
   };
 
+  // ★ 修正：計算債務與列表時，必須「排除」已作廢的紀錄 (!r.isDeleted)
   const calculateDebt = (userKey) => {
-    return history.filter(r => r.advancedBy === userKey && r.isSettled === false).reduce((sum, r) => sum + Number(r.total), 0);
+    return history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false).reduce((sum, r) => sum + Number(r.total), 0);
   };
 
   const getDebtList = (userKey) => {
-    return history.filter(r => r.advancedBy === userKey && r.isSettled === false);
+    return history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false);
   };
 
   const handleSettle = (targetUser) => {
@@ -74,7 +64,8 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     newAssets[targetUser] += debtAmount;
 
     const newHistory = newAssets.monthlyExpenses.map(record => {
-        if (record.advancedBy === targetUser && record.isSettled === false) return { ...record, isSettled: true }; 
+        // 確保作廢的紀錄不會被意外改動
+        if (!record.isDeleted && record.advancedBy === targetUser && record.isSettled === false) return { ...record, isSettled: true }; 
         return record;
     });
     newAssets.monthlyExpenses = newHistory;
@@ -83,13 +74,9 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     
     if (sendLineNotification) {
         sendLineNotification({
-            title: "✅ 代墊款結清",
-            amount: `$${debtAmount.toLocaleString()}`,
-            category: "帳務結算",
-            note: `共同帳戶已實際撥款給 ${targetName}。`,
-            date: new Date().toISOString().split('T')[0],
-            color: "#2ecc71",
-            operator: currentUser || "系統"
+            title: "✅ 代墊款結清", amount: `$${debtAmount.toLocaleString()}`, category: "帳務結算",
+            note: `共同帳戶已實際撥款給 ${targetName}。`, date: new Date().toISOString().split('T')[0],
+            color: "#2ecc71", operator: currentUser || "系統"
         });
     }
 
@@ -97,33 +84,22 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     setShowSettlementModal(false);
   };
 
-  const handleDeleteClick = (originalIndex, record) => {
-    const confirmMsg = `【危險動作】\n\n您確定要刪除這筆紀錄嗎？\n\n日期：${record.date}\n項目：${record.note}\n金額：${formatMoney(record.total)}\n\n⚠️ 刪除後，系統將自動復原金額。`;
-    if (window.confirm(confirmMsg)) onDelete(originalIndex);
-  };
-
-  // --- ★ 超級戰情室數據計算 ---
+  // ★ 戰情室數據計算 (全面過濾掉 isDeleted)
   const dashboardData = useMemo(() => {
     const currentMonth = selectedMonth;
-    
-    // 計算上個月的字串 (處理跨年問題)
     const [yearStr, monthStr] = currentMonth.split('-');
     let date = new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1);
     date.setMonth(date.getMonth() - 1);
     const prevMonthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-    const monthRecords = history.filter(r => r.month === currentMonth);
-    const prevMonthRecords = history.filter(r => r.month === prevMonthStr);
+    // ★ 過濾掉已作廢的紀錄
+    const monthRecords = history.filter(r => r.month === currentMonth && !r.isDeleted);
+    const prevMonthRecords = history.filter(r => r.month === prevMonthStr && !r.isDeleted);
 
-    const stats = {
-        income: { total: 0, userA: 0, userB: 0 },
-        expense: { total: 0, joint: 0, userA: 0, userB: 0 }
-    };
-    
+    const stats = { income: { total: 0, userA: 0, userB: 0 }, expense: { total: 0, joint: 0, userA: 0, userB: 0 } };
     let dailyData = {};  
     const catStats = { '餐費':0, '購物':0, '固定費用':0, '其他':0 };
 
-    // 計算本月
     monthRecords.forEach(r => {
         const day = parseInt(r.date.split('-')[2]); 
         if (r.type === 'income') {
@@ -156,7 +132,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
         }
     });
 
-    // 計算上月總花費 (MoM 比較)
     let prevMonthExpense = 0;
     prevMonthRecords.forEach(r => {
         if (r.type === 'expense' || r.type === 'spend') prevMonthExpense += r.total;
@@ -168,11 +143,9 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
         : (momDiff > 0 ? `⬆️ 比上月多花 $${momDiff.toLocaleString()}` : `⬇️ 比上月省了 $${Math.abs(momDiff).toLocaleString()}`);
     const momColor = momDiff > 0 ? '#e74c3c' : '#2ecc71';
 
-    // 計算淨現金流與儲蓄率
     const netCashFlow = stats.income.total - stats.expense.total;
     const savingsRate = stats.income.total > 0 ? ((netCashFlow / stats.income.total) * 100).toFixed(1) : 0;
 
-    // 計算日均消耗 (抓天數)
     const today = new Date();
     const realCurrentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     const daysInMonth = new Date(parseInt(yearStr), parseInt(monthStr), 0).getDate();
@@ -180,7 +153,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     if (currentMonth === realCurrentMonthStr) daysPassed = today.getDate() || 1;
     else if (currentMonth < realCurrentMonthStr) daysPassed = daysInMonth;
 
-    // 排行榜生成
     const leaderboard = Object.entries(catStats)
         .map(([name, amount]) => ({
             name, amount,
@@ -205,13 +177,11 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return { stats, pieData, barChartData, momText, momColor, netCashFlow, savingsRate, leaderboard };
   }, [history, selectedMonth]);
 
-  // 進度條顏色計算
   const budgetPercent = Math.min((dashboardData.stats.expense.total / currentBudget) * 100, 100).toFixed(1);
   let progressColor = '#2ecc71'; 
   if (budgetPercent >= 90) progressColor = '#e74c3c'; 
   else if (budgetPercent >= 70) progressColor = '#f39c12'; 
 
-  // --- 進階篩選邏輯 (流水帳用) ---
   const historyWithIndex = history.map((record, index) => ({ ...record, originalIndex: index }));
   const filteredHistory = historyWithIndex.filter(record => {
     const recordMonth = record.month || record.date.slice(0, 7);
@@ -256,7 +226,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 <input type="month" className="glass-input" style={{width:'auto', margin:0, padding:'5px 10px'}} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
             </div>
 
-            {/* ★ 功能一：月度預算進度條 */}
             <div className="glass-card" style={{padding:'15px', marginBottom:'15px'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
                     <h3 style={{margin:0, fontSize:'1.1rem', color:'#555'}}>🎯 本月預算進度</h3>
@@ -280,7 +249,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 </div>
             </div>
 
-            {/* ★ 功能二 & 四：三大核心數據 (包含同期比較、淨現金流、儲蓄率) */}
             <div style={{display:'flex', gap:'10px', marginBottom:'15px', flexWrap:'wrap'}}>
                 <div className="glass-card" style={{flex:1, minWidth:'120px', padding:'15px', textAlign:'center', background:'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)'}}>
                     <div style={{fontSize:'0.8rem', color:'#1d1d1f', opacity:0.7}}>總收入</div>
@@ -309,11 +277,10 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
 
             {dashboardData.stats.expense.total === 0 ? (
                 <div className="glass-card" style={{textAlign:'center', padding:'30px', color:'#888'}}>
-                    🦕 這個月還沒有支出紀錄喔！
+                    🦕 這個月還沒有有效的支出紀錄喔！
                 </div>
             ) : (
                 <>
-                    {/* ★ 功能三：排行榜與圓餅圖 */}
                     <div style={{display:'flex', gap:'10px', marginBottom:'15px', flexWrap:'wrap'}}>
                         <div className="glass-card" style={{flex:1, minWidth:'250px'}}>
                             <h4 style={{margin:'0 0 10px 0', textAlign:'center', color:'#666'}}>支出結構</h4>
@@ -407,19 +374,33 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 [...filteredHistory].reverse().map((record) => {
                   const isPositive = ['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit'].includes(record.type);
                   const showSign = isPositive ? '+' : '-';
-                  const amountColor = isPositive ? '#2ecc71' : '#1d1d1f';
+                  
+                  // ★ 樣式設定：判斷是否被軟刪除
+                  const isDeleted = record.isDeleted;
+                  const opacity = isDeleted ? 0.6 : 1;
+                  const textDeco = isDeleted ? 'line-through' : 'none';
+                  const amountColor = isDeleted ? '#aaa' : (isPositive ? '#2ecc71' : '#1d1d1f');
+                  const borderColor = isDeleted ? '#ccc' : getTypeColor(record.type);
 
                   return (
-                    <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${getTypeColor(record.type)}`, position: 'relative', paddingBottom: '10px' }}>
-                        <button 
-                            onClick={() => handleDeleteClick(record.originalIndex, record)}
-                            style={{ position: 'absolute', top: '15px', right: '15px', background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: 10 }}
-                        >🗑️</button>
+                    <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
+                        
+                        {/* 如果被刪除了，就不顯示垃圾桶，改顯示「已作廢」標籤 */}
+                        {!isDeleted ? (
+                            <button 
+                                onClick={() => { if(window.confirm(`⚠️ 確認作廢？`)) onDelete(record.originalIndex); }}
+                                style={{ position: 'absolute', top: '15px', right: '15px', background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: 10 }}
+                            >🗑️</button>
+                        ) : (
+                            <div style={{ position: 'absolute', top: '15px', right: '15px', background: '#ffeaa7', color: '#d35400', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                🚫 已作廢
+                            </div>
+                        )}
 
                         <div style={{ paddingBottom: '5px' }}>
                             <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px', flexWrap:'wrap'}}>
-                                <span style={{fontWeight:'bold', fontSize:'1.1rem', fontFamily:'monospace', color:'#444'}}>{record.date || record.month}</span>
-                                <span style={{fontSize:'0.8rem', color:'white', background: getTypeColor(record.type), padding:'2px 8px', borderRadius:'10px', fontWeight:'600'}}>{record.category}</span>
+                                <span style={{fontWeight:'bold', fontSize:'1.1rem', fontFamily:'monospace', color:'#444', textDecoration: textDeco}}>{record.date || record.month}</span>
+                                <span style={{fontSize:'0.8rem', color:'white', background: borderColor, padding:'2px 8px', borderRadius:'10px', fontWeight:'600'}}>{record.category}</span>
                                 {record.advancedBy && (
                                     <span style={{ fontSize:'0.75rem', border: record.isSettled ? '1px solid #2ecc71' : '1px solid #f39c12', color: record.isSettled ? '#2ecc71' : '#f39c12', padding:'1px 6px', borderRadius:'10px', background:'#fff', fontWeight:'bold' }}>
                                         {record.advancedBy === 'userA' ? '恆恆' : '得得'}墊付 {record.isSettled ? ' (已結)' : ' (未結)'}
@@ -428,20 +409,30 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                             </div>
 
                             <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '40px', marginBottom:'5px'}}>
-                                <span style={{fontSize:'1.1rem', color:'#1d1d1f', fontWeight:'700'}}>{record.note === '月結記帳' ? '日記帳' : record.note}</span>
-                                <span style={{fontSize:'1.6rem', fontWeight:'800', color: amountColor}}>{showSign}{formatMoney(record.total)}</span>
+                                <span style={{fontSize:'1.1rem', color:'#1d1d1f', fontWeight:'700', textDecoration: textDeco}}>{record.note === '月結記帳' ? '日記帳' : record.note}</span>
+                                <span style={{fontSize:'1.6rem', fontWeight:'800', color: amountColor, textDecoration: textDeco}}>{showSign}{formatMoney(record.total)}</span>
                             </div>
 
                             <div style={{fontSize:'0.85rem', color:'#888', display:'flex', alignItems:'center', gap:'5px', marginTop:'5px'}}>
-                                {record.payer === '共同帳戶' ? <span style={{background:'#eee', padding:'2px 6px', borderRadius:'4px'}}>🏫 共同帳戶</span> : <span style={{background:'#e8f0fe', color:'#1967d2', padding:'2px 6px', borderRadius:'4px'}}>👤 {record.payer}</span>}
+                                {record.payer === '共同帳戶' ? <span style={{background:'#eee', padding:'2px 6px', borderRadius:'4px', textDecoration: textDeco}}>🏫 共同帳戶</span> : <span style={{background:'#e8f0fe', color:'#1967d2', padding:'2px 6px', borderRadius:'4px', textDecoration: textDeco}}>👤 {record.payer}</span>}
                             </div>
+                            
+                            {/* ★ 顯示作廢原因 */}
+                            {isDeleted && (
+                                <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#e74c3c', background: 'rgba(231, 76, 60, 0.1)', padding: '8px', borderRadius: '8px', border: '1px dashed #e74c3c' }}>
+                                    <strong>作廢原因：</strong> {record.deleteReason}
+                                </div>
+                            )}
 
-                            {record.type === 'expense' && record.details && (
-                                <div style={{ marginTop: '10px', fontSize:'0.9rem', color:'#666', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px', background:'rgba(255,255,255,0.4)', padding:'8px', borderRadius:'8px' }}>
-                                    <span>🍱 餐費: {formatMoney(record.details.food || 0)}</span>
-                                    <span>🛍️ 購物: {formatMoney(record.details.shopping || 0)}</span>
-                                    <span>📱 固定: {formatMoney(record.details.fixed || 0)}</span>
-                                    <span>🧩 其他: {formatMoney(record.details.other || 0)}</span>
+                            {/* ★ 顯示稽核軌跡 (快照) */}
+                            {record.auditTrail && !isDeleted && (
+                                <div style={{ marginTop: '10px', fontSize:'0.75rem', color:'#888', background:'rgba(0,0,0,0.03)', padding:'8px', borderRadius:'8px', borderTop:'1px dashed #ddd' }}>
+                                    <div style={{marginBottom:'4px', fontWeight:'bold'}}>🔍 交易後餘額快照：</div>
+                                    <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
+                                        {record.auditTrail.after.jointCash !== record.auditTrail.before.jointCash && <span>共同現金: {formatMoney(record.auditTrail.after.jointCash)}</span>}
+                                        {record.auditTrail.after.userA !== record.auditTrail.before.userA && <span>恆恆: {formatMoney(record.auditTrail.after.userA)}</span>}
+                                        {record.auditTrail.after.userB !== record.auditTrail.before.userB && <span>得得: {formatMoney(record.auditTrail.after.userB)}</span>}
+                                    </div>
                                 </div>
                             )}
                         </div>

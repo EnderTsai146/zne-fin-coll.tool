@@ -10,16 +10,12 @@ import { db, auth } from './firebase';
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
-// ==========================================
-// ★★★ 請檢查您的設定 ★★★
-// ==========================================
 const USER_MAPPING = {
-  "hzh940317@gmail.com": "恆恆🐶",   
-  "ender.tsai@gmail.com": "得得🐕" 
+  "您的email@example.com": "恆恆🐶",   
+  "另一半的email@example.com": "得得🐕" 
 };
 
 const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/bl76wl9v2v6hxd1k5xdm5n1yjt34hs7l"; 
-// ==========================================
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -53,14 +49,9 @@ function App() {
     if (!currentUser) return;
     const docRef = doc(db, "finance", "data");
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setAssets(docSnap.data());
-      } else {
-        setDoc(docRef, assets);
-      }
-    }, (error) => {
-      console.error("資料讀取失敗:", error);
-    });
+      if (docSnap.exists()) setAssets(docSnap.data());
+      else setDoc(docRef, assets);
+    }, (error) => console.error("資料讀取失敗:", error));
     return () => unsubscribe();
     // eslint-disable-next-line
   }, [currentUser]);
@@ -84,15 +75,20 @@ function App() {
   };
 
   const handleLogout = () => {
-    if(window.confirm("確定要登出嗎？")) {
-      signOut(auth);
-    }
+    if(window.confirm("確定要登出嗎？")) signOut(auth);
   };
+
+  // ★ 新增：產生「交易前後資金快照」的小工具
+  const getSnapshot = (currentAssets) => ({
+    userA: currentAssets.userA,
+    userB: currentAssets.userB,
+    jointCash: currentAssets.jointCash,
+    jointInvestments: { ...currentAssets.jointInvestments }
+  });
 
   const handleTransaction = (newAssets, historyRecord) => {
     const timestamp = historyRecord.date ? `${historyRecord.date}T12:00:00.000Z` : new Date().toISOString();
-    let color = "#17c9b2"; 
-    let title = "資產變動";
+    let color = "#17c9b2"; let title = "資產變動";
     
     if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
     else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
@@ -102,24 +98,28 @@ function App() {
     else if (historyRecord.type === 'personal_invest_profit') { color = "#e67e22"; title = "個人投資獲利"; }
     else if (historyRecord.type === 'personal_invest_loss') { color = "#7f8c8d"; title = "個人投資虧損"; }
 
+    // ★ 紀錄快照
+    const snapshotBefore = getSnapshot(assets);
+    const snapshotAfter = getSnapshot(newAssets);
+
     const finalAssets = {
       ...newAssets,
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
-        { ...historyRecord, operator: operatorName, timestamp: timestamp }
+        { 
+          ...historyRecord, 
+          operator: operatorName, 
+          timestamp: timestamp,
+          auditTrail: { before: snapshotBefore, after: snapshotAfter } // 存入快照
+        }
       ]
     };
     saveToCloud(finalAssets);
     setCurrentPage('overview');
 
     sendLineNotification({
-      title: title,
-      amount: `$${historyRecord.total.toLocaleString()}`,
-      category: historyRecord.category,
-      note: historyRecord.note || '無',
-      date: historyRecord.date,
-      color: color,
-      operator: operatorName
+      title: title, amount: `$${historyRecord.total.toLocaleString()}`, category: historyRecord.category,
+      note: historyRecord.note || '無', date: historyRecord.date, color: color, operator: operatorName
     });
   };
 
@@ -130,16 +130,20 @@ function App() {
     if (assets[payerKey] < totalAmount) alert(`⚠️ ${payerName} 的個人餘額不足！`);
 
     const finalNote = note || '日記帳';
+    const snapshotBefore = getSnapshot(assets); // ★ 快照前
+    
+    const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
+    const snapshotAfter = getSnapshot(newAssetsTemp); // ★ 快照後
 
     const finalAssets = {
-      ...assets,
-      [payerKey]: assets[payerKey] - totalAmount,
+      ...newAssetsTemp,
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
         { 
           date, month: date.slice(0, 7), type: 'expense', category: '個人支出',
           details: expenseData, total: totalAmount, payer: payerName, 
-          operator: operatorName, note: finalNote, timestamp: `${date}T12:00:00.000Z`
+          operator: operatorName, note: finalNote, timestamp: `${date}T12:00:00.000Z`,
+          auditTrail: { before: snapshotBefore, after: snapshotAfter } // 存入快照
         }
       ]
     };
@@ -153,11 +157,11 @@ function App() {
     });
   };
 
-  // ★ 修正：加入防呆機制，確保任何情況下都不會當機
   const handleAddJointExpense = (date, category, amount, advancedBy, note) => {
     try {
         const val = Number(amount) || 0;
         const newAssets = { ...assets };
+        const snapshotBefore = getSnapshot(assets); // ★ 快照前
         
         let paymentMethodName = "共同帳戶直接付";
         if (advancedBy === 'jointCash') {
@@ -173,7 +177,8 @@ function App() {
           paymentMethodName = "得得先墊 (User B)";
         }
 
-        // 🛡️ 防呆：確保 note 絕對不會引發錯誤
+        const snapshotAfter = getSnapshot(newAssets); // ★ 快照後
+
         const safeNote = note ? String(note).trim() : '';
         const finalNote = safeNote ? `${category} - ${safeNote}` : category;
         const isSettled = advancedBy === 'jointCash';
@@ -186,18 +191,16 @@ function App() {
               date, month: date.slice(0, 7), type: 'spend', category: '共同支出',
               payer: '共同帳戶', total: val, note: finalNote, operator: operatorName,
               advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
-              isSettled: isSettled, timestamp: `${date}T12:00:00.000Z`
+              isSettled: isSettled, timestamp: `${date}T12:00:00.000Z`,
+              auditTrail: { before: snapshotBefore, after: snapshotAfter } // 存入快照
             }
           ]
         };
 
         saveToCloud(finalAssets);
         alert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
-        
-        // 確保跳轉
         setCurrentPage('overview'); 
 
-        // 確保發送通知
         sendLineNotification({
           title: "共同支出", amount: `$${val.toLocaleString()}`, category: "共同支出",
           note: finalNote, date: date, color: "#ef454d", operator: operatorName
@@ -208,12 +211,25 @@ function App() {
     }
   };
 
+  // ★ 全面升級：支援備註與軟刪除的作廢邏輯
   const handleDeleteTransaction = (indexToDelete) => {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
+    
+    // 防呆：已經刪除過的不能再刪
+    if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
+
+    // ★ 跳出視窗要求填寫刪除原因
+    const reason = window.prompt("⚠️ 準備作廢此紀錄，請輸入刪除原因（必填）：");
+    if (!reason || !reason.trim()) {
+        return alert("❌ 必須輸入刪除原因才能作廢紀錄喔！");
+    }
+
+    const snapshotBefore = getSnapshot(assets);
     const newAssets = { ...assets };
     const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
 
+    // 執行退款邏輯 (保持不變)
     switch (record.type) {
       case 'income':
       case 'personal_invest_profit':
@@ -225,20 +241,14 @@ function App() {
          if (record.advancedBy === 'jointCash' || !record.advancedBy) {
              newAssets.jointCash += record.total;
          } else {
-             if (record.isSettled) {
-                 newAssets.jointCash += record.total;
-             } else {
-                 newAssets[record.advancedBy] += record.total;
-             }
+             if (record.isSettled) newAssets.jointCash += record.total;
+             else newAssets[record.advancedBy] += record.total;
          }
          break;
       case 'transfer': 
          if (payerKey) newAssets[payerKey] += record.total;
-         if (record.note && record.note.includes('共同現金')) {
-             newAssets.jointCash -= record.total;
-         } else {
-             newAssets.jointCash -= record.total; 
-         }
+         if (record.note && record.note.includes('共同現金')) newAssets.jointCash -= record.total;
+         else newAssets.jointCash -= record.total; 
          break;
       case 'joint_invest_buy':
          newAssets.jointCash += record.total;
@@ -256,20 +266,35 @@ function App() {
          break;
       default: break;
     }
-    newAssets.monthlyExpenses = assets.monthlyExpenses.filter((_, i) => i !== indexToDelete);
+
+    const snapshotAfter = getSnapshot(newAssets);
+
+    // ★ 軟刪除：不移除資料，而是更新狀態並存入作廢原因與退款快照
+    newAssets.monthlyExpenses = assets.monthlyExpenses.map((r, i) => 
+        i === indexToDelete 
+            ? { 
+                ...r, 
+                isDeleted: true, 
+                deleteReason: reason.trim(), 
+                deleteTimestamp: new Date().toISOString(),
+                deleteAuditTrail: { before: snapshotBefore, after: snapshotAfter }
+              } 
+            : r
+    );
+
     saveToCloud(newAssets);
     
     sendLineNotification({
-      title: "🗑️ 刪除/撤銷紀錄",
+      title: "🗑️ 刪除/作廢紀錄",
       amount: `$${record.total.toLocaleString()}`,
       category: record.category,
-      note: `已撤銷: ${record.note}`,
+      note: `已作廢: ${record.note} (原因: ${reason.trim()})`,
       date: new Date().toISOString().split('T')[0],
       color: "#666666", 
       operator: operatorName
     });
 
-    alert("🗑️ 已刪除，金額已正確復原歸位！");
+    alert("🗑️ 紀錄已作廢，資金已正確復原！");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
@@ -295,7 +320,6 @@ function App() {
   return (
     <div>
       <Navbar />
-      {/* ★ 補回了過場動畫標籤 (key 與 className) */}
       <div key={currentPage} className="page-transition-enter" style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
         {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
         
