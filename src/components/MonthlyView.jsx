@@ -33,7 +33,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     if (type === 'expense') return '#ff6b6b'; 
     if (type === 'spend') return '#ff9f43'; 
     if (type === 'transfer') return '#3498db'; 
-    if (type === 'settle') return '#00b894'; // ★ 新增結清的專屬顏色
+    if (type === 'settle') return '#00b894'; 
     if (type === 'liquidate' || type === 'joint_invest_sell') return '#f1c40f'; 
     if (type === 'joint_invest_buy') return '#8e44ad'; 
     if (type === 'personal_invest_profit') return '#e67e22'; 
@@ -49,7 +49,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false);
   };
 
-  // ★ 完美修復：加入結清的實體軌跡與資金快照
   const handleSettle = (targetUser) => {
     const targetName = targetUser === 'userA' ? '恆恆' : '得得';
     const debtAmount = calculateDebt(targetUser);
@@ -60,7 +59,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     const confirmMsg = `【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這將會從「共同現金」扣除該金額，並加回「${targetName}」的個人帳戶)`;
     if (!window.confirm(confirmMsg)) return;
 
-    // 1. 產生快照 (結清前)
     const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
     const snapshotBefore = {
         userA: assets.userA || 0,
@@ -73,7 +71,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     newAssets.jointCash -= debtAmount;
     newAssets[targetUser] += debtAmount;
 
-    // 2. 產生快照 (結清後)
     const snapshotAfter = {
         userA: newAssets.userA,
         userB: newAssets.userB,
@@ -86,7 +83,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
         return record;
     });
 
-    // 3. 推入實體結清軌跡 (讓分類帳能完美顯示這筆流動)
     const timestamp = new Date().toISOString();
     newHistory.push({
         date: timestamp.split('T')[0],
@@ -98,7 +94,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
         note: `撥款結清 ${targetName} 的代墊`,
         operator: currentUser || "系統",
         timestamp: timestamp,
-        isUndeletable: true, // 系統紀錄，禁止手動作廢
+        isUndeletable: true, 
         auditTrail: { before: snapshotBefore, after: snapshotAfter }
     });
 
@@ -403,19 +399,30 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 <div className="glass-card" style={{textAlign:'center', color: '#888'}}><p>📭 沒有符合篩選條件的紀錄</p></div>
             ) : (
                 [...filteredHistory].reverse().map((record) => {
-                  const isPositive = ['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'settle'].includes(record.type);
-                  const showSign = isPositive ? '+' : '-';
+                  
+                  // ★ 更新 1：內部流動（結清、劃撥）不顯示正負號，改用中立藍色
+                  let showSign = '';
+                  let amountColor = '#1d1d1f';
+                  if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit'].includes(record.type)) {
+                      showSign = '+';
+                      amountColor = '#2ecc71';
+                  } else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy'].includes(record.type)) {
+                      showSign = '-';
+                      amountColor = '#1d1d1f';
+                  } else if (record.type === 'settle' || record.type === 'transfer') {
+                      showSign = '🔄 '; 
+                      amountColor = '#3498db'; // 藍色代表內部流動
+                  }
                   
                   const isDeleted = record.isDeleted;
                   const opacity = isDeleted ? 0.6 : 1;
                   const textDeco = isDeleted ? 'line-through' : 'none';
-                  const amountColor = isDeleted ? '#aaa' : (isPositive ? '#2ecc71' : '#1d1d1f');
+                  if (isDeleted) amountColor = '#aaa';
                   const borderColor = isDeleted ? '#ccc' : getTypeColor(record.type);
 
                   return (
                     <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
                         
-                        {/* ★ 防呆按鈕：判斷是否可以刪除 */}
                         {!isDeleted && !record.isUndeletable ? (
                             <button 
                                 onClick={() => { if(window.confirm(`⚠️ 確認作廢？`)) onDelete(record.originalIndex); }}
@@ -457,13 +464,25 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                                 </div>
                             )}
 
+                            {/* ★ 更新 2：快照顯示「原金額 ➔ 新金額」，完全免大腦運算 */}
                             {record.auditTrail && !isDeleted && (
-                                <div style={{ marginTop: '10px', fontSize:'0.75rem', color:'#888', background:'rgba(0,0,0,0.03)', padding:'8px', borderRadius:'8px', borderTop:'1px dashed #ddd' }}>
-                                    <div style={{marginBottom:'4px', fontWeight:'bold'}}>🔍 交易後餘額快照：</div>
-                                    <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
-                                        {record.auditTrail.after.jointCash !== record.auditTrail.before.jointCash && <span>共同現金: {formatMoney(record.auditTrail.after.jointCash)}</span>}
-                                        {record.auditTrail.after.userA !== record.auditTrail.before.userA && <span>恆恆: {formatMoney(record.auditTrail.after.userA)}</span>}
-                                        {record.auditTrail.after.userB !== record.auditTrail.before.userB && <span>得得: {formatMoney(record.auditTrail.after.userB)}</span>}
+                                <div style={{ marginTop: '10px', fontSize:'0.8rem', color:'#666', background:'rgba(0,0,0,0.03)', padding:'10px', borderRadius:'8px', borderTop:'1px dashed #ddd' }}>
+                                    <div style={{marginBottom:'6px', fontWeight:'bold', color:'#555'}}>🔍 交易前後餘額對比：</div>
+                                    <div style={{display:'flex', flexDirection:'column', gap:'4px'}}>
+                                        {record.auditTrail.after.jointCash !== record.auditTrail.before.jointCash && (() => {
+                                            const diff = (record.auditTrail.after.jointCash || 0) - (record.auditTrail.before.jointCash || 0);
+                                            return <div>🏫 共同現金: <span style={{textDecoration:'line-through', color:'#aaa'}}>{formatMoney(record.auditTrail.before.jointCash || 0)}</span> ➔ <span style={{fontWeight:'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c'}}>{formatMoney(record.auditTrail.after.jointCash || 0)}</span> <span style={{fontSize:'0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c'}}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                        })()}
+                                        
+                                        {record.auditTrail.after.userA !== record.auditTrail.before.userA && (() => {
+                                            const diff = (record.auditTrail.after.userA || 0) - (record.auditTrail.before.userA || 0);
+                                            return <div>🐶 恆恆: <span style={{textDecoration:'line-through', color:'#aaa'}}>{formatMoney(record.auditTrail.before.userA || 0)}</span> ➔ <span style={{fontWeight:'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c'}}>{formatMoney(record.auditTrail.after.userA || 0)}</span> <span style={{fontSize:'0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c'}}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                        })()}
+                                        
+                                        {record.auditTrail.after.userB !== record.auditTrail.before.userB && (() => {
+                                            const diff = (record.auditTrail.after.userB || 0) - (record.auditTrail.before.userB || 0);
+                                            return <div>🐕 得得: <span style={{textDecoration:'line-through', color:'#aaa'}}>{formatMoney(record.auditTrail.before.userB || 0)}</span> ➔ <span style={{fontWeight:'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c'}}>{formatMoney(record.auditTrail.after.userB || 0)}</span> <span style={{fontSize:'0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c'}}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                        })()}
                                     </div>
                                 </div>
                             )}
