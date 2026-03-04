@@ -33,6 +33,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     if (type === 'expense') return '#ff6b6b'; 
     if (type === 'spend') return '#ff9f43'; 
     if (type === 'transfer') return '#3498db'; 
+    if (type === 'settle') return '#00b894'; // ★ 新增結清的專屬顏色
     if (type === 'liquidate' || type === 'joint_invest_sell') return '#f1c40f'; 
     if (type === 'joint_invest_buy') return '#8e44ad'; 
     if (type === 'personal_invest_profit') return '#e67e22'; 
@@ -40,7 +41,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return '#666';
   };
 
-  // ★ 修正：計算債務與列表時，必須「排除」已作廢的紀錄 (!r.isDeleted)
   const calculateDebt = (userKey) => {
     return history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false).reduce((sum, r) => sum + Number(r.total), 0);
   };
@@ -49,6 +49,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     return history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false);
   };
 
+  // ★ 完美修復：加入結清的實體軌跡與資金快照
   const handleSettle = (targetUser) => {
     const targetName = targetUser === 'userA' ? '恆恆' : '得得';
     const debtAmount = calculateDebt(targetUser);
@@ -59,32 +60,63 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     const confirmMsg = `【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這將會從「共同現金」扣除該金額，並加回「${targetName}」的個人帳戶)`;
     if (!window.confirm(confirmMsg)) return;
 
+    // 1. 產生快照 (結清前)
+    const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
+    const snapshotBefore = {
+        userA: assets.userA || 0,
+        userB: assets.userB || 0,
+        jointCash: assets.jointCash || 0,
+        jointInvestments: { ...safeInvestments }
+    };
+
     const newAssets = { ...assets };
     newAssets.jointCash -= debtAmount;
     newAssets[targetUser] += debtAmount;
 
+    // 2. 產生快照 (結清後)
+    const snapshotAfter = {
+        userA: newAssets.userA,
+        userB: newAssets.userB,
+        jointCash: newAssets.jointCash,
+        jointInvestments: { ...safeInvestments }
+    };
+
     const newHistory = newAssets.monthlyExpenses.map(record => {
-        // 確保作廢的紀錄不會被意外改動
         if (!record.isDeleted && record.advancedBy === targetUser && record.isSettled === false) return { ...record, isSettled: true }; 
         return record;
     });
-    newAssets.monthlyExpenses = newHistory;
 
+    // 3. 推入實體結清軌跡 (讓分類帳能完美顯示這筆流動)
+    const timestamp = new Date().toISOString();
+    newHistory.push({
+        date: timestamp.split('T')[0],
+        month: timestamp.slice(0, 7),
+        type: 'settle',
+        category: '帳務結算',
+        payer: '共同帳戶',
+        total: debtAmount,
+        note: `撥款結清 ${targetName} 的代墊`,
+        operator: currentUser || "系統",
+        timestamp: timestamp,
+        isUndeletable: true, // 系統紀錄，禁止手動作廢
+        auditTrail: { before: snapshotBefore, after: snapshotAfter }
+    });
+
+    newAssets.monthlyExpenses = newHistory;
     setAssets(newAssets); 
     
     if (sendLineNotification) {
         sendLineNotification({
             title: "✅ 代墊款結清", amount: `$${debtAmount.toLocaleString()}`, category: "帳務結算",
-            note: `共同帳戶已實際撥款給 ${targetName}。`, date: new Date().toISOString().split('T')[0],
+            note: `共同帳戶已實際撥款給 ${targetName}。`, date: timestamp.split('T')[0],
             color: "#2ecc71", operator: currentUser || "系統"
         });
     }
 
-    alert("✅ 結清完成！資金已轉移，並發送通知。");
+    alert("✅ 結清完成！資金已轉移，並已產生結清軌跡。");
     setShowSettlementModal(false);
   };
 
-  // ★ 戰情室數據計算 (全面過濾掉 isDeleted)
   const dashboardData = useMemo(() => {
     const currentMonth = selectedMonth;
     const [yearStr, monthStr] = currentMonth.split('-');
@@ -92,7 +124,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     date.setMonth(date.getMonth() - 1);
     const prevMonthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-    // ★ 過濾掉已作廢的紀錄
     const monthRecords = history.filter(r => r.month === currentMonth && !r.isDeleted);
     const prevMonthRecords = history.filter(r => r.month === prevMonthStr && !r.isDeleted);
 
@@ -372,10 +403,9 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 <div className="glass-card" style={{textAlign:'center', color: '#888'}}><p>📭 沒有符合篩選條件的紀錄</p></div>
             ) : (
                 [...filteredHistory].reverse().map((record) => {
-                  const isPositive = ['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit'].includes(record.type);
+                  const isPositive = ['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'settle'].includes(record.type);
                   const showSign = isPositive ? '+' : '-';
                   
-                  // ★ 樣式設定：判斷是否被軟刪除
                   const isDeleted = record.isDeleted;
                   const opacity = isDeleted ? 0.6 : 1;
                   const textDeco = isDeleted ? 'line-through' : 'none';
@@ -385,17 +415,21 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                   return (
                     <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
                         
-                        {/* 如果被刪除了，就不顯示垃圾桶，改顯示「已作廢」標籤 */}
-                        {!isDeleted ? (
+                        {/* ★ 防呆按鈕：判斷是否可以刪除 */}
+                        {!isDeleted && !record.isUndeletable ? (
                             <button 
                                 onClick={() => { if(window.confirm(`⚠️ 確認作廢？`)) onDelete(record.originalIndex); }}
                                 style={{ position: 'absolute', top: '15px', right: '15px', background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: 10 }}
                             >🗑️</button>
-                        ) : (
+                        ) : isDeleted ? (
                             <div style={{ position: 'absolute', top: '15px', right: '15px', background: '#ffeaa7', color: '#d35400', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 🚫 已作廢
                             </div>
-                        )}
+                        ) : record.isUndeletable ? (
+                            <div style={{ position: 'absolute', top: '15px', right: '15px', background: '#e0f7fa', color: '#00b894', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                ✅ 系統結算
+                            </div>
+                        ) : null}
 
                         <div style={{ paddingBottom: '5px' }}>
                             <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px', flexWrap:'wrap'}}>
@@ -417,14 +451,12 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                                 {record.payer === '共同帳戶' ? <span style={{background:'#eee', padding:'2px 6px', borderRadius:'4px', textDecoration: textDeco}}>🏫 共同帳戶</span> : <span style={{background:'#e8f0fe', color:'#1967d2', padding:'2px 6px', borderRadius:'4px', textDecoration: textDeco}}>👤 {record.payer}</span>}
                             </div>
                             
-                            {/* ★ 顯示作廢原因 */}
                             {isDeleted && (
                                 <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#e74c3c', background: 'rgba(231, 76, 60, 0.1)', padding: '8px', borderRadius: '8px', border: '1px dashed #e74c3c' }}>
                                     <strong>作廢原因：</strong> {record.deleteReason}
                                 </div>
                             )}
 
-                            {/* ★ 顯示稽核軌跡 (快照) */}
                             {record.auditTrail && !isDeleted && (
                                 <div style={{ marginTop: '10px', fontSize:'0.75rem', color:'#888', background:'rgba(0,0,0,0.03)', padding:'8px', borderRadius:'8px', borderTop:'1px dashed #ddd' }}>
                                     <div style={{marginBottom:'4px', fontWeight:'bold'}}>🔍 交易後餘額快照：</div>
