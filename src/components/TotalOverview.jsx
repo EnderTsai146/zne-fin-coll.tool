@@ -9,6 +9,8 @@ const TotalOverview = ({ assets, setAssets }) => {
   const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const [ledgerModal, setLedgerModal] = useState(null); 
+  // ★ 新增：月份篩選狀態，預設顯示「當前月份」
+  const [ledgerMonth, setLedgerMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const getEstValue = (type) => {
     const principal = safeInvestments[type] || 0;
@@ -31,20 +33,34 @@ const TotalOverview = ({ assets, setAssets }) => {
   const getLedgerRecords = (accountKey) => {
     let records = [];
     history.forEach(r => {
+      // 1. 正常交易
       if (r.auditTrail) {
         const diff = (r.auditTrail.after[accountKey] || 0) - (r.auditTrail.before[accountKey] || 0);
-        if (diff !== 0) records.push({ ...r, isReversal: false, diff, balance: r.auditTrail.after[accountKey] });
+        if (diff !== 0) {
+            records.push({ 
+                ...r, isReversal: false, diff, balance: r.auditTrail.after[accountKey], 
+                filterMonth: r.timestamp.slice(0, 7) // 擷取年月供篩選
+            });
+        }
       }
+      // 2. 作廢退款
       if (r.isDeleted && r.deleteAuditTrail) {
         const diff = (r.deleteAuditTrail.after[accountKey] || 0) - (r.deleteAuditTrail.before[accountKey] || 0);
         if (diff !== 0) {
            records.push({ 
              ...r, isReversal: true, diff, balance: r.deleteAuditTrail.after[accountKey], 
-             actionName: '作廢退款', timestamp: r.deleteTimestamp 
+             actionName: '作廢退款', timestamp: r.deleteTimestamp,
+             filterMonth: r.deleteTimestamp.slice(0, 7) // 擷取年月供篩選
            });
         }
       }
     });
+
+    // ★ 進行月份篩選
+    if (ledgerMonth !== 'all') {
+        records = records.filter(r => r.filterMonth === ledgerMonth);
+    }
+
     return records.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
   };
 
@@ -124,21 +140,39 @@ const TotalOverview = ({ assets, setAssets }) => {
         </div>
       </div>
 
-      {/* ★ 修復：視窗採用上下分離設計，右上角固定關閉按鈕 */}
+      {/* 變動紀錄 Modal */}
       {ledgerModal && (
          <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', justifyContent:'center', alignItems:'center', padding:'20px' }} onClick={() => setLedgerModal(null)}>
              <div className="glass-card" style={{width:'100%', maxWidth:'500px', height:'80vh', display:'flex', flexDirection:'column', background:'white', padding:0, overflow:'hidden'}} onClick={e => e.stopPropagation()}>
                  
-                 {/* 頂部固定 Header */}
-                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'15px 20px', borderBottom:'1px solid #eee', background:'#f8f9fa'}}>
-                    <h3 style={{margin:0}}>📖 {accountNames[ledgerModal]} 的變動軌跡</h3>
+                 {/* 頂部固定 Header + 月份篩選 */}
+                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'15px 20px', borderBottom:'1px solid #eee', background:'#f8f9fa'}}>
+                    <div>
+                        <h3 style={{margin:0, marginBottom:'8px'}}>📖 {accountNames[ledgerModal]} 的變動紀錄</h3>
+                        <div style={{display:'flex', gap:'5px', alignItems:'center'}}>
+                            <input 
+                                type="month" 
+                                value={ledgerMonth === 'all' ? '' : ledgerMonth} 
+                                onChange={(e) => setLedgerMonth(e.target.value || 'all')}
+                                style={{padding:'4px 8px', borderRadius:'6px', border:'1px solid #ccc', fontSize:'0.85rem'}}
+                            />
+                            <button 
+                                onClick={() => setLedgerMonth('all')} 
+                                style={{padding:'4px 8px', borderRadius:'6px', border:'1px solid #ccc', background: ledgerMonth === 'all' ? '#e2e8f0' : '#fff', cursor:'pointer', fontSize:'0.85rem'}}
+                            >
+                                看全部
+                            </button>
+                        </div>
+                    </div>
                     <button style={{background:'transparent', border:'none', fontSize:'1.5rem', cursor:'pointer', color:'#888', lineHeight:1}} onClick={() => setLedgerModal(null)}>✖</button>
                  </div>
                  
                  {/* 內部滾動區域 */}
                  <div style={{flex:1, overflowY:'auto', padding:'0 20px 20px 20px'}}>
                      {getLedgerRecords(ledgerModal).length === 0 ? (
-                         <div style={{textAlign:'center', color:'#888', padding:'30px'}}>目前還沒有變動紀錄喔！(舊紀錄不含快照)</div>
+                         <div style={{textAlign:'center', color:'#888', padding:'30px'}}>
+                            {ledgerMonth === 'all' ? '目前還沒有變動紀錄喔！(舊紀錄不會顯示)' : '這個月沒有變動紀錄喔！'}
+                         </div>
                      ) : (
                          getLedgerRecords(ledgerModal).map((r, idx) => (
                              <div key={idx} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'15px 0', borderBottom:'1px dashed #eee'}}>
