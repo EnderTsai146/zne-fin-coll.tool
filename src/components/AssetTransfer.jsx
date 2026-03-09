@@ -4,72 +4,54 @@ import React, { useState, useRef } from 'react';
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
 const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
-  const [activeTab, setActiveTab] = useState('personal');
+  const [activeTab, setActiveTab] = useState('invest'); // 預設打開投資
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
   const fileInputRef = useRef(null);
 
-  // --- 狀態：個人資金操作 ---
-  const [personalAction, setPersonalAction] = useState('income'); // income, profit, loss
-  const [personalUser, setPersonalUser] = useState('userA');
-  const [personalAmount, setPersonalAmount] = useState('');
-  const [personalNote, setPersonalNote] = useState('');
+  // --- 狀態：一般收入操作 (取代原本複雜的個人資金) ---
+  const [incomeUser, setIncomeUser] = useState('userA');
+  const [incomeAmount, setIncomeAmount] = useState('');
+  const [incomeNote, setIncomeNote] = useState('');
 
   // --- 狀態：上繳公庫 ---
   const [transSource, setTransSource] = useState('userA');
   const [transAmount, setTransAmount] = useState('');
 
-  // --- 狀態：共同投資操作 ---
-  const [investAction, setInvestAction] = useState('buy'); // buy, sell
+  // --- ★ 全新統一投資狀態 ---
+  const [investAccount, setInvestAccount] = useState('jointCash'); // 'jointCash', 'userA', 'userB'
+  const [investAction, setInvestAction] = useState('buy'); // 'buy', 'sell'
   const [investType, setInvestType] = useState('stock');
-  const [investAmount, setInvestAmount] = useState('');
+  const [investAmount, setInvestAmount] = useState(''); // 買入總花費 / 賣出總拿回現金
+  const [investPrincipal, setInvestPrincipal] = useState(''); // 賣出時扣除的本金
 
-  // 1. 個人資金操作 (包含投資損益)
-  const handlePersonalSubmit = () => {
-    const val = parseInt(personalAmount);
+  // 1. 一般收入操作 (薪水/紅包)
+  const handleIncomeSubmit = () => {
+    const val = parseInt(incomeAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
     
-    const userName = personalUser === 'userA' ? '恆恆🐶' : '得得🐕';
-    const newAssets = { ...assets };
-
-    let recordType = 'income';
-    let recordCategory = '個人收入';
-    let finalNote = personalNote.trim() || '薪資/收入';
-
-    if (personalAction === 'loss') {
-        if (newAssets[personalUser] < val) return alert(`❌ ${userName} 的餘額不足以認列虧損！`);
-        newAssets[personalUser] -= val;
-        recordType = 'personal_invest_loss';
-        recordCategory = '投資虧損';
-        finalNote = personalNote.trim() || '投資虧損';
-    } else {
-        newAssets[personalUser] += val;
-        if (personalAction === 'profit') {
-            recordType = 'personal_invest_profit';
-            recordCategory = '投資獲利';
-            finalNote = personalNote.trim() || '投資獲利';
-        }
-    }
-
-    const confirmMsg = `【確認個人資金變動】\n\n日期：${txDate}\n對象：${userName}\n類型：${recordCategory}\n金額：${formatMoney(val)}\n\n確定要執行嗎？`;
+    const userName = incomeUser === 'userA' ? '恆恆🐶' : '得得🐕';
+    const confirmMsg = `【確認收入】\n\n日期：${txDate}\n對象：${userName}\n金額：${formatMoney(val)}\n\n確定要執行嗎？`;
     if (!window.confirm(confirmMsg)) return;
 
-    // ★ 修復：這才是正確的「個人資金」存檔邏輯！
+    const newAssets = { ...assets };
+    newAssets[incomeUser] += val;
+
     onTransaction(newAssets, {
-        type: recordType,
-        category: recordCategory,
+        type: 'income',
+        category: '個人收入',
         payer: userName,
         total: val,
-        note: finalNote,
+        note: incomeNote.trim() || '一般收入',
         month: txDate.slice(0, 7),
         date: txDate
     });
 
-    alert(`✅ 已記錄 ${recordCategory}：${formatMoney(val)}`);
-    setPersonalAmount('');
-    setPersonalNote('');
+    alert(`✅ 已記錄收入：${formatMoney(val)}`);
+    setIncomeAmount('');
+    setIncomeNote('');
   };
 
-  // 2. 上繳公庫 (個人 -> 共同現金)
+  // 2. 上繳公庫
   const handleTransfer = () => {
     const val = parseInt(transAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
@@ -97,68 +79,86 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     setTransAmount('');
   };
 
-  // 3. 共同投資操作 (一鍵買賣)
+  // 3. 統一大投資買賣邏輯
   const handleInvestSubmit = () => {
     const val = parseInt(investAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
 
     const newAssets = { ...assets };
+    // 安全防呆：如果舊資料沒有這個物件，補齊它
+    if (!newAssets.userInvestments) {
+        newAssets.userInvestments = { userA: { stock:0, fund:0, deposit:0, other:0 }, userB: { stock:0, fund:0, deposit:0, other:0 } };
+    }
+
+    const isJoint = investAccount === 'jointCash';
+    const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '恆恆🐶' : '得得🐕');
     const typeLabelMap = { stock: '股票', fund: '基金', deposit: '定存', other: '其他' };
     const label = typeLabelMap[investType];
 
     if (investAction === 'buy') {
-        if (newAssets.jointCash < val) return alert("❌ 共同現金餘額不足！無法買入投資。");
+        if (newAssets[investAccount] < val) return alert(`❌ ${accountName} 現金餘額不足！無法買入投資。`);
         
-        const confirmMsg = `【確認買入投資】\n\n將從「共同現金」扣款，買入「${label}」\n金額：${formatMoney(val)}\n\n確定要執行嗎？`;
+        const confirmMsg = `【確認買入投資】\n\n將從「${accountName}」扣款買入「${label}」\n買入金額：${formatMoney(val)}\n\n確定要執行嗎？`;
         if (!window.confirm(confirmMsg)) return;
 
-        newAssets.jointCash -= val;
-        newAssets.jointInvestments[investType] += val;
+        // 扣除現金，增加本金
+        newAssets[investAccount] -= val;
+        if (isJoint) newAssets.jointInvestments[investType] += val;
+        else newAssets.userInvestments[investAccount][investType] += val;
 
         onTransaction(newAssets, {
-            type: 'joint_invest_buy',
+            type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy',
             category: '投資買入',
-            payer: '共同帳戶',
+            payer: isJoint ? '共同帳戶' : accountName,
+            accountKey: investAccount, // 重要：刪除時會用到
             investType: investType,
             total: val,
             note: `買入 ${label}`,
             month: txDate.slice(0, 7),
             date: txDate
         });
-        alert(`✅ 成功買入 ${label} ${formatMoney(val)}`);
+        alert(`✅ 成功用 ${accountName} 買入 ${label} ${formatMoney(val)}`);
 
     } else {
-        // 賣出變現邏輯 (含 ROI 計算)
-        const roi = (assets.roi && assets.roi[investType]) || 0;
-        const principal = newAssets.jointInvestments[investType];
-        const estValue = principal * (1 + roi / 100);
+        // ★ 賣出變現邏輯 (手動輸入本金，精準算出利潤)
+        const principalVal = parseInt(investPrincipal);
+        if (isNaN(principalVal) || principalVal < 0) return alert("請輸入本次賣出要扣除的有效「本金金額」！");
 
-        if (estValue < val) return alert(`❌ 該投資項目的預估現值僅為 ${formatMoney(estValue)}，無法變現這麼多！`);
+        const currentPrincipal = isJoint ? newAssets.jointInvestments[investType] : newAssets.userInvestments[investAccount][investType];
 
-        const confirmMsg = `【確認投資變現】\n\n賣出「${label}」並轉回「共同現金」\n變現金額：${formatMoney(val)}\n\n確定要執行嗎？`;
+        if (currentPrincipal < principalVal) {
+            return alert(`❌ ${accountName} 的 ${label} 本金僅剩 ${formatMoney(currentPrincipal)}，不足以扣除 ${formatMoney(principalVal)}！`);
+        }
+
+        const profit = val - principalVal;
+        const profitNote = profit >= 0 ? `(賺 ${formatMoney(profit)})` : `(賠 ${formatMoney(Math.abs(profit))})`;
+
+        const confirmMsg = `【確認投資變現】\n\n對象：${accountName}\n賣出資產：${label}\n拿回現金：${formatMoney(val)}\n扣除本金：${formatMoney(principalVal)}\n\n結算：${profitNote}\n\n確定執行嗎？`;
         if (!window.confirm(confirmMsg)) return;
 
-        const principalToDeduct = val / (1 + roi / 100);
-        newAssets.jointInvestments[investType] -= principalToDeduct;
-        newAssets.jointCash += val;
+        // 增加現金，扣除本金
+        newAssets[investAccount] += val;
+        if (isJoint) newAssets.jointInvestments[investType] -= principalVal;
+        else newAssets.userInvestments[investAccount][investType] -= principalVal;
 
         onTransaction(newAssets, {
-            type: 'joint_invest_sell',
+            type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell',
             category: '投資變現',
-            payer: '共同帳戶',
+            payer: isJoint ? '共同帳戶' : accountName,
+            accountKey: investAccount,
             investType: investType,
             total: val,
-            principal: principalToDeduct, // 記錄原始本金，未來撤銷時才不會退錯錢
-            note: `賣出 ${label} (轉回現金)`,
+            principal: principalVal, // 記錄被扣除的本金，未來撤銷才能還原
+            note: `賣出 ${label} ${profitNote}`,
             month: txDate.slice(0, 7),
             date: txDate
         });
-        alert(`🔄 成功變現 ${formatMoney(val)} 至共同現金！`);
+        alert(`🔄 成功變現 ${formatMoney(val)} 至 ${accountName}！\n結算：${profitNote}`);
     }
     setInvestAmount('');
+    setInvestPrincipal('');
   };
 
-  // --- 資料匯出入 (維持不變) ---
   const handleExport = () => {
     const fileName = `雙人資產備份_${new Date().toISOString().split('T')[0]}.json`;
     const json = JSON.stringify(assets, null, 2);
@@ -191,11 +191,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     <div>
       <h1 className="page-title">資產操作</h1>
       
-      {/* 分頁按鈕 */}
       <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
-        <button className={`glass-btn ${activeTab==='personal'?'':'inactive'}`} onClick={()=>setActiveTab('personal')} style={{flex:1}}>👤 個人資金</button>
+        <button className={`glass-btn ${activeTab==='invest'?'':'inactive'}`} onClick={()=>setActiveTab('invest')} style={{flex:1}}>📈 投資買賣</button>
         <button className={`glass-btn ${activeTab==='transfer'?'':'inactive'}`} onClick={()=>setActiveTab('transfer')} style={{flex:1}}>📥 上繳公庫</button>
-        <button className={`glass-btn ${activeTab==='invest'?'':'inactive'}`} onClick={()=>setActiveTab('invest')} style={{flex:1}}>📈 共同投資</button>
+        <button className={`glass-btn ${activeTab==='income'?'':'inactive'}`} onClick={()=>setActiveTab('income')} style={{flex:1}}>💰 一般收入</button>
       </div>
 
       <div className="glass-card" style={{ padding: '15px 20px', marginBottom: '20px', borderLeft: '5px solid #667eea', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -203,40 +202,57 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         <input type="date" className="glass-input" style={{width:'auto', marginBottom:0, padding:'8px 12px'}} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
       </div>
 
-      {/* 1. 個人資金區塊 */}
-      {activeTab === 'personal' && (
-        <div className="glass-card">
-          <h3 style={{marginBottom: '15px'}}>💰 個人資金變動 (含投資)</h3>
+      {/* 3. 統一投資買賣 (放在最前面，因為最常用) */}
+      {activeTab === 'invest' && (
+        <div className="glass-card" style={{border:'1px solid #b78af7'}}>
+          <h3 style={{marginBottom: '15px'}}>📈 投資操作中心</h3>
           
           <div style={{ marginBottom: '15px' }}>
-            <label>操作類型</label>
-            <select className="glass-input" value={personalAction} onChange={(e)=>setPersonalAction(e.target.value)}>
-              <option value="income">💵 一般收入 (薪水/獎金)</option>
-              <option value="profit">📈 個人投資獲利 (股票當沖賺錢等)</option>
-              <option value="loss">📉 個人投資虧損 (認賠殺出等)</option>
+            <label>操作帳戶 (用誰的錢買？賣出回到誰的錢包？)</label>
+            <select className="glass-input" value={investAccount} onChange={(e)=>setInvestAccount(e.target.value)}>
+              <option value="jointCash">🏫 共同帳戶</option>
+              <option value="userA">🐶 恆恆個人</option>
+              <option value="userB">🐕 得得個人</option>
             </select>
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label>對象戶頭</label>
-            <select className="glass-input" value={personalUser} onChange={(e)=>setPersonalUser(e.target.value)}>
-              <option value="userA">恆恆🐶 ({formatMoney(assets.userA)})</option>
-              <option value="userB">得得🐕 ({formatMoney(assets.userB)})</option>
-            </select>
+          <div style={{ marginBottom: '15px', display:'flex', gap:'10px' }}>
+            <div style={{flex:1}}>
+                <label>動作</label>
+                <select className="glass-input" value={investAction} onChange={(e)=>setInvestAction(e.target.value)}>
+                  <option value="buy">📥 買入 (扣除現金)</option>
+                  <option value="sell">📤 賣出 (變現回戶頭)</option>
+                </select>
+            </div>
+            <div style={{flex:1}}>
+                <label>標的類型</label>
+                <select className="glass-input" value={investType} onChange={(e)=>setInvestType(e.target.value)}>
+                  <option value="stock">股票</option>
+                  <option value="fund">基金</option>
+                  <option value="deposit">定存</option>
+                  <option value="other">其他</option>
+                </select>
+            </div>
           </div>
 
           <div style={{ marginBottom: '15px' }}>
-            <label>備註 (可選)</label>
-            <input type="text" className="glass-input" value={personalNote} onChange={(e)=>setPersonalNote(e.target.value)} placeholder="例如：1月薪資、台積電當沖..." />
+            <label>{investAction === 'buy' ? '本次買入「總花費」' : '本次賣出「拿回多少現金」'} {investAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(investAmount)})</span>}</label>
+            <input type="number" inputMode="numeric" className="glass-input" value={investAmount} onChange={(e)=>setInvestAmount(e.target.value)} placeholder="0" />
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label>金額</label>
-            <input type="number" inputMode="numeric" className="glass-input" value={personalAmount} onChange={(e)=>setPersonalAmount(e.target.value)} placeholder="輸入金額" />
-          </div>
+          {/* ★ 賣出時，讓使用者手動輸入扣除本金，系統幫算損益 */}
+          {investAction === 'sell' && (
+             <div style={{ marginBottom: '15px', padding:'10px', background:'rgba(241, 196, 15, 0.1)', borderRadius:'8px', border:'1px dashed #f1c40f' }}>
+               <label style={{color:'#b7791f', fontWeight:'bold'}}>⚠️ 這批賣掉的資產，當初買入的「本金」是多少？</label>
+               <input type="number" inputMode="numeric" className="glass-input" style={{margin:'5px 0', border:'1px solid #f1c40f'}} value={investPrincipal} onChange={(e)=>setInvestPrincipal(e.target.value)} placeholder="請輸入扣除本金" />
+               <div style={{fontSize:'0.8rem', color:'#888'}}>
+                  * 系統會將 (拿回現金 - 本金) 自動結算為您的投資損益！
+               </div>
+             </div>
+          )}
           
-          <button className="glass-btn" style={{width:'100%', background: personalAction === 'loss' ? '#ff7675' : ''}} onClick={handlePersonalSubmit}>
-            確認送出
+          <button className="glass-btn" style={{width:'100%', background: investAction === 'buy' ? 'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)' : 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', color:'#333', fontWeight:'bold'}} onClick={handleInvestSubmit}>
+            {investAction === 'buy' ? '確認買入' : '確認賣出並結算'}
           </button>
         </div>
       )}
@@ -260,44 +276,26 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 3. 共同投資 */}
-      {activeTab === 'invest' && (
-        <div className="glass-card" style={{border:'1px solid #b78af7'}}>
-          <h3 style={{marginBottom: '15px'}}>📈 共同投資買賣</h3>
-          
-          <div style={{ marginBottom: '15px', display:'flex', gap:'10px' }}>
-            <div style={{flex:1}}>
-                <label>動作</label>
-                <select className="glass-input" value={investAction} onChange={(e)=>setInvestAction(e.target.value)}>
-                  <option value="buy">📥 買入 (扣除現金)</option>
-                  <option value="sell">📤 賣出 (退回現金)</option>
-                </select>
-            </div>
-            <div style={{flex:1}}>
-                <label>資產項目</label>
-                <select className="glass-input" value={investType} onChange={(e)=>setInvestType(e.target.value)}>
-                  <option value="stock">股票</option>
-                  <option value="fund">基金</option>
-                  <option value="deposit">定存</option>
-                  <option value="other">其他</option>
-                </select>
-            </div>
-          </div>
-
+      {/* 1. 一般收入 */}
+      {activeTab === 'income' && (
+        <div className="glass-card">
+          <h3 style={{marginBottom: '15px'}}>💰 一般收入 (薪水/獎金)</h3>
           <div style={{ marginBottom: '15px' }}>
-            <label>{investAction === 'buy' ? '買入總金額' : '變現提領金額'} {investAmount && <span style={{color:'#666', fontSize:'0.9rem'}}>({formatMoney(investAmount)})</span>}</label>
-            <input type="number" inputMode="numeric" className="glass-input" value={investAmount} onChange={(e)=>setInvestAmount(e.target.value)} placeholder="0" />
-            
-            {investAction === 'sell' && (
-                <div style={{fontSize:'0.8rem', color:'#d63031', marginTop:'5px'}}>
-                    * 賣出時將依照您在總覽設定的「預估報酬率」按比例扣除投資本金。
-                </div>
-            )}
+            <label>入帳戶頭</label>
+            <select className="glass-input" value={incomeUser} onChange={(e)=>setIncomeUser(e.target.value)}>
+              <option value="userA">恆恆🐶 ({formatMoney(assets.userA)})</option>
+              <option value="userB">得得🐕 ({formatMoney(assets.userB)})</option>
+            </select>
           </div>
-          
-          <button className="glass-btn" style={{width:'100%', background: investAction === 'buy' ? 'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)' : 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', color:'#333'}} onClick={handleInvestSubmit}>
-            {investAction === 'buy' ? '確認買入' : '確認賣出變現'}
-          </button>
+          <div style={{ marginBottom: '15px' }}>
+            <label>金額</label>
+            <input type="number" inputMode="numeric" className="glass-input" value={incomeAmount} onChange={(e)=>setIncomeAmount(e.target.value)} placeholder="輸入金額" />
+          </div>
+          <div style={{ marginBottom: '15px' }}>
+            <label>備註 (可選)</label>
+            <input type="text" className="glass-input" value={incomeNote} onChange={(e)=>setIncomeNote(e.target.value)} placeholder="例如：3月薪水" />
+          </div>
+          <button className="glass-btn" style={{width:'100%'}} onClick={handleIncomeSubmit}>確認收入入帳</button>
         </div>
       )}
 

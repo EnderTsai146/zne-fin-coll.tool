@@ -23,9 +23,14 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('overview');
 
+  // ★ 資料庫擴充：加入 userInvestments 來追蹤個人投資本金
   const [assets, setAssets] = useState({
     userA: 0, userB: 0, jointCash: 0,
     jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
+    userInvestments: { 
+        userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, 
+        userB: { stock: 0, fund: 0, deposit: 0, other: 0 } 
+    },
     roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
     monthlyExpenses: [] 
   });
@@ -49,7 +54,17 @@ function App() {
     if (!currentUser) return;
     const docRef = doc(db, "finance", "data");
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) setAssets(docSnap.data());
+      if (docSnap.exists()) {
+          const data = docSnap.data();
+          // 防呆：如果舊資料沒有個人投資欄位，自動補齊
+          if (!data.userInvestments) {
+              data.userInvestments = { 
+                  userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, 
+                  userB: { stock: 0, fund: 0, deposit: 0, other: 0 } 
+              };
+          }
+          setAssets(data);
+      }
       else setDoc(docRef, assets);
     }, (error) => console.error("資料讀取失敗:", error));
     return () => unsubscribe();
@@ -62,10 +77,8 @@ function App() {
     setDoc(docRef, newAssets).catch((err) => alert("連線錯誤：" + err.message));
   };
 
-  // ★ 升級重點：替 Line 發送器裝上終極過濾防護罩
   const sendLineNotification = async (data) => {
     try {
-      // 🛡️ 防呆清洗：確保所有傳給 Make.com 的資料都是字串，並替換掉會弄壞 JSON 的特殊符號
       const safeData = {
         title: String(data.title || "系統通知").replace(/"/g, '＂').replace(/\n/g, ' '),
         amount: String(data.amount || "$0").replace(/"/g, '＂'),
@@ -90,11 +103,13 @@ function App() {
     if(window.confirm("確定要登出嗎？")) signOut(auth);
   };
 
+  // ★ 快照擴充：將個人投資納入交易前後比對
   const getSnapshot = (currentAssets) => ({
     userA: currentAssets.userA,
     userB: currentAssets.userB,
     jointCash: currentAssets.jointCash,
-    jointInvestments: { ...currentAssets.jointInvestments }
+    jointInvestments: { ...(currentAssets.jointInvestments || {}) },
+    userInvestments: currentAssets.userInvestments ? JSON.parse(JSON.stringify(currentAssets.userInvestments)) : { userA: { stock:0, fund:0, deposit:0, other:0 }, userB: { stock:0, fund:0, deposit:0, other:0 } }
   });
 
   const handleTransaction = (newAssets, historyRecord) => {
@@ -104,10 +119,8 @@ function App() {
     if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
     else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
     else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
-    else if (historyRecord.type === 'liquidate' || historyRecord.type === 'joint_invest_sell') { color = "#f1c40f"; title = "投資變現"; }
-    else if (historyRecord.type === 'joint_invest_buy') { color = "#8e44ad"; title = "買入投資"; }
-    else if (historyRecord.type === 'personal_invest_profit') { color = "#e67e22"; title = "個人投資獲利"; }
-    else if (historyRecord.type === 'personal_invest_loss') { color = "#7f8c8d"; title = "個人投資虧損"; }
+    else if (historyRecord.type.includes('invest_sell')) { color = "#f1c40f"; title = "投資變現"; }
+    else if (historyRecord.type.includes('invest_buy')) { color = "#8e44ad"; title = "買入投資"; }
 
     const snapshotBefore = getSnapshot(assets);
     const snapshotAfter = getSnapshot(newAssets);
@@ -129,7 +142,7 @@ function App() {
 
     sendLineNotification({
       title: title, 
-      amount: `$${(Number(historyRecord.total) || 0).toLocaleString()}`, // 🛡️ 加上 Number 轉換防呆
+      amount: `$${(Number(historyRecord.total) || 0).toLocaleString()}`, 
       category: historyRecord.category,
       note: historyRecord.note || '無', date: historyRecord.date, color: color, operator: operatorName
     });
@@ -178,14 +191,14 @@ function App() {
         
         let paymentMethodName = "共同帳戶直接付";
         if (advancedBy === 'jointCash') {
-          if (newAssets.jointCash < val) return alert("❌ 共同現金不足，無法記錄共同支出。");
+          if (newAssets.jointCash < val) return alert("❌ 共同現金不足！(帳面餘額不足)");
           newAssets.jointCash -= val;
         } else if (advancedBy === 'userA') {
-          if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足，無法代墊。");
+          if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足以代墊！");
           newAssets.userA -= val; 
           paymentMethodName = "恆恆先墊 (User A)";
         } else if (advancedBy === 'userB') {
-          if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足，無法代墊。");
+          if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足以代墊！");
           newAssets.userB -= val; 
           paymentMethodName = "得得先墊 (User B)";
         }
@@ -231,7 +244,6 @@ function App() {
     
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
 
-    // 🛡️ 新增：會計鎖防呆 (已結清的帳不能直接刪除)
     if (record.isSettled) {
         return alert("❌ 此筆消費已經被「結清」過了！\n請先在流水帳中找到對應的「系統結算」紀錄並作廢它，才能解鎖並作廢此筆消費。");
     }
@@ -245,17 +257,14 @@ function App() {
     const newAssets = { ...assets };
     const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
 
-    // 複製一份歷史紀錄準備進行修改 (因為如果刪除的是結算，我們要連帶修改其他紀錄)
     let updatedExpenses = [...(assets.monthlyExpenses || [])];
 
     switch (record.type) {
       case 'settle':
-         // 1. 退回結清當時的轉帳款項
          if (record.settledUser) {
              newAssets.jointCash += record.total;
              newAssets[record.settledUser] -= record.total;
          }
-         // 2. 自動將關聯的消費紀錄「解鎖」 (恢復成未結清)
          if (record.settleId) {
              updatedExpenses = updatedExpenses.map(r => {
                  if (r.settleId === record.settleId) {
@@ -275,7 +284,6 @@ function App() {
          if (record.advancedBy === 'jointCash' || !record.advancedBy) {
              newAssets.jointCash += record.total;
          } else {
-             // 走到這裡代表它一定是未結清的 (因為結清的已經在前面被擋下來了)
              newAssets[record.advancedBy] += record.total;
          }
          break;
@@ -298,12 +306,24 @@ function App() {
              newAssets.jointInvestments[sellType] += (record.principal || record.total); 
          }
          break;
+      // ★ 擴充：個人投資買賣的完美復原
+      case 'personal_invest_buy':
+         if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
+             newAssets[record.accountKey] += record.total;
+             newAssets.userInvestments[record.accountKey][record.investType] -= record.total;
+         }
+         break;
+      case 'personal_invest_sell':
+         if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
+             newAssets[record.accountKey] -= record.total;
+             newAssets.userInvestments[record.accountKey][record.investType] += (record.principal || record.total);
+         }
+         break;
       default: break;
     }
 
     const snapshotAfter = getSnapshot(newAssets);
 
-    // ★ 軟刪除：更新狀態並存入作廢原因與退款快照
     newAssets.monthlyExpenses = updatedExpenses.map((r, i) => 
         i === indexToDelete 
             ? { 
@@ -336,25 +356,56 @@ function App() {
   if (loading) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh'}}>馬鈴薯甦醒中...🥔</div>;
   if (!currentUser) return <Login />;
 
-  const Navbar = () => (
-    <nav className="glass-nav">
+  const Topbar = () => (
+    <nav className="glass-nav" style={{ padding: '15px 25px', borderRadius: '0 0 20px 20px', marginBottom: '20px' }}>
       <div style={{ fontSize: '1.2rem', lineHeight: '1.2', fontWeight: 'bold' }}> 
-        🥔管家 <span style={{fontSize:'0.75rem', fontWeight: 'normal', opacity:0.7, display: 'block', marginTop: '2px'}}>({operatorName})</span>
+        🥔管家 <span style={{fontSize:'0.75rem', fontWeight: 'normal', opacity:0.7, display: 'inline-block', marginLeft: '5px'}}>({operatorName})</span>
       </div>
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <button className="glass-btn" style={{padding:'6px 10px', fontSize:'0.85rem'}} onClick={() => setCurrentPage('overview')}>總覽</button>
-        <button className="glass-btn" style={{padding:'6px 10px', fontSize:'0.85rem'}} onClick={() => setCurrentPage('monthly')}>紀錄</button>
-        <button className="glass-btn" style={{padding:'6px 10px', fontSize:'0.85rem'}} onClick={() => setCurrentPage('transfer')}>操作</button>
-        <button className="glass-btn" style={{padding:'6px 10px', fontSize:'0.85rem'}} onClick={() => setCurrentPage('expense')}>記帳</button>
-        <button className="glass-btn" style={{padding:'6px 10px', fontSize:'0.85rem', background:'rgba(255,0,0,0.1)', color:'red'}} onClick={handleLogout}>登出</button>
-      </div>
+      <button className="glass-btn" style={{padding:'6px 12px', fontSize:'0.85rem', background:'rgba(255,0,0,0.1)', color:'red'}} onClick={handleLogout}>登出</button>
     </nav>
   );
 
+  const navItems = [
+    { id: 'overview', icon: '🏠', label: '總覽' },
+    { id: 'monthly', icon: '📊', label: '紀錄' },
+    { id: 'invest', icon: '📈', label: '投資' }, 
+    { id: 'transfer', icon: '🛠️', label: '操作' },
+    { id: 'expense', icon: '✍️', label: '記帳' }
+  ];
+
+  const BottomNav = () => (
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000,
+      background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      borderTop: '1px solid rgba(0, 0, 0, 0.05)',
+      display: 'flex', justifyContent: 'space-around', padding: '10px 5px 25px 5px', 
+      boxShadow: '0 -4px 20px rgba(0,0,0,0.05)'
+    }}>
+      {navItems.map(item => (
+        <div 
+          key={item.id} 
+          onClick={() => setCurrentPage(item.id)}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            width: '60px', cursor: 'pointer', transition: 'all 0.2s',
+            opacity: currentPage === item.id ? 1 : 0.5,
+            transform: currentPage === item.id ? 'scale(1.1)' : 'scale(1)'
+          }}
+        >
+          <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>{item.icon}</div>
+          <div style={{ fontSize: '0.7rem', fontWeight: currentPage === item.id ? 'bold' : 'normal', color: currentPage === item.id ? '#1967d2' : '#666' }}>
+            {item.label}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div>
-      <Navbar />
-      <div key={currentPage} className="page-transition-enter" style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+    <div style={{ paddingBottom: '90px' }}>
+      <Topbar />
+      <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+        
         {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
         
         {currentPage === 'monthly' && (
@@ -367,10 +418,19 @@ function App() {
            />
         )}
         
+        {currentPage === 'invest' && (
+            <div className="glass-card" style={{textAlign:'center', padding:'50px 20px', color:'#666'}}>
+                <h2>📈 投資戰情室</h2>
+                <p>專屬的投資績效頁面正在建置中...<br/>(即將進入第三步升級！)</p>
+            </div>
+        )}
+
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
         
         {currentPage === 'expense' && <ExpenseEntry onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
       </div>
+      
+      <BottomNav />
     </div>
   );
 }
