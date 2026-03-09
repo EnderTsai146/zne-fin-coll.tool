@@ -178,14 +178,14 @@ function App() {
         
         let paymentMethodName = "共同帳戶直接付";
         if (advancedBy === 'jointCash') {
-          if (newAssets.jointCash < val) return alert("❌ 共同現金不足！(帳面餘額不足)");
+          if (newAssets.jointCash < val) return alert("❌ 共同現金不足，無法記錄共同支出。");
           newAssets.jointCash -= val;
         } else if (advancedBy === 'userA') {
-          if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足以代墊！");
+          if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足，無法代墊。");
           newAssets.userA -= val; 
           paymentMethodName = "恆恆先墊 (User A)";
         } else if (advancedBy === 'userB') {
-          if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足以代墊！");
+          if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足，無法代墊。");
           newAssets.userB -= val; 
           paymentMethodName = "得得先墊 (User B)";
         }
@@ -231,6 +231,11 @@ function App() {
     
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
 
+    // 🛡️ 新增：會計鎖防呆 (已結清的帳不能直接刪除)
+    if (record.isSettled) {
+        return alert("❌ 此筆消費已經被「結清」過了！\n請先在流水帳中找到對應的「系統結算」紀錄並作廢它，才能解鎖並作廢此筆消費。");
+    }
+
     const reason = window.prompt("⚠️ 準備作廢此紀錄，請輸入刪除原因（必填）：");
     if (!reason || !reason.trim()) {
         return alert("❌ 必須輸入刪除原因才能作廢紀錄喔！");
@@ -240,7 +245,26 @@ function App() {
     const newAssets = { ...assets };
     const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
 
+    // 複製一份歷史紀錄準備進行修改 (因為如果刪除的是結算，我們要連帶修改其他紀錄)
+    let updatedExpenses = [...(assets.monthlyExpenses || [])];
+
     switch (record.type) {
+      case 'settle':
+         // 1. 退回結清當時的轉帳款項
+         if (record.settledUser) {
+             newAssets.jointCash += record.total;
+             newAssets[record.settledUser] -= record.total;
+         }
+         // 2. 自動將關聯的消費紀錄「解鎖」 (恢復成未結清)
+         if (record.settleId) {
+             updatedExpenses = updatedExpenses.map(r => {
+                 if (r.settleId === record.settleId) {
+                     return { ...r, isSettled: false, settleId: null };
+                 }
+                 return r;
+             });
+         }
+         break;
       case 'income':
       case 'personal_invest_profit':
          if (payerKey) newAssets[payerKey] -= record.total; break;
@@ -251,8 +275,8 @@ function App() {
          if (record.advancedBy === 'jointCash' || !record.advancedBy) {
              newAssets.jointCash += record.total;
          } else {
-             if (record.isSettled) newAssets.jointCash += record.total;
-             else newAssets[record.advancedBy] += record.total;
+             // 走到這裡代表它一定是未結清的 (因為結清的已經在前面被擋下來了)
+             newAssets[record.advancedBy] += record.total;
          }
          break;
       case 'transfer': 
@@ -279,7 +303,8 @@ function App() {
 
     const snapshotAfter = getSnapshot(newAssets);
 
-    newAssets.monthlyExpenses = assets.monthlyExpenses.map((r, i) => 
+    // ★ 軟刪除：更新狀態並存入作廢原因與退款快照
+    newAssets.monthlyExpenses = updatedExpenses.map((r, i) => 
         i === indexToDelete 
             ? { 
                 ...r, 
@@ -295,7 +320,7 @@ function App() {
     
     sendLineNotification({
       title: "🗑️ 刪除/作廢紀錄",
-      amount: `$${(Number(record.total) || 0).toLocaleString()}`, // 🛡️ 加上 Number 轉換防呆
+      amount: `$${(Number(record.total) || 0).toLocaleString()}`,
       category: record.category,
       note: `已作廢: ${record.note} (原因: ${reason.trim()})`,
       date: new Date().toISOString().split('T')[0],
