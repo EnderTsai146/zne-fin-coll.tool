@@ -256,7 +256,10 @@ function App() {
 
     const snapshotBefore = getSnapshot(assets);
     const newAssets = { ...assets };
-    const payerKey = record.payer === '恆恆🐶' ? 'userA' : (record.payer === '得得🐕' ? 'userB' : null);
+    
+    // ★ 終極防呆補丁：使用 includes 來兼容早期沒有表情符號的舊資料！
+    const safePayer = record.payer || '';
+    const payerKey = safePayer.includes('恆恆') ? 'userA' : (safePayer.includes('得得') ? 'userB' : null);
 
     let updatedExpenses = [...(assets.monthlyExpenses || [])];
 
@@ -307,7 +310,6 @@ function App() {
              newAssets.jointInvestments[sellType] += (record.principal || record.total); 
          }
          break;
-      // ★ 擴充：個人投資買賣的完美復原
       case 'personal_invest_buy':
          if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
              newAssets[record.accountKey] += record.total;

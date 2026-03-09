@@ -241,7 +241,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   return (
     <div>
        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-         <h1 className="page-title" style={{margin:0}}>財務戰情室</h1>
+         <h1 className="page-title" style={{margin:0}}>財務資料庫</h1>
          <div style={{background:'rgba(255,255,255,0.3)', borderRadius:'20px', padding:'4px', display:'flex'}}>
             {['chart', 'list'].map(mode => (
                 <button 
