@@ -34,8 +34,10 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     if (type === 'spend') return '#ff9f43'; 
     if (type === 'transfer') return '#3498db'; 
     if (type === 'settle') return '#00b894'; 
-    if (type === 'liquidate' || type === 'joint_invest_sell') return '#f1c40f'; 
-    if (type === 'joint_invest_buy') return '#8e44ad'; 
+    // ★ 確保新的個人變現也被標示為金黃色
+    if (type === 'liquidate' || type === 'joint_invest_sell' || type === 'personal_invest_sell') return '#f1c40f'; 
+    // ★ 確保新的個人買入也被標示為紫色
+    if (type === 'joint_invest_buy' || type === 'personal_invest_buy') return '#8e44ad'; 
     if (type === 'personal_invest_profit') return '#e67e22'; 
     if (type === 'personal_invest_loss') return '#7f8c8d'; 
     return '#666';
@@ -78,8 +80,12 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
         jointInvestments: { ...safeInvestments }
     };
 
+    const currentSettleId = `settle_${Date.now()}`;
+
     const newHistory = newAssets.monthlyExpenses.map(record => {
-        if (!record.isDeleted && record.advancedBy === targetUser && record.isSettled === false) return { ...record, isSettled: true }; 
+        if (!record.isDeleted && record.advancedBy === targetUser && record.isSettled === false) {
+            return { ...record, isSettled: true, settleId: currentSettleId }; 
+        }
         return record;
     });
 
@@ -94,7 +100,8 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
         note: `撥款結清 ${targetName} 的代墊`,
         operator: currentUser || "系統",
         timestamp: timestamp,
-        isUndeletable: true, 
+        settledUser: targetUser, 
+        settleId: currentSettleId, 
         auditTrail: { before: snapshotBefore, after: snapshotAfter }
     });
 
@@ -217,7 +224,8 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
     if (filterType === 'income') { if (record.type !== 'income') return false; } 
     else if (filterType === 'expense') { if (record.type !== 'expense' && record.type !== 'spend') return false; } 
     else if (filterType === 'invest') {
-        const investTypes = ['liquidate', 'joint_invest_buy', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_loss'];
+        // ★ 將個人買賣加入過濾選單的識別清單
+        const investTypes = ['liquidate', 'joint_invest_buy', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_loss', 'personal_invest_buy', 'personal_invest_sell'];
         if (!investTypes.includes(record.type)) return false;
     }
 
@@ -400,18 +408,18 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
             ) : (
                 [...filteredHistory].reverse().map((record) => {
                   
-                  // ★ 更新 1：內部流動（結清、劃撥）不顯示正負號，改用中立藍色
                   let showSign = '';
                   let amountColor = '#1d1d1f';
-                  if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit'].includes(record.type)) {
+                  // ★ 確保新類型有正確的加減號與顏色
+                  if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) {
                       showSign = '+';
                       amountColor = '#2ecc71';
-                  } else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy'].includes(record.type)) {
+                  } else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy', 'personal_invest_buy'].includes(record.type)) {
                       showSign = '-';
                       amountColor = '#1d1d1f';
                   } else if (record.type === 'settle' || record.type === 'transfer') {
                       showSign = '🔄 '; 
-                      amountColor = '#3498db'; // 藍色代表內部流動
+                      amountColor = '#3498db'; 
                   }
                   
                   const isDeleted = record.isDeleted;
@@ -423,20 +431,16 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                   return (
                     <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
                         
-                        {!isDeleted && !record.isUndeletable ? (
-                            <button 
-                                onClick={() => { if(window.confirm(`⚠️ 確認作廢？`)) onDelete(record.originalIndex); }}
-                                style={{ position: 'absolute', top: '15px', right: '15px', background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', zIndex: 10 }}
-                            >🗑️</button>
-                        ) : isDeleted ? (
-                            <div style={{ position: 'absolute', top: '15px', right: '15px', background: '#ffeaa7', color: '#d35400', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                🚫 已作廢
-                            </div>
-                        ) : record.isUndeletable ? (
-                            <div style={{ position: 'absolute', top: '15px', right: '15px', background: '#e0f7fa', color: '#00b894', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                ✅ 系統結算
-                            </div>
-                        ) : null}
+                        <div style={{ position: 'absolute', top: '15px', right: '15px', display:'flex', gap:'8px', alignItems:'center', zIndex: 10 }}>
+                            {record.type === 'settle' && !isDeleted && (
+                                <div style={{ background: '#e0f7fa', color: '#00b894', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>✅ 系統結算</div>
+                            )}
+                            {!isDeleted ? (
+                                <button onClick={() => { if(window.confirm(`⚠️ 確認作廢此筆紀錄？`)) onDelete(record.originalIndex); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                            ) : (
+                                <div style={{ background: '#ffeaa7', color: '#d35400', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>🚫 已作廢</div>
+                            )}
+                        </div>
 
                         <div style={{ paddingBottom: '5px' }}>
                             <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px', flexWrap:'wrap'}}>
@@ -464,7 +468,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                                 </div>
                             )}
 
-                            {/* ★ 更新 2：快照顯示「原金額 ➔ 新金額」，完全免大腦運算 */}
                             {record.auditTrail && !isDeleted && (
                                 <div style={{ marginTop: '10px', fontSize:'0.8rem', color:'#666', background:'rgba(0,0,0,0.03)', padding:'10px', borderRadius:'8px', borderTop:'1px dashed #ddd' }}>
                                     <div style={{marginBottom:'6px', fontWeight:'bold', color:'#555'}}>🔍 交易前後餘額對比：</div>

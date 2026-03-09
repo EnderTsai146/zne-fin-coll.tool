@@ -4,6 +4,7 @@ import Login from './components/Login';
 import TotalOverview from './components/TotalOverview';
 import MonthlyView from './components/MonthlyView';
 import AssetTransfer from './components/AssetTransfer';
+import InvestmentView from './components/InvestmentView';
 import ExpenseEntry from './components/ExpenseEntry';
 import './index.css';
 import { db, auth } from './firebase'; 
@@ -419,10 +420,7 @@ function App() {
         )}
         
         {currentPage === 'invest' && (
-            <div className="glass-card" style={{textAlign:'center', padding:'50px 20px', color:'#666'}}>
-                <h2>📈 投資戰情室</h2>
-                <p>專屬的投資績效頁面正在建置中...<br/>(即將進入第三步升級！)</p>
-            </div>
+           <InvestmentView assets={assets} />
         )}
 
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}

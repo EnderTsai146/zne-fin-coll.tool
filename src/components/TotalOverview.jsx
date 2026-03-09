@@ -7,9 +7,11 @@ const TotalOverview = ({ assets, setAssets }) => {
   const history = assets.monthlyExpenses || [];
   
   const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
+  // ★ 新增：讀取個人投資本金
+  const safeUserAInvest = assets.userInvestments?.userA || { stock: 0, fund: 0, deposit: 0, other: 0 };
+  const safeUserBInvest = assets.userInvestments?.userB || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const [ledgerModal, setLedgerModal] = useState(null); 
-  // ★ 新增：月份篩選狀態，預設顯示「當前月份」
   const [ledgerMonth, setLedgerMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const getEstValue = (type) => {
@@ -28,39 +30,39 @@ const TotalOverview = ({ assets, setAssets }) => {
   const totalJointInvestPrincipal = Object.values(safeInvestments).reduce((a, b) => a + b, 0);
   const totalEstValue = getEstValue('stock') + getEstValue('fund') + getEstValue('deposit') + getEstValue('other');
   const totalUnrealizedPL = totalEstValue - totalJointInvestPrincipal;
-  const totalAssets = (assets.userA || 0) + (assets.userB || 0) + (assets.jointCash || 0) + totalEstValue;
+  
+  // ★ 更新：將個人投資本金加入總資產計算，避免買股後總資產視覺縮水
+  const totalUserAInvestPrincipal = Object.values(safeUserAInvest).reduce((a, b) => a + b, 0);
+  const totalUserBInvestPrincipal = Object.values(safeUserBInvest).reduce((a, b) => a + b, 0);
+  const totalAssets = (assets.userA || 0) + totalUserAInvestPrincipal + (assets.userB || 0) + totalUserBInvestPrincipal + (assets.jointCash || 0) + totalEstValue;
 
   const getLedgerRecords = (accountKey) => {
     let records = [];
     history.forEach(r => {
-      // 1. 正常交易
       if (r.auditTrail) {
         const diff = (r.auditTrail.after[accountKey] || 0) - (r.auditTrail.before[accountKey] || 0);
         if (diff !== 0) {
             records.push({ 
                 ...r, isReversal: false, diff, balance: r.auditTrail.after[accountKey], 
-                filterMonth: r.timestamp.slice(0, 7) // 擷取年月供篩選
+                filterMonth: r.timestamp.slice(0, 7) 
             });
         }
       }
-      // 2. 作廢退款
       if (r.isDeleted && r.deleteAuditTrail) {
         const diff = (r.deleteAuditTrail.after[accountKey] || 0) - (r.deleteAuditTrail.before[accountKey] || 0);
         if (diff !== 0) {
            records.push({ 
              ...r, isReversal: true, diff, balance: r.deleteAuditTrail.after[accountKey], 
              actionName: '作廢退款', timestamp: r.deleteTimestamp,
-             filterMonth: r.deleteTimestamp.slice(0, 7) // 擷取年月供篩選
+             filterMonth: r.deleteTimestamp.slice(0, 7) 
            });
         }
       }
     });
 
-    // ★ 進行月份篩選
     if (ledgerMonth !== 'all') {
         records = records.filter(r => r.filterMonth === ledgerMonth);
     }
-
     return records.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
   };
 
@@ -127,7 +129,9 @@ const TotalOverview = ({ assets, setAssets }) => {
                   恆恆🐶
                   <button className="glass-btn" style={{padding:'2px 6px', fontSize:'0.7rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('userA')}>🔍</button>
               </div>
-              <div style={{fontSize:'1.5rem', color:'#667eea'}}>{formatMoney(assets.userA || 0)}</div>
+              <div style={{fontSize:'1.5rem', color:'#667eea'}}>{formatMoney((assets.userA || 0) + totalUserAInvestPrincipal)}</div>
+              <div style={{fontSize:'0.75rem', color:'#888', marginTop:'4px'}}>現金: {formatMoney(assets.userA || 0)}</div>
+              <div style={{fontSize:'0.75rem', color:'#888'}}>投資: {formatMoney(totalUserAInvestPrincipal)}</div>
           </div>
           <div style={{width:'1px', background:'#ddd'}}></div>
           <div style={{textAlign:'center', width:'48%'}}>
@@ -135,17 +139,17 @@ const TotalOverview = ({ assets, setAssets }) => {
                   得得🐕
                   <button className="glass-btn" style={{padding:'2px 6px', fontSize:'0.7rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('userB')}>🔍</button>
               </div>
-              <div style={{fontSize:'1.5rem', color:'#764ba2'}}>{formatMoney(assets.userB || 0)}</div>
+              <div style={{fontSize:'1.5rem', color:'#764ba2'}}>{formatMoney((assets.userB || 0) + totalUserBInvestPrincipal)}</div>
+              <div style={{fontSize:'0.75rem', color:'#888', marginTop:'4px'}}>現金: {formatMoney(assets.userB || 0)}</div>
+              <div style={{fontSize:'0.75rem', color:'#888'}}>投資: {formatMoney(totalUserBInvestPrincipal)}</div>
           </div>
         </div>
       </div>
 
-      {/* 變動紀錄 Modal */}
       {ledgerModal && (
          <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', justifyContent:'center', alignItems:'center', padding:'20px' }} onClick={() => setLedgerModal(null)}>
              <div className="glass-card" style={{width:'100%', maxWidth:'500px', height:'80vh', display:'flex', flexDirection:'column', background:'white', padding:0, overflow:'hidden'}} onClick={e => e.stopPropagation()}>
                  
-                 {/* 頂部固定 Header + 月份篩選 */}
                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'15px 20px', borderBottom:'1px solid #eee', background:'#f8f9fa'}}>
                     <div>
                         <h3 style={{margin:0, marginBottom:'8px'}}>📖 {accountNames[ledgerModal]} 的變動紀錄</h3>
@@ -167,7 +171,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                     <button style={{background:'transparent', border:'none', fontSize:'1.5rem', cursor:'pointer', color:'#888', lineHeight:1}} onClick={() => setLedgerModal(null)}>✖</button>
                  </div>
                  
-                 {/* 內部滾動區域 */}
                  <div style={{flex:1, overflowY:'auto', padding:'0 20px 20px 20px'}}>
                      {getLedgerRecords(ledgerModal).length === 0 ? (
                          <div style={{textAlign:'center', color:'#888', padding:'30px'}}>
