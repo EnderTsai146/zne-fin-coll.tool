@@ -174,7 +174,7 @@ const TotalOverview = ({ assets, setAssets }) => {
                  <div style={{flex:1, overflowY:'auto', padding:'0 20px 20px 20px'}}>
                      {getLedgerRecords(ledgerModal).length === 0 ? (
                          <div style={{textAlign:'center', color:'#888', padding:'30px'}}>
-                            {ledgerMonth === 'all' ? '目前還沒有變動紀錄喔！(舊紀錄不會顯示)' : '這個月沒有變動紀錄喔！'}
+                            {ledgerMonth === 'all' ? '目前尚無變動紀錄' : '本月份查無變動紀錄。'}
                          </div>
                      ) : (
                          getLedgerRecords(ledgerModal).map((r, idx) => (

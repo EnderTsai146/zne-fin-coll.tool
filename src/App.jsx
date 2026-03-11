@@ -12,8 +12,8 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
 const USER_MAPPING = {
-  "您的email@example.com": "恆恆🐶",   
-  "另一半的email@example.com": "得得🐕" 
+  "hzh930217@gmail.com": "恆恆🐶",   
+  "ender.tsai@gmail.com": "得得🐕" 
 };
 
 const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/bl76wl9v2v6hxd1k5xdm5n1yjt34hs7l"; 
@@ -246,12 +246,12 @@ function App() {
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
 
     if (record.isSettled) {
-        return alert("❌ 此筆消費已經被「結清」過了！\n請先在流水帳中找到對應的「系統結算」紀錄並作廢它，才能解鎖並作廢此筆消費。");
+        return alert("❌ 此筆消費已被「結清」！\n請先在流水帳中找到對應的「系統結算」紀錄並作廢它，才能作廢此筆消費。");
     }
 
-    const reason = window.prompt("⚠️ 準備作廢此紀錄，請輸入刪除原因（必填）：");
+    const reason = window.prompt("⚠️ 即將作廢此紀錄，請輸入刪除原因（必填）：");
     if (!reason || !reason.trim()) {
-        return alert("❌ 必須輸入刪除原因才能作廢紀錄喔！");
+        return alert("❌ 必須輸入刪除原因才能作廢紀錄。");
     }
 
     const snapshotBefore = getSnapshot(assets);
@@ -351,7 +351,7 @@ function App() {
       operator: operatorName
     });
 
-    alert("🗑️ 紀錄已作廢，資金已正確復原！");
+    alert("🗑️ 紀錄已作廢並完成復原。");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
