@@ -141,9 +141,15 @@ function App() {
     saveToCloud(finalAssets);
     setCurrentPage('overview');
 
+    // ★ Line 升級：自動判斷正負號
+    let signPrefix = '';
+    if (['income', 'joint_invest_sell', 'personal_invest_sell', 'personal_invest_profit', 'liquidate'].includes(historyRecord.type)) { signPrefix = '+'; }
+    else if (['spend', 'expense', 'joint_invest_buy', 'personal_invest_buy', 'personal_invest_loss'].includes(historyRecord.type)) { signPrefix = '-'; }
+    else if (['transfer', 'settle'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
+
     sendLineNotification({
       title: title, 
-      amount: `$${(Number(historyRecord.total) || 0).toLocaleString()}`, 
+      amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`, 
       category: historyRecord.category,
       note: historyRecord.note || '無', date: historyRecord.date, color: color, operator: operatorName
     });
@@ -179,7 +185,7 @@ function App() {
     setCurrentPage('overview'); 
 
     sendLineNotification({
-      title: "個人日記帳", amount: `$${totalAmount.toLocaleString()}`, category: "個人支出",
+      title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出",
       note: finalNote, date: date, color: "#ef454d", operator: operatorName
     });
   };
@@ -230,7 +236,7 @@ function App() {
         setCurrentPage('overview'); 
 
         sendLineNotification({
-          title: "共同支出", amount: `$${val.toLocaleString()}`, category: "共同支出",
+          title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出",
           note: finalNote, date: date, color: "#ef454d", operator: operatorName
         });
     } catch (err) {
@@ -343,7 +349,7 @@ function App() {
     
     sendLineNotification({
       title: "🗑️ 刪除/作廢紀錄",
-      amount: `$${(Number(record.total) || 0).toLocaleString()}`,
+      amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`,
       category: record.category,
       note: `已作廢: ${record.note} (原因: ${reason.trim()})`,
       date: new Date().toISOString().split('T')[0],
@@ -376,26 +382,45 @@ function App() {
     { id: 'expense', icon: '✍️', label: '記帳' }
   ];
 
+  // ★ 全新設計：懸浮玻璃膠囊 (Floating Glass Pill)
   const BottomNav = () => (
-    <div style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000,
-      background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-      borderTop: '1px solid rgba(0, 0, 0, 0.05)',
-      display: 'flex', justifyContent: 'space-around', padding: '10px 5px 25px 5px', 
-      boxShadow: '0 -4px 20px rgba(0,0,0,0.05)'
-    }}>
+    <div 
+      className="glass-nav" // 直接套用與頂部相同的液態玻璃特效
+      style={{
+        position: 'fixed', 
+        bottom: '25px', // 讓它微微浮起，離開螢幕最底端
+        left: '50%', 
+        transform: 'translateX(-50%)', // 確保完美置中
+        width: 'calc(100% - 40px)', // 左右各留 20px 的縫隙
+        maxWidth: '500px', // 如果用 iPad 或電腦看，不會拉得太長
+        zIndex: 1000,
+        borderRadius: '30px', // 完美的膠囊大圓角
+        display: 'flex', 
+        justifyContent: 'space-around', 
+        padding: '12px 10px', 
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)', // 懸浮造成的柔和陰影
+        border: '1px solid rgba(255, 255, 255, 0.4)' // 邊緣的玻璃反光質感
+      }}
+    >
       {navItems.map(item => (
         <div 
           key={item.id} 
           onClick={() => setCurrentPage(item.id)}
           style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            width: '60px', cursor: 'pointer', transition: 'all 0.2s',
+            width: '60px', cursor: 'pointer', 
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', // 升級為超平滑的蘋果風彈性動畫
             opacity: currentPage === item.id ? 1 : 0.5,
-            transform: currentPage === item.id ? 'scale(1.1)' : 'scale(1)'
+            transform: currentPage === item.id ? 'scale(1.15) translateY(-2px)' : 'scale(1)' // 被選中時會微微放大並向上浮起
           }}
         >
-          <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>{item.icon}</div>
+          <div style={{ 
+              fontSize: '1.5rem', 
+              marginBottom: '4px', 
+              filter: currentPage === item.id ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none' // 被選中的圖示加上小陰影
+          }}>
+              {item.icon}
+          </div>
           <div style={{ fontSize: '0.7rem', fontWeight: currentPage === item.id ? 'bold' : 'normal', color: currentPage === item.id ? '#1967d2' : '#666' }}>
             {item.label}
           </div>
