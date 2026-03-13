@@ -382,7 +382,7 @@ function App() {
     { id: 'expense', icon: '✍️', label: '記帳' }
   ];
 
- // ★ 修正版：懸浮玻璃膠囊 (移除 class 衝突，手動注入蘋果風毛玻璃)
+ // ★ 修正版：懸浮玻璃膠囊 (移除 class 衝突，手動注入頂級超透明毛玻璃特效)
   const BottomNav = () => (
     <div 
       style={{
@@ -396,14 +396,15 @@ function App() {
         borderRadius: '30px', 
         display: 'flex', 
         justifyContent: 'space-around', 
-        alignItems: 'center', // 🛡️ 防呆：強制垂直置中，防止內容把膠囊撐開
+        alignItems: 'center', // 🛡️ 強制垂直置中
         padding: '12px 10px', 
-        // 👇 手動加上頂級毛玻璃特效，絕對不依賴外部 CSS
-        background: 'rgba(255, 255, 255, 0.85)', 
-        backdropFilter: 'blur(20px) saturate(180%)', 
+        // 👇 手動加上頂級毛玻璃特效，移除 className 衝突
+        // 🛡️ 關鍵修正：將 background 改為極低不透明度，達到非常透的效果
+        background: 'rgba(255, 255, 255, 0.05)', // 超透明白色色調，幾乎看不到白色
+        backdropFilter: 'blur(20px) saturate(180%)', // 保留顯著毛玻璃模糊與飽和度
         WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)', 
-        border: '1px solid rgba(255, 255, 255, 0.4)' 
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)', // 柔和陰影
+        border: '1px solid rgba(255, 255, 255, 0.4)' // 保留邊框高光反光質感
       }}
     >
       {navItems.map(item => (
@@ -434,7 +435,7 @@ function App() {
   );
 
   return (
-    <div style={{ paddingBottom: '90px' }}>
+    <div style={{ paddingBottom: '110px' }}>
       <Topbar />
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
         
