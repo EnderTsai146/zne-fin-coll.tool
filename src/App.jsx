@@ -382,24 +382,28 @@ function App() {
     { id: 'expense', icon: '✍️', label: '記帳' }
   ];
 
-  // ★ 全新設計：懸浮玻璃膠囊 (Floating Glass Pill)
+ // ★ 修正版：懸浮玻璃膠囊 (移除 class 衝突，手動注入蘋果風毛玻璃)
   const BottomNav = () => (
     <div 
-      className="glass-nav" // 直接套用與頂部相同的液態玻璃特效
       style={{
         position: 'fixed', 
-        bottom: '25px', // 讓它微微浮起，離開螢幕最底端
+        bottom: '25px', 
         left: '50%', 
-        transform: 'translateX(-50%)', // 確保完美置中
-        width: 'calc(100% - 40px)', // 左右各留 20px 的縫隙
-        maxWidth: '500px', // 如果用 iPad 或電腦看，不會拉得太長
+        transform: 'translateX(-50%)', 
+        width: 'calc(100% - 40px)', 
+        maxWidth: '500px', 
         zIndex: 1000,
-        borderRadius: '30px', // 完美的膠囊大圓角
+        borderRadius: '30px', 
         display: 'flex', 
         justifyContent: 'space-around', 
+        alignItems: 'center', // 🛡️ 防呆：強制垂直置中，防止內容把膠囊撐開
         padding: '12px 10px', 
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)', // 懸浮造成的柔和陰影
-        border: '1px solid rgba(255, 255, 255, 0.4)' // 邊緣的玻璃反光質感
+        // 👇 手動加上頂級毛玻璃特效，絕對不依賴外部 CSS
+        background: 'rgba(255, 255, 255, 0.85)', 
+        backdropFilter: 'blur(20px) saturate(180%)', 
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)', 
+        border: '1px solid rgba(255, 255, 255, 0.4)' 
       }}
     >
       {navItems.map(item => (
@@ -409,15 +413,15 @@ function App() {
           style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             width: '60px', cursor: 'pointer', 
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', // 升級為超平滑的蘋果風彈性動畫
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
             opacity: currentPage === item.id ? 1 : 0.5,
-            transform: currentPage === item.id ? 'scale(1.15) translateY(-2px)' : 'scale(1)' // 被選中時會微微放大並向上浮起
+            transform: currentPage === item.id ? 'scale(1.15) translateY(-2px)' : 'scale(1)' 
           }}
         >
           <div style={{ 
               fontSize: '1.5rem', 
               marginBottom: '4px', 
-              filter: currentPage === item.id ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none' // 被選中的圖示加上小陰影
+              filter: currentPage === item.id ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none' 
           }}>
               {item.icon}
           </div>
