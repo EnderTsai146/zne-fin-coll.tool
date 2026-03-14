@@ -33,7 +33,8 @@ function App() {
         userB: { stock: 0, fund: 0, deposit: 0, other: 0 } 
     },
     roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
-    monthlyExpenses: [] 
+    monthlyExpenses: [],
+    bills: [] // ★ 補上這個，讓帳單系統有預設的家
   });
 
   useEffect(() => {
@@ -457,7 +458,7 @@ function App() {
 
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
         
-        {currentPage === 'expense' && <ExpenseEntry onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
+        {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
       </div>
       
       <BottomNav />

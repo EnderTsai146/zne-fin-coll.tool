@@ -39,16 +39,16 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   const [jointCat, setJointCat] = useState('餐費');
   const [jointAmount, setJointAmount] = useState('');
   const [jointNote, setJointNote] = useState('');
-  const [jointCart, setJointCart] = useState([]); // 多筆合併購物車
+  const [jointCart, setJointCart] = useState([]); 
 
   // --- 👤 個人記帳狀態 ---
   const [persUser, setPersUser] = useState('heng'); 
   const [persCat, setPersCat] = useState('餐費');
   const [persAmount, setPersAmount] = useState('');
   const [persNote, setPersNote] = useState('');
-  const [persCart, setPersCart] = useState([]); // 多筆合併購物車
+  const [persCart, setPersCart] = useState([]); 
 
-  // --- 📅 帳單管家狀態 (維持原樣) ---
+  // --- 📅 帳單管家狀態 ---
   const [showAddBill, setShowAddBill] = useState(false);
   const [billName, setBillName] = useState('');
   const [billScope, setBillScope] = useState('joint');
@@ -90,7 +90,6 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
     const isMulti = finalItems.length > 1;
     const mainCat = isMulti ? '多筆合併' : finalItems[0].cat;
     
-    // 組合備註 (如果是多筆，會顯示: [餐費] $100 - 午餐，[購物] $50 - 飲料)
     const finalNote = finalItems.map(i => {
         let s = isMulti ? `[${i.cat}] $${i.amount}` : '';
         if (i.note) s += (s ? ` - ${i.note}` : i.note);
@@ -99,7 +98,6 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
     }).join('，');
 
     onAddJointExpense(txDate, mainCat, total, jointAdvanced, finalNote);
-    
     setJointCart([]); setJointAmount(''); setJointNote(''); setJointCat('餐費');
   };
 
@@ -119,7 +117,6 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
         return s;
     }).join('，');
 
-    // ★ 轉換回底層需要的分類資料結構
     const expenseData = { food: 0, shopping: 0, fixed: 0, other: 0 };
     const catMap = { '餐費': 'food', '購物': 'shopping', '固定費用': 'fixed', '固定': 'fixed', '其他': 'other' };
     finalItems.forEach(i => {
@@ -128,12 +125,13 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
     });
 
     onAddExpense(txDate, expenseData, total, persUser, finalNote);
-    
     setPersCart([]); setPersAmount(''); setPersNote(''); setPersCat('餐費');
   };
 
-  // ======== 📅 帳單管家邏輯 (維持原樣) ========
+  // ======== 📅 帳單管家邏輯 ========
   const handleSaveNewBill = () => {
+      if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限，請確認 App.jsx 是否已更新！");
+      
       if (!billName) return alert("請填寫帳單名稱！");
       if (billType === 'fixed' && (!billAmount || isNaN(billAmount))) return alert("固定帳單請輸入金額！");
       const newBill = { id: Date.now().toString(), name: billName, scope: billScope, payer: billPayer, type: billType, amount: billType === 'fixed' ? Number(billAmount) : 0, cycle: Number(billCycle), nextDate: billNextDate };
@@ -143,6 +141,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   };
 
   const handlePayBill = (bill) => {
+      if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限！");
       let finalAmount = bill.amount;
       if (bill.type === 'variable') {
           const input = window.prompt(`請輸入【${bill.name}】本期的實際扣款金額：`);
@@ -164,6 +163,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   };
 
   const handleDeleteBill = (id) => {
+      if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限！");
       if(!window.confirm("⚠️ 確定要刪除這個帳單提醒嗎？")) return;
       setAssets({ ...assets, bills: safeBills.filter(b => b.id !== id) });
   };
@@ -180,10 +180,11 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
         </button>
       </div>
 
+      {/* 🛡️ 修正：加入 flexWrap:'wrap' 防止手機版日期框超出邊界 */}
       {activeTab !== 'bills' && (
-        <div className="glass-card" style={{ padding: '15px 20px', marginBottom: '20px', borderLeft: '5px solid #667eea', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <label style={{fontWeight:'bold', fontSize:'1.1rem', margin:0}}>📅 消費日期</label>
-          <input type="date" className="glass-input" style={{width:'auto', margin:0, padding:'6px 10px'}} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+        <div className="glass-card" style={{ padding: '12px 15px', marginBottom: '20px', borderLeft: '5px solid #667eea', display:'flex', flexWrap:'wrap', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+          <label style={{fontWeight:'bold', fontSize:'1.05rem', margin:0}}>📅 消費日期</label>
+          <input type="date" className="glass-input" style={{flex:1, minWidth:'140px', maxWidth:'100%', margin:0, padding:'8px 12px', boxSizing:'border-box'}} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
         </div>
       )}
 
@@ -202,14 +203,15 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
             <SegmentedControl options={[{ label: '🏫 共同直接付', value: 'jointCash' }, { label: '🐶 恆恆代墊', value: 'userA' }, { label: '🐕 得得代墊', value: 'userB' }]} value={jointAdvanced} onChange={setJointAdvanced} />
           </div>
 
-          <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
-            <div style={{flex:1}}>
+          {/* 🛡️ 修正：加入 flexWrap:'wrap' 防止輸入框擠壓 */}
+          <div style={{display:'flex', flexWrap:'wrap', gap:'10px', marginBottom:'10px'}}>
+            <div style={{flex:1, minWidth:'100px'}}>
                 <label style={{fontSize:'0.85rem'}}>金額</label>
-                <input type="number" inputMode="numeric" className="glass-input" value={jointAmount} onChange={(e)=>setJointAmount(e.target.value)} placeholder="0" />
+                <input type="number" inputMode="numeric" className="glass-input" style={{boxSizing:'border-box'}} value={jointAmount} onChange={(e)=>setJointAmount(e.target.value)} placeholder="0" />
             </div>
-            <div style={{flex:2}}>
+            <div style={{flex:2, minWidth:'150px'}}>
                 <label style={{fontSize:'0.85rem'}}>備註 (選填)</label>
-                <input type="text" className="glass-input" value={jointNote} onChange={(e)=>setJointNote(e.target.value)} placeholder="例如：全聯買菜" />
+                <input type="text" className="glass-input" style={{boxSizing:'border-box'}} value={jointNote} onChange={(e)=>setJointNote(e.target.value)} placeholder="例如：全聯買菜" />
             </div>
           </div>
 
@@ -217,7 +219,6 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
              ➕ 暫存此筆，繼續加入下一筆
           </button>
 
-          {/* 🛒 共同購物車顯示區 */}
           {jointCart.length > 0 && (
              <div style={{background:'rgba(168, 230, 207, 0.15)', padding:'10px', borderRadius:'8px', marginBottom:'15px', border:'1px solid rgba(168, 230, 207, 0.5)'}}>
                  <div style={{fontSize:'0.85rem', color:'#666', marginBottom:'8px'}}>🛒 本次合併明細：</div>
@@ -251,14 +252,15 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
             <SegmentedControl options={[{ label: '🍔 餐費', value: '餐費' }, { label: '🛍️ 購物', value: '購物' }, { label: '🏠 固定', value: '固定' }, { label: '📦 其他', value: '其他' }]} value={persCat} onChange={setPersCat} />
           </div>
 
-          <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
-            <div style={{flex:1}}>
+          {/* 🛡️ 修正：加入 flexWrap:'wrap' 防止輸入框擠壓 */}
+          <div style={{display:'flex', flexWrap:'wrap', gap:'10px', marginBottom:'10px'}}>
+            <div style={{flex:1, minWidth:'100px'}}>
                 <label style={{fontSize:'0.85rem'}}>金額</label>
-                <input type="number" inputMode="numeric" className="glass-input" value={persAmount} onChange={(e)=>setPersAmount(e.target.value)} placeholder="0" />
+                <input type="number" inputMode="numeric" className="glass-input" style={{boxSizing:'border-box'}} value={persAmount} onChange={(e)=>setPersAmount(e.target.value)} placeholder="0" />
             </div>
-            <div style={{flex:2}}>
+            <div style={{flex:2, minWidth:'150px'}}>
                 <label style={{fontSize:'0.85rem'}}>備註 (選填)</label>
-                <input type="text" className="glass-input" value={persNote} onChange={(e)=>setPersNote(e.target.value)} placeholder="例如：手搖飲" />
+                <input type="text" className="glass-input" style={{boxSizing:'border-box'}} value={persNote} onChange={(e)=>setPersNote(e.target.value)} placeholder="例如：手搖飲" />
             </div>
           </div>
 
@@ -266,7 +268,6 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
              ➕ 暫存此筆，繼續加入下一筆
           </button>
 
-          {/* 🛒 個人購物車顯示區 */}
           {persCart.length > 0 && (
              <div style={{background:'rgba(255, 154, 158, 0.15)', padding:'10px', borderRadius:'8px', marginBottom:'15px', border:'1px solid rgba(255, 154, 158, 0.5)'}}>
                  <div style={{fontSize:'0.85rem', color:'#666', marginBottom:'8px'}}>🛒 本次合併明細：</div>
@@ -285,7 +286,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
         </div>
       )}
 
-      {/* 📅 帳單管家面板 (維持原樣) */}
+      {/* 📅 帳單管家面板 */}
       {activeTab === 'bills' && (
         <div>
            {!showAddBill && (
@@ -301,7 +302,9 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
                   <div style={{ marginBottom: '10px' }}><label style={{fontSize:'0.85rem', color:'#666'}}>金額類型</label><SegmentedControl options={[{ label: '固定金額 (如訂閱)', value: 'fixed' }, { label: '變動金額 (如水電)', value: 'variable' }]} value={billType} onChange={setBillType} /></div>
                   {billType === 'fixed' && (<input type="number" inputMode="numeric" className="glass-input" placeholder="請輸入每期固定金額" value={billAmount} onChange={e=>setBillAmount(e.target.value)} />)}
                   <div style={{ marginBottom: '10px' }}><label style={{fontSize:'0.85rem', color:'#666'}}>繳費週期</label><SegmentedControl options={[{ label: '每月', value: 1 }, { label: '每兩月', value: 2 }, { label: '每年', value: 12 }]} value={billCycle} onChange={setBillCycle} /></div>
-                  <div style={{ marginBottom: '15px' }}><label style={{fontSize:'0.85rem', color:'#666'}}>「下次」預計扣款日</label><input type="date" className="glass-input" value={billNextDate} onChange={e=>setBillNextDate(e.target.value)} /></div>
+                  
+                  {/* 🛡️ 修正：確保日期輸入框 100% 寬度且不溢出 */}
+                  <div style={{ marginBottom: '15px' }}><label style={{fontSize:'0.85rem', color:'#666'}}>「下次」預計扣款日</label><input type="date" className="glass-input" style={{width:'100%', boxSizing:'border-box'}} value={billNextDate} onChange={e=>setBillNextDate(e.target.value)} /></div>
                   <div style={{display:'flex', gap:'10px'}}>
                       <button className="glass-btn" style={{flex:1, background:'#eee', color:'#333'}} onClick={() => setShowAddBill(false)}>取消</button>
                       <button className="glass-btn" style={{flex:1, background:'#3498db', color:'#fff'}} onClick={handleSaveNewBill}>儲存設定</button>
