@@ -13,7 +13,7 @@ const InvestmentView = ({ assets }) => {
 
   // ★ 即時盯盤 API 狀態
   const [livePrices, setLivePrices] = useState({});
-  const [liveFx, setLiveFx] = useState(31.5); // 預設匯率
+  const [liveFx, setLiveFx] = useState(31.5); 
   const [isFetching, setIsFetching] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
 
@@ -27,7 +27,6 @@ const InvestmentView = ({ assets }) => {
   
   const totalPrincipal = Object.values(currentData).reduce((a, b) => a + b, 0);
 
-  // 1. 取得該帳戶所有歷史紀錄
   const accountHistory = useMemo(() => {
       return history.filter(r => {
           if (r.isDeleted === true) return false;
@@ -41,7 +40,6 @@ const InvestmentView = ({ assets }) => {
       });
   }, [history, activeTab]);
 
-  // 2. 日期區間過濾
   const filteredHistory = useMemo(() => {
       return accountHistory.filter(r => {
           const rDate = r.date || `${r.month}-01`;
@@ -51,7 +49,6 @@ const InvestmentView = ({ assets }) => {
       });
   }, [accountHistory, dateRange]);
 
-  // 3. 結算已實現損益
   const realizedProfit = useMemo(() => {
       return filteredHistory.reduce((sum, r) => {
           if (r.type.includes('sell')) return sum + ((Number(r.total) || 0) - (Number(r.principal) || Number(r.total)));
@@ -61,69 +58,88 @@ const InvestmentView = ({ assets }) => {
       }, 0);
   }, [filteredHistory]);
 
-  // ★ 4. 結算「庫存股票 (Holdings)」
   const stockHoldings = useMemo(() => {
       const holdings = {};
       accountHistory.forEach(r => {
-          if (!r.symbol) return; // 只抓有填寫股票代號的
+          if (!r.symbol) return; 
           const sym = r.symbol;
           if (!holdings[sym]) holdings[sym] = { shares: 0, totalCost: 0, market: r.market || 'TW' };
 
           if (r.type.includes('buy')) {
               holdings[sym].shares += (Number(r.shares) || 0);
-              holdings[sym].totalCost += (Number(r.total) || 0); // 本金已含買入手續費
+              holdings[sym].totalCost += (Number(r.total) || 0); 
               holdings[sym].market = r.market || 'TW';
           } else if (r.type.includes('sell')) {
               holdings[sym].shares -= (Number(r.shares) || 0);
-              holdings[sym].totalCost -= (Number(r.principal) || 0); // 扣除使用者填寫的本金
+              holdings[sym].totalCost -= (Number(r.principal) || 0); 
           }
       });
-      // 過濾掉已經賣光 (股數 <= 0) 的股票
       Object.keys(holdings).forEach(k => { if (holdings[k].shares <= 0) delete holdings[k]; });
       return holdings;
   }, [accountHistory]);
 
   const holdingSymbols = Object.keys(stockHoldings);
 
-  // ★ 5. Yahoo Finance API 抓價引擎 (透過 allorigins 代理避開 CORS)
+  // ★ 5. 全新：雙引擎與獨立防護罩的 API 抓價系統
   const fetchLivePrices = async () => {
       if (holdingSymbols.length === 0) return;
       setIsFetching(true);
       
-      try {
-          // 先抓美金匯率 (TWD=X)
-          const fxRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/TWD=X')}`);
-          const fxData = await fxRes.json();
-          const currentFx = fxData?.chart?.result?.[0]?.meta?.regularMarketPrice || 31.5;
-          setLiveFx(currentFx);
-
-          // 抓取各檔股票
-          const newPrices = { ...livePrices };
-          for (const sym of holdingSymbols) {
-              const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}`)}`);
-              const data = await res.json();
-              const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-              if (price) newPrices[sym] = price;
+      // 雙引擎備援系統：如果 API A 失敗，自動嘗試 API B
+      const fetchWithProxy = async (targetUrl) => {
+          try {
+              const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`);
+              if (!res.ok) throw new Error('Proxy 1 失敗');
+              return await res.json();
+          } catch (e1) {
+              try {
+                  const res2 = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+                  if (!res2.ok) throw new Error('Proxy 2 失敗');
+                  return await res2.json();
+              } catch (e2) {
+                  throw new Error('所有 Proxy 皆失敗');
+              }
           }
-          setLivePrices(newPrices);
-          
-          const now = new Date();
-          setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
+      };
+
+      // 獨立任務 1：抓匯率 (就算失敗也不會卡住股票)
+      try {
+          const fxData = await fetchWithProxy('https://query1.finance.yahoo.com/v8/finance/chart/TWD=X');
+          const currentFx = fxData?.chart?.result?.[0]?.meta?.regularMarketPrice;
+          if (currentFx) setLiveFx(currentFx);
       } catch (error) {
-          console.error("API 抓取失敗:", error);
+          console.log("匯率抓取失敗，沿用舊值");
       }
+
+      // 獨立任務 2：各自抓取每檔股票
+      const newPrices = { ...livePrices };
+      for (const sym of holdingSymbols) {
+          try {
+              const data = await fetchWithProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}`);
+              const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+              if (price) {
+                  newPrices[sym] = price;
+              } else {
+                  newPrices[sym] = -1; // -1 代表抓取失敗
+              }
+          } catch (error) {
+              console.log(`${sym} 抓取失敗:`, error);
+              newPrices[sym] = -1; // -1 代表抓取失敗
+          }
+      }
+      
+      setLivePrices(newPrices);
+      const now = new Date();
+      setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
       setIsFetching(false);
   };
 
-  // 當帳戶切換時，如果有庫存就自動抓取最新價格
   useEffect(() => {
       if (holdingSymbols.length > 0) fetchLivePrices();
       // eslint-disable-next-line
   }, [activeTab]);
 
-  // 6. 計算包含手續費的「即時未實現損益」
   let totalUnrealizedPnL = 0;
-  let totalHoldingCurrentValue = 0;
 
   const renderHoldings = () => {
       if (holdingSymbols.length === 0) return <div style={{textAlign:'center', color:'#888', padding:'20px'}}>目前沒有庫存股票喔！</div>;
@@ -132,35 +148,31 @@ const InvestmentView = ({ assets }) => {
           const holding = stockHoldings[sym];
           const currentPrice = livePrices[sym] || 0;
           let currentValue = 0;
-          let estimatedSellFee = 0;
 
           if (currentPrice > 0) {
               const baseValue = currentPrice * holding.shares;
               if (holding.market === 'TW') {
-                  // 台股：(現價 * 股數) - 賣出手續費 - 賣出交易稅
                   const fee = Math.max(20, Math.floor(baseValue * 0.001425 * 0.6));
                   const tax = Math.floor(baseValue * 0.003);
-                  estimatedSellFee = fee + tax;
-                  currentValue = baseValue - estimatedSellFee;
+                  currentValue = baseValue - (fee + tax);
               } else {
-                  // 美股：((現價 * 股數) - 0.1%手續費) * 即時匯率
                   const feeUsd = baseValue * 0.001;
-                  estimatedSellFee = feeUsd * liveFx; // 僅供顯示參考
                   currentValue = (baseValue - feeUsd) * liveFx;
               }
           }
 
+          // 只有當成功抓到大於 0 的價格時，才計算損益
           const pnl = currentValue > 0 ? (currentValue - holding.totalCost) : 0;
           const roi = holding.totalCost > 0 ? ((pnl / holding.totalCost) * 100).toFixed(2) : 0;
           
           totalUnrealizedPnL += pnl;
-          totalHoldingCurrentValue += holding.totalCost; // 用成本計入總資產較穩健，或可用市值
 
           const isProfit = pnl >= 0;
-          const color = isProfit ? '#2ecc71' : '#e74c3c';
+          // 如果 currentPrice === -1 代表抓取失敗，將邊框變成橘色警告
+          const borderColor = currentPrice === -1 ? '#f39c12' : (isProfit ? '#2ecc71' : '#e74c3c');
 
           return (
-              <div key={sym} className="glass-card" style={{ marginBottom:'10px', padding:'12px', borderLeft: `4px solid ${color}` }}>
+              <div key={sym} className="glass-card" style={{ marginBottom:'10px', padding:'12px', borderLeft: `4px solid ${borderColor}` }}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                       <div>
                           <div style={{fontWeight:'bold', fontSize:'1.1rem', color:'#333'}}>{sym} <span style={{fontSize:'0.7rem', color:'#fff', background: holding.market === 'TW' ? '#3498db' : '#9b59b6', padding:'2px 6px', borderRadius:'10px'}}>{holding.market}</span></div>
@@ -170,10 +182,14 @@ const InvestmentView = ({ assets }) => {
                       </div>
                       <div style={{textAlign:'right'}}>
                           <div style={{fontSize:'0.85rem', color:'#888'}}>
-                              現價: <span style={{fontWeight:'bold', color:'#333'}}>{currentPrice > 0 ? (holding.market === 'US' ? `$${currentPrice.toFixed(2)} (USD)` : `$${currentPrice.toFixed(2)}`) : '載入中...'}</span>
+                              現價: <span style={{fontWeight:'bold', color:'#333'}}>
+                                  {currentPrice > 0 
+                                      ? (holding.market === 'US' ? `$${currentPrice.toFixed(2)} (USD)` : `$${currentPrice.toFixed(2)}`) 
+                                      : (currentPrice === -1 ? '⚠️ 暫無法取得' : '載入中...')}
+                              </span>
                           </div>
                           {currentPrice > 0 && (
-                              <div style={{fontWeight:'bold', color: color, fontSize:'1.1rem'}}>
+                              <div style={{fontWeight:'bold', color: isProfit ? '#2ecc71' : '#e74c3c', fontSize:'1.1rem'}}>
                                   {isProfit ? '+' : ''}{formatMoney(pnl)} <span style={{fontSize:'0.8rem'}}>({isProfit ? '+' : ''}{roi}%)</span>
                               </div>
                           )}
@@ -221,7 +237,6 @@ const InvestmentView = ({ assets }) => {
           </div>
       </div>
 
-      {/* ★ 史詩升級：即時股市戰情區 */}
       <div className="glass-card" style={{marginBottom:'20px', background: 'linear-gradient(to bottom, #f8f9fa, #eef2f3)'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
               <h3 style={{margin:0, color:'#2c3e50', display:'flex', alignItems:'center', gap:'5px'}}>
@@ -235,7 +250,6 @@ const InvestmentView = ({ assets }) => {
               </div>
           </div>
 
-          {/* 渲染各檔股票的即時損益卡片 */}
           {renderHoldings()}
 
           {holdingSymbols.length > 0 && (
