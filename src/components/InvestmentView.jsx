@@ -1,5 +1,5 @@
 // src/components/InvestmentView.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 
@@ -11,6 +11,12 @@ const InvestmentView = ({ assets }) => {
   const [activeTab, setActiveTab] = useState('jointCash'); 
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
+  // ★ 即時盯盤 API 狀態
+  const [livePrices, setLivePrices] = useState({});
+  const [liveFx, setLiveFx] = useState(31.5); // 預設匯率
+  const [isFetching, setIsFetching] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState('');
+
   const history = assets.monthlyExpenses || [];
   const safeJoint = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
   const safeUserA = assets.userInvestments?.userA || { stock: 0, fund: 0, deposit: 0, other: 0 };
@@ -21,10 +27,10 @@ const InvestmentView = ({ assets }) => {
   
   const totalPrincipal = Object.values(currentData).reduce((a, b) => a + b, 0);
 
+  // 1. 取得該帳戶所有歷史紀錄
   const accountHistory = useMemo(() => {
       return history.filter(r => {
           if (r.isDeleted === true) return false;
-
           if (activeTab === 'jointCash') {
               return r.type === 'joint_invest_buy' || r.type === 'joint_invest_sell';
           } else {
@@ -35,6 +41,7 @@ const InvestmentView = ({ assets }) => {
       });
   }, [history, activeTab]);
 
+  // 2. 日期區間過濾
   const filteredHistory = useMemo(() => {
       return accountHistory.filter(r => {
           const rDate = r.date || `${r.month}-01`;
@@ -44,35 +51,150 @@ const InvestmentView = ({ assets }) => {
       });
   }, [accountHistory, dateRange]);
 
+  // 3. 結算已實現損益
   const realizedProfit = useMemo(() => {
       return filteredHistory.reduce((sum, r) => {
-          if (r.type.includes('sell')) {
-              const profit = (Number(r.total) || 0) - (Number(r.principal) || Number(r.total));
-              return sum + profit;
-          }
+          if (r.type.includes('sell')) return sum + ((Number(r.total) || 0) - (Number(r.principal) || Number(r.total)));
           if (r.type === 'personal_invest_profit') return sum + (Number(r.total) || 0);
           if (r.type === 'personal_invest_loss') return sum - (Number(r.total) || 0);
           return sum;
       }, 0);
   }, [filteredHistory]);
 
+  // ★ 4. 結算「庫存股票 (Holdings)」
+  const stockHoldings = useMemo(() => {
+      const holdings = {};
+      accountHistory.forEach(r => {
+          if (!r.symbol) return; // 只抓有填寫股票代號的
+          const sym = r.symbol;
+          if (!holdings[sym]) holdings[sym] = { shares: 0, totalCost: 0, market: r.market || 'TW' };
+
+          if (r.type.includes('buy')) {
+              holdings[sym].shares += (Number(r.shares) || 0);
+              holdings[sym].totalCost += (Number(r.total) || 0); // 本金已含買入手續費
+              holdings[sym].market = r.market || 'TW';
+          } else if (r.type.includes('sell')) {
+              holdings[sym].shares -= (Number(r.shares) || 0);
+              holdings[sym].totalCost -= (Number(r.principal) || 0); // 扣除使用者填寫的本金
+          }
+      });
+      // 過濾掉已經賣光 (股數 <= 0) 的股票
+      Object.keys(holdings).forEach(k => { if (holdings[k].shares <= 0) delete holdings[k]; });
+      return holdings;
+  }, [accountHistory]);
+
+  const holdingSymbols = Object.keys(stockHoldings);
+
+  // ★ 5. Yahoo Finance API 抓價引擎 (透過 allorigins 代理避開 CORS)
+  const fetchLivePrices = async () => {
+      if (holdingSymbols.length === 0) return;
+      setIsFetching(true);
+      
+      try {
+          // 先抓美金匯率 (TWD=X)
+          const fxRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/TWD=X')}`);
+          const fxData = await fxRes.json();
+          const currentFx = fxData?.chart?.result?.[0]?.meta?.regularMarketPrice || 31.5;
+          setLiveFx(currentFx);
+
+          // 抓取各檔股票
+          const newPrices = { ...livePrices };
+          for (const sym of holdingSymbols) {
+              const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}`)}`);
+              const data = await res.json();
+              const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+              if (price) newPrices[sym] = price;
+          }
+          setLivePrices(newPrices);
+          
+          const now = new Date();
+          setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
+      } catch (error) {
+          console.error("API 抓取失敗:", error);
+      }
+      setIsFetching(false);
+  };
+
+  // 當帳戶切換時，如果有庫存就自動抓取最新價格
+  useEffect(() => {
+      if (holdingSymbols.length > 0) fetchLivePrices();
+      // eslint-disable-next-line
+  }, [activeTab]);
+
+  // 6. 計算包含手續費的「即時未實現損益」
+  let totalUnrealizedPnL = 0;
+  let totalHoldingCurrentValue = 0;
+
+  const renderHoldings = () => {
+      if (holdingSymbols.length === 0) return <div style={{textAlign:'center', color:'#888', padding:'20px'}}>目前沒有庫存股票喔！</div>;
+
+      return holdingSymbols.map(sym => {
+          const holding = stockHoldings[sym];
+          const currentPrice = livePrices[sym] || 0;
+          let currentValue = 0;
+          let estimatedSellFee = 0;
+
+          if (currentPrice > 0) {
+              const baseValue = currentPrice * holding.shares;
+              if (holding.market === 'TW') {
+                  // 台股：(現價 * 股數) - 賣出手續費 - 賣出交易稅
+                  const fee = Math.max(20, Math.floor(baseValue * 0.001425 * 0.6));
+                  const tax = Math.floor(baseValue * 0.003);
+                  estimatedSellFee = fee + tax;
+                  currentValue = baseValue - estimatedSellFee;
+              } else {
+                  // 美股：((現價 * 股數) - 0.1%手續費) * 即時匯率
+                  const feeUsd = baseValue * 0.001;
+                  estimatedSellFee = feeUsd * liveFx; // 僅供顯示參考
+                  currentValue = (baseValue - feeUsd) * liveFx;
+              }
+          }
+
+          const pnl = currentValue > 0 ? (currentValue - holding.totalCost) : 0;
+          const roi = holding.totalCost > 0 ? ((pnl / holding.totalCost) * 100).toFixed(2) : 0;
+          
+          totalUnrealizedPnL += pnl;
+          totalHoldingCurrentValue += holding.totalCost; // 用成本計入總資產較穩健，或可用市值
+
+          const isProfit = pnl >= 0;
+          const color = isProfit ? '#2ecc71' : '#e74c3c';
+
+          return (
+              <div key={sym} className="glass-card" style={{ marginBottom:'10px', padding:'12px', borderLeft: `4px solid ${color}` }}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                      <div>
+                          <div style={{fontWeight:'bold', fontSize:'1.1rem', color:'#333'}}>{sym} <span style={{fontSize:'0.7rem', color:'#fff', background: holding.market === 'TW' ? '#3498db' : '#9b59b6', padding:'2px 6px', borderRadius:'10px'}}>{holding.market}</span></div>
+                          <div style={{fontSize:'0.8rem', color:'#666'}}>
+                              {holding.shares} 股 | 總成本 {formatMoney(holding.totalCost)}
+                          </div>
+                      </div>
+                      <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:'0.85rem', color:'#888'}}>
+                              現價: <span style={{fontWeight:'bold', color:'#333'}}>{currentPrice > 0 ? (holding.market === 'US' ? `$${currentPrice.toFixed(2)} (USD)` : `$${currentPrice.toFixed(2)}`) : '載入中...'}</span>
+                          </div>
+                          {currentPrice > 0 && (
+                              <div style={{fontWeight:'bold', color: color, fontSize:'1.1rem'}}>
+                                  {isProfit ? '+' : ''}{formatMoney(pnl)} <span style={{fontSize:'0.8rem'}}>({isProfit ? '+' : ''}{roi}%)</span>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              </div>
+          );
+      });
+  };
+
   const chartData = {
       labels: ['股票', '基金', '定存', '其他'],
       datasets: [{
           data: [currentData.stock, currentData.fund, currentData.deposit, currentData.other],
           backgroundColor: ['#ff9f43', '#54a0ff', '#2ecc71', '#c8d6e5'],
-          borderWidth: 0,
-          hoverOffset: 4
+          borderWidth: 0, hoverOffset: 4
       }]
   };
 
   const isAllTime = !dateRange.start && !dateRange.end;
-  const displayHistory = isAllTime
-      ? [...filteredHistory].reverse().slice(0, 30) 
-      : [...filteredHistory].reverse(); 
-
-  const profitLabel = isAllTime ? '累計已實現損益' : '區間已實現損益';
-  const listLabel = isAllTime ? '📝 近期買賣紀錄' : '📝 區間買賣紀錄';
+  const displayHistory = isAllTime ? [...filteredHistory].reverse().slice(0, 30) : [...filteredHistory].reverse(); 
 
   return (
     <div style={{animation: 'fadeIn 0.5s'}}>
@@ -84,16 +206,6 @@ const InvestmentView = ({ assets }) => {
         <button className={`glass-btn ${activeTab==='userB'?'':'inactive'}`} onClick={()=>setActiveTab('userB')} style={{flex:1, padding:'8px 0'}}>🐕 得得</button>
       </div>
 
-      <div className="glass-card" style={{ padding: '12px 15px', marginBottom: '20px', borderLeft: '5px solid #3498db' }}>
-          <div style={{color:'#555', fontWeight:'bold', marginBottom:'8px', fontSize:'0.9rem'}}>🔍 自訂時間範圍</div>
-          <div style={{display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'center'}}>
-              <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
-              <span style={{color:'#888', fontSize:'0.85rem'}}>至</span>
-              <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
-              <button onClick={() => setDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'6px 12px', fontSize:'0.85rem', background: isAllTime ? '#e2e8f0' : '#fff', color:'#333', border:'1px solid #ccc'}}>清除/看全部</button>
-          </div>
-      </div>
-
       <h3 style={{color:'#555', margin:'0 0 15px 0', textAlign:'center'}}>{accountName} 的資產現況</h3>
 
       <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
@@ -102,23 +214,46 @@ const InvestmentView = ({ assets }) => {
               <div style={{fontSize:'1.5rem', fontWeight:'bold', color:'#34495e'}}>{formatMoney(totalPrincipal)}</div>
           </div>
           <div className="glass-card" style={{flex:1, textAlign:'center', padding:'15px', background: realizedProfit >= 0 ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)', border: realizedProfit >= 0 ? '1px solid #2ecc71' : '1px solid #e74c3c'}}>
-              <div style={{fontSize:'0.85rem', color: realizedProfit >= 0 ? '#27ae60' : '#c0392b', marginBottom:'5px'}}>{profitLabel}</div>
+              <div style={{fontSize:'0.85rem', color: realizedProfit >= 0 ? '#27ae60' : '#c0392b', marginBottom:'5px'}}>{isAllTime ? '累計已實現損益' : '區間已實現損益'}</div>
               <div style={{fontSize:'1.5rem', fontWeight:'bold', color: realizedProfit >= 0 ? '#2ecc71' : '#e74c3c'}}>
                   {realizedProfit > 0 ? '+' : ''}{formatMoney(realizedProfit)}
               </div>
           </div>
       </div>
 
-      {totalPrincipal === 0 ? (
-          <div className="glass-card" style={{textAlign:'center', padding:'40px', color:'#888', marginBottom:'20px'}}>
-              <div style={{fontSize:'2rem', marginBottom:'10px'}}>🌱</div>目前還沒有任何投資部位喔！<br/>去「操作」頁面買入一些資產吧！
+      {/* ★ 史詩升級：即時股市戰情區 */}
+      <div className="glass-card" style={{marginBottom:'20px', background: 'linear-gradient(to bottom, #f8f9fa, #eef2f3)'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
+              <h3 style={{margin:0, color:'#2c3e50', display:'flex', alignItems:'center', gap:'5px'}}>
+                  📡 即時庫存戰情 
+              </h3>
+              <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                  {lastUpdated && <span style={{fontSize:'0.75rem', color:'#888'}}>更新: {lastUpdated}</span>}
+                  <button onClick={fetchLivePrices} disabled={isFetching || holdingSymbols.length === 0} style={{background: isFetching ? '#ccc' : '#3498db', color:'white', border:'none', padding:'4px 10px', borderRadius:'12px', fontSize:'0.8rem', cursor: isFetching ? 'wait' : 'pointer'}}>
+                      {isFetching ? '抓取中...' : '🔄 更新'}
+                  </button>
+              </div>
           </div>
-      ) : (
+
+          {/* 渲染各檔股票的即時損益卡片 */}
+          {renderHoldings()}
+
+          {holdingSymbols.length > 0 && (
+             <div style={{marginTop:'15px', paddingTop:'15px', borderTop:'1px dashed #ccc', textAlign:'right'}}>
+                <span style={{fontSize:'0.85rem', color:'#666'}}>預估總未實現損益 (已扣元大稅費)：</span>
+                <span style={{fontWeight:'bold', fontSize:'1.2rem', color: totalUnrealizedPnL >= 0 ? '#2ecc71' : '#e74c3c', marginLeft:'10px'}}>
+                    {totalUnrealizedPnL > 0 ? '+' : ''}{formatMoney(totalUnrealizedPnL)}
+                </span>
+             </div>
+          )}
+      </div>
+
+      {totalPrincipal > 0 && (
           <div className="glass-card" style={{marginBottom:'20px', display:'flex', flexWrap:'wrap', alignItems:'center'}}>
-              <div style={{flex:1, minWidth:'200px', height:'200px', display:'flex', justifyContent:'center'}}>
+              <div style={{flex:1, minWidth:'150px', height:'150px', display:'flex', justifyContent:'center'}}>
                   <Doughnut data={chartData} options={{ maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }} />
               </div>
-              <div style={{flex:1, minWidth:'200px', padding:'10px'}}>
+              <div style={{flex:1, minWidth:'150px', padding:'10px'}}>
                   {['stock', 'fund', 'deposit', 'other'].map((type, idx) => {
                       const colors = ['#ff9f43', '#54a0ff', '#2ecc71', '#c8d6e5'];
                       const labels = ['股票', '基金', '定存', '其他'];
@@ -127,12 +262,8 @@ const InvestmentView = ({ assets }) => {
                       const percentage = ((val / totalPrincipal) * 100).toFixed(1);
                       return (
                           <div key={type} style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-                              <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                                  <div style={{width:'12px', height:'12px', borderRadius:'50%', background:colors[idx]}}></div>
-                                  <span style={{fontWeight:'bold', color:'#555'}}>{labels[idx]}</span>
-                                  <span style={{fontSize:'0.75rem', color:'#888'}}>{percentage}%</span>
-                              </div>
-                              <div style={{fontWeight:'bold', color:'#333'}}>{formatMoney(val)}</div>
+                              <div style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px', height:'12px', borderRadius:'50%', background:colors[idx]}}></div><span style={{fontWeight:'bold', color:'#555', fontSize:'0.9rem'}}>{labels[idx]}</span></div>
+                              <div style={{fontWeight:'bold', color:'#333', fontSize:'0.9rem'}}>{formatMoney(val)}</div>
                           </div>
                       );
                   })}
@@ -140,37 +271,28 @@ const InvestmentView = ({ assets }) => {
           </div>
       )}
 
+      <div className="glass-card" style={{ padding: '12px 15px', marginBottom: '20px', borderLeft: '5px solid #3498db' }}>
+          <div style={{color:'#555', fontWeight:'bold', marginBottom:'8px', fontSize:'0.9rem'}}>🔍 歷史買賣區間</div>
+          <div style={{display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'center'}}>
+              <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
+              <span style={{color:'#888', fontSize:'0.85rem'}}>至</span>
+              <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
+              <button onClick={() => setDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'6px 12px', fontSize:'0.85rem', background: isAllTime ? '#e2e8f0' : '#fff', color:'#333', border:'1px solid #ccc'}}>清除</button>
+          </div>
+      </div>
+
       <div className="glass-card" style={{marginBottom:'20px'}}>
-          <h3 style={{marginTop:0, marginBottom:'15px', fontSize:'1.1rem', color:'#555', borderBottom:'1px solid #eee', paddingBottom:'10px'}}>{listLabel}</h3>
+          <h3 style={{marginTop:0, marginBottom:'15px', fontSize:'1.1rem', color:'#555', borderBottom:'1px solid #eee', paddingBottom:'10px'}}>{isAllTime ? '📝 近期買賣紀錄' : '📝 區間買賣紀錄'}</h3>
           {displayHistory.length === 0 ? (
-              <div style={{textAlign:'center', color:'#888', padding:'20px'}}>
-                  {isAllTime ? '尚無交易紀錄' : '在這個時間範圍內沒有買賣紀錄喔！'}
-              </div>
+              <div style={{textAlign:'center', color:'#888', padding:'20px'}}>{isAllTime ? '尚無交易紀錄' : '在這個時間範圍內沒有買賣紀錄喔！'}</div>
           ) : (
               displayHistory.map((r, idx) => {
+                  let actionSign = ''; let amountStr = ''; let amountColor = '#333';
                   
-                  // ★ 升級：根據不同行為給予明確的 正負號 與 高對比顏色
-                  let actionSign = '';
-                  let amountStr = '';
-                  let amountColor = '#333';
-                  
-                  if (r.type.includes('buy')) {
-                      actionSign = '買入';
-                      amountStr = `-${formatMoney(r.total)}`; // 買入是扣除現金
-                      amountColor = '#1d1d1f'; // 深黑色，對比清晰
-                  } else if (r.type.includes('sell') || r.type === 'liquidate') {
-                      actionSign = '變現';
-                      amountStr = `+${formatMoney(r.total)}`; // 變現是拿回現金
-                      amountColor = '#2ecc71'; // 綠色
-                  } else if (r.type.includes('profit')) {
-                      actionSign = '當沖獲利';
-                      amountStr = `+${formatMoney(r.total)}`; 
-                      amountColor = '#2ecc71'; // 綠色
-                  } else if (r.type.includes('loss')) {
-                      actionSign = '當沖虧損';
-                      amountStr = `-${formatMoney(r.total)}`; 
-                      amountColor = '#e74c3c'; // 紅色
-                  }
+                  if (r.type.includes('buy')) { actionSign = '買入'; amountStr = `-${formatMoney(r.total)}`; amountColor = '#1d1d1f'; } 
+                  else if (r.type.includes('sell') || r.type === 'liquidate') { actionSign = '變現'; amountStr = `+${formatMoney(r.total)}`; amountColor = '#2ecc71'; } 
+                  else if (r.type.includes('profit')) { actionSign = '當沖獲利'; amountStr = `+${formatMoney(r.total)}`; amountColor = '#2ecc71'; } 
+                  else if (r.type.includes('loss')) { actionSign = '當沖虧損'; amountStr = `-${formatMoney(r.total)}`; amountColor = '#e74c3c'; }
 
                   let profitStr = '';
                   if (r.type.includes('sell')) {
@@ -183,9 +305,9 @@ const InvestmentView = ({ assets }) => {
                           <div>
                               <div style={{fontSize:'0.8rem', color:'#888'}}>{r.date || r.month}</div>
                               <div style={{fontWeight:'bold', color:'#444'}}>{r.note} <span style={{fontSize:'0.75rem', color:'#888', fontWeight:'normal'}}>({actionSign})</span></div>
+                              {r.symbol && <div style={{fontSize:'0.75rem', color:'#3498db', marginTop:'2px'}}>{r.symbol} | {r.shares}股</div>}
                           </div>
                           <div style={{textAlign:'right'}}>
-                              {/* ★ 套用新的字串與顏色 */}
                               <div style={{fontWeight:'bold', fontSize:'1.1rem', color: amountColor}}>{amountStr}</div>
                               {profitStr && <div style={{fontSize:'0.75rem', color: profitStr.includes('賺') ? '#2ecc71' : '#e74c3c'}}>{profitStr}</div>}
                           </div>
