@@ -79,19 +79,27 @@ const InvestmentView = ({ assets }) => {
 
   const holdingSymbols = Object.keys(stockHoldings);
 
-  // ★ 核心大升級：單發批次查詢引擎 (Batch Request) + 高速 Proxy 輪替
+  // ★ 核心大升級：相容性 100% 的批次查詢與超強防護罩
   const fetchLivePrices = async () => {
       if (holdingSymbols.length === 0) return;
       setIsFetching(true);
       
-      // 將所有股票與匯率「打包成一包」
       const allSymbols = [...holdingSymbols, 'TWD=X'].join(',');
-      const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${allSymbols}`;
+      const yahooUrl = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${allSymbols}`;
 
-      // 三重高速備援 Proxy
+      // 🛡️ 自建 100% 相容的 Timeout 機制，取代會讓舊手機崩潰的 AbortSignal
+      const fetchWithTimeout = (resource, timeout = 6000) => {
+          return Promise.race([
+              fetch(resource),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('連線逾時')), timeout))
+          ]);
+      };
+
+      // 擴充至 4 條代理伺服器通道
       const proxies = [
-          (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`, // 通常最快
           (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+          (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
           (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
       ];
 
@@ -99,15 +107,17 @@ const InvestmentView = ({ assets }) => {
 
       for (const proxy of proxies) {
           try {
-              const res = await fetch(proxy(yahooUrl), { signal: AbortSignal.timeout(5000) }); // 5秒沒回應就果斷切換下一個
-              if (!res.ok) throw new Error('Proxy 狀態錯誤');
+              const targetUrl = proxy(yahooUrl);
+              const res = await fetchWithTimeout(targetUrl, 6000); 
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              
               const data = await res.json();
               if (data?.quoteResponse?.result) {
                   successData = data.quoteResponse.result;
-                  break; // 成功抓到就跳出迴圈
+                  break; // 只要有一條通道成功，立刻跳出迴圈
               }
           } catch (err) {
-              console.warn("Proxy 切換中...", err);
+              console.warn("Proxy 切換中...", err.message); // 靜默切換，不打擾使用者
           }
       }
 
@@ -115,7 +125,6 @@ const InvestmentView = ({ assets }) => {
       let newFx = liveFx;
 
       if (successData) {
-          // 解析批次傳回來的包裹
           successData.forEach(quote => {
               if (quote.symbol === 'TWD=X') {
                   newFx = quote.regularMarketPrice || liveFx;
@@ -124,7 +133,6 @@ const InvestmentView = ({ assets }) => {
               }
           });
 
-          // 如果有哪一檔股票沒在包裹裡，標記為失敗 (-1)
           holdingSymbols.forEach(sym => {
               if (newPrices[sym] === undefined) newPrices[sym] = -1;
           });
@@ -134,10 +142,10 @@ const InvestmentView = ({ assets }) => {
           const now = new Date();
           setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
       } else {
-          // 全部 Proxy 都陣亡的極端情況
+          // 🛡️ 溫柔降級：全部失敗時，只標示 -1，【不再跳出 Alert 視窗】
           holdingSymbols.forEach(sym => { if (!newPrices[sym]) newPrices[sym] = -1; });
           setLivePrices(newPrices);
-          alert("📡 網路連線或 API 伺服器異常，請稍後再試！");
+          console.error("📡 網路連線或 API 伺服器暫時無法使用");
       }
 
       setIsFetching(false);
