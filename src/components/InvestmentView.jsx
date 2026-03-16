@@ -11,7 +11,6 @@ const InvestmentView = ({ assets }) => {
   const [activeTab, setActiveTab] = useState('jointCash'); 
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  // ★ 即時盯盤 API 狀態
   const [livePrices, setLivePrices] = useState({});
   const [liveFx, setLiveFx] = useState(31.5); 
   const [isFetching, setIsFetching] = useState(false);
@@ -80,57 +79,67 @@ const InvestmentView = ({ assets }) => {
 
   const holdingSymbols = Object.keys(stockHoldings);
 
-  // ★ 5. 全新：雙引擎與獨立防護罩的 API 抓價系統
+  // ★ 核心大升級：單發批次查詢引擎 (Batch Request) + 高速 Proxy 輪替
   const fetchLivePrices = async () => {
       if (holdingSymbols.length === 0) return;
       setIsFetching(true);
       
-      // 雙引擎備援系統：如果 API A 失敗，自動嘗試 API B
-      const fetchWithProxy = async (targetUrl) => {
-          try {
-              const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`);
-              if (!res.ok) throw new Error('Proxy 1 失敗');
-              return await res.json();
-          } catch (e1) {
-              try {
-                  const res2 = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
-                  if (!res2.ok) throw new Error('Proxy 2 失敗');
-                  return await res2.json();
-              } catch (e2) {
-                  throw new Error('所有 Proxy 皆失敗');
-              }
-          }
-      };
+      // 將所有股票與匯率「打包成一包」
+      const allSymbols = [...holdingSymbols, 'TWD=X'].join(',');
+      const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${allSymbols}`;
 
-      // 獨立任務 1：抓匯率 (就算失敗也不會卡住股票)
-      try {
-          const fxData = await fetchWithProxy('https://query1.finance.yahoo.com/v8/finance/chart/TWD=X');
-          const currentFx = fxData?.chart?.result?.[0]?.meta?.regularMarketPrice;
-          if (currentFx) setLiveFx(currentFx);
-      } catch (error) {
-          console.log("匯率抓取失敗，沿用舊值");
+      // 三重高速備援 Proxy
+      const proxies = [
+          (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`, // 通常最快
+          (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+      ];
+
+      let successData = null;
+
+      for (const proxy of proxies) {
+          try {
+              const res = await fetch(proxy(yahooUrl), { signal: AbortSignal.timeout(5000) }); // 5秒沒回應就果斷切換下一個
+              if (!res.ok) throw new Error('Proxy 狀態錯誤');
+              const data = await res.json();
+              if (data?.quoteResponse?.result) {
+                  successData = data.quoteResponse.result;
+                  break; // 成功抓到就跳出迴圈
+              }
+          } catch (err) {
+              console.warn("Proxy 切換中...", err);
+          }
       }
 
-      // 獨立任務 2：各自抓取每檔股票
       const newPrices = { ...livePrices };
-      for (const sym of holdingSymbols) {
-          try {
-              const data = await fetchWithProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}`);
-              const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-              if (price) {
-                  newPrices[sym] = price;
+      let newFx = liveFx;
+
+      if (successData) {
+          // 解析批次傳回來的包裹
+          successData.forEach(quote => {
+              if (quote.symbol === 'TWD=X') {
+                  newFx = quote.regularMarketPrice || liveFx;
               } else {
-                  newPrices[sym] = -1; // -1 代表抓取失敗
+                  newPrices[quote.symbol] = quote.regularMarketPrice;
               }
-          } catch (error) {
-              console.log(`${sym} 抓取失敗:`, error);
-              newPrices[sym] = -1; // -1 代表抓取失敗
-          }
+          });
+
+          // 如果有哪一檔股票沒在包裹裡，標記為失敗 (-1)
+          holdingSymbols.forEach(sym => {
+              if (newPrices[sym] === undefined) newPrices[sym] = -1;
+          });
+
+          setLiveFx(newFx);
+          setLivePrices(newPrices);
+          const now = new Date();
+          setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
+      } else {
+          // 全部 Proxy 都陣亡的極端情況
+          holdingSymbols.forEach(sym => { if (!newPrices[sym]) newPrices[sym] = -1; });
+          setLivePrices(newPrices);
+          alert("📡 網路連線或 API 伺服器異常，請稍後再試！");
       }
-      
-      setLivePrices(newPrices);
-      const now = new Date();
-      setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
+
       setIsFetching(false);
   };
 
@@ -161,14 +170,12 @@ const InvestmentView = ({ assets }) => {
               }
           }
 
-          // 只有當成功抓到大於 0 的價格時，才計算損益
           const pnl = currentValue > 0 ? (currentValue - holding.totalCost) : 0;
           const roi = holding.totalCost > 0 ? ((pnl / holding.totalCost) * 100).toFixed(2) : 0;
           
           totalUnrealizedPnL += pnl;
 
           const isProfit = pnl >= 0;
-          // 如果 currentPrice === -1 代表抓取失敗，將邊框變成橘色警告
           const borderColor = currentPrice === -1 ? '#f39c12' : (isProfit ? '#2ecc71' : '#e74c3c');
 
           return (
