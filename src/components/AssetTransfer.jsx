@@ -60,18 +60,57 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
+  // ★ 升級：裝甲級多重備援智慧搜尋引擎
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (stockSymbol.length >= 1 && showDropdown) {
         setIsSearching(true);
-        try {
-          const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query2.finance.yahoo.com/v1/finance/search?q=${stockSymbol}&quotesCount=6`)}`);
-          const data = await res.json();
-          if (data.quotes) setSearchResults(data.quotes.filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF'));
-        } catch(err) { console.error("搜尋失敗:", err); }
+        
+        // 🛡️ 自建 100% 相容的 Timeout 機制 (3秒沒反應就切換)
+        const fetchWithTimeout = (resource, timeout = 3000) => {
+            return Promise.race([
+                fetch(resource),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('搜尋連線逾時')), timeout))
+            ]);
+        };
+
+        const targetUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(stockSymbol)}&quotesCount=6`;
+        
+        // 🚀 多重代理伺服器輪替陣列
+        const proxies = [
+            (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+        ];
+
+        let successData = null;
+
+        for (const proxy of proxies) {
+            try {
+                const res = await fetchWithTimeout(proxy(targetUrl), 3000);
+                if (!res.ok) continue; // 如果失敗，直接換下一條通道
+                const data = await res.json();
+                if (data && data.quotes) {
+                    successData = data.quotes;
+                    break; // 成功就跳出迴圈
+                }
+            } catch(err) {
+                console.warn("搜尋 Proxy 切換中..."); 
+            }
+        }
+
+        if (successData) {
+            // 過濾出股票或ETF
+            setSearchResults(successData.filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF' || q.quoteType === 'MUTUALFUND'));
+        } else {
+            setSearchResults([]); // 全部失敗則清空
+        }
+        
         setIsSearching(false);
-      } else { setSearchResults([]); }
-    }, 500);
+      } else { 
+        setSearchResults([]); 
+      }
+    }, 600); // 延長到 0.6 秒防手震，避免打字太快被 Yahoo 鎖 IP
     return () => clearTimeout(timer);
   }, [stockSymbol, showDropdown]);
 
@@ -263,6 +302,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                    <div style={{flex:1, position: 'relative'}}>
                      <label style={{fontSize:'0.8rem', color:'#666'}}>股票代號/名稱</label>
                      <input type="text" className="glass-input" value={stockSymbol} onChange={e => { setStockSymbol(e.target.value.toUpperCase()); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onBlur={() => setTimeout(() => setShowDropdown(false), 200)} placeholder="例: 2330 或 台積電" />
+                     
+                     {/* ★ 搜尋結果下拉選單 */}
                      {showDropdown && (searchResults.length > 0 || isSearching) && (
                          <div style={{position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', zIndex: 50, borderRadius: '8px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', overflow: 'hidden', marginTop: '4px', border: '1px solid #ddd'}}>
                              {isSearching ? <div style={{padding:'10px', fontSize:'0.85rem', color:'#888', textAlign:'center'}}>📡 尋找股號中...</div> : searchResults.map((item, idx) => ( <div key={idx} onClick={() => { setStockSymbol(item.symbol); setShowDropdown(false); }} style={{padding: '10px 12px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}> <strong style={{color:'#8e44ad', fontSize:'0.9rem'}}>{item.symbol}</strong> <span style={{color:'#666', fontSize:'0.75rem', textAlign:'right', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginLeft:'10px'}}> {item.shortname || item.longname} </span> </div> ))}
