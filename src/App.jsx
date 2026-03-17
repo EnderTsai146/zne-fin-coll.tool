@@ -12,7 +12,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
 const USER_MAPPING = {
-  "hzh930217@gmail.com": "恆恆🐶",   
+  "hzh940317@gmail.com": "恆恆🐶",   
   "ender.tsai@gmail.com": "得得🐕" 
 };
 

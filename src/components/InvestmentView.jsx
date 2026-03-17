@@ -7,6 +7,9 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 
+// 🚀 請把下面這串引號內的網址，換成你剛剛在 Google 部署出來的「網頁應用程式網址」！
+const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
+
 const InvestmentView = ({ assets }) => {
   const [activeTab, setActiveTab] = useState('jointCash'); 
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -79,73 +82,48 @@ const InvestmentView = ({ assets }) => {
 
   const holdingSymbols = Object.keys(stockHoldings);
 
-  // ★ 核心大升級：相容性 100% 的批次查詢與超強防護罩
+  // ★ 核心大升級：透過自己的 Google 專屬後端抓取資料，永不被擋！
   const fetchLivePrices = async () => {
       if (holdingSymbols.length === 0) return;
       setIsFetching(true);
       
       const allSymbols = [...holdingSymbols, 'TWD=X'].join(',');
-      const yahooUrl = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${allSymbols}`;
+      
+      try {
+          // 直接呼叫我們架設好的 Google Apps Script API
+          const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${allSymbols}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          
+          const data = await res.json();
+          
+          const newPrices = { ...livePrices };
+          let newFx = liveFx;
 
-      // 🛡️ 自建 100% 相容的 Timeout 機制，取代會讓舊手機崩潰的 AbortSignal
-      const fetchWithTimeout = (resource, timeout = 6000) => {
-          return Promise.race([
-              fetch(resource),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('連線逾時')), timeout))
-          ]);
-      };
+          if (data?.quoteResponse?.result) {
+              data.quoteResponse.result.forEach(quote => {
+                  if (quote.symbol === 'TWD=X') {
+                      newFx = quote.regularMarketPrice || liveFx;
+                  } else {
+                      newPrices[quote.symbol] = quote.regularMarketPrice;
+                  }
+              });
 
-      // 擴充至 4 條代理伺服器通道
-      const proxies = [
-          (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-          (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-          (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
-          (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
-      ];
+              holdingSymbols.forEach(sym => {
+                  if (newPrices[sym] === undefined) newPrices[sym] = -1;
+              });
 
-      let successData = null;
-
-      for (const proxy of proxies) {
-          try {
-              const targetUrl = proxy(yahooUrl);
-              const res = await fetchWithTimeout(targetUrl, 6000); 
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              
-              const data = await res.json();
-              if (data?.quoteResponse?.result) {
-                  successData = data.quoteResponse.result;
-                  break; // 只要有一條通道成功，立刻跳出迴圈
-              }
-          } catch (err) {
-              console.warn("Proxy 切換中...", err.message); // 靜默切換，不打擾使用者
+              setLiveFx(newFx);
+              setLivePrices(newPrices);
+              const now = new Date();
+              setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
+          } else {
+              throw new Error("抓不到資料");
           }
-      }
-
-      const newPrices = { ...livePrices };
-      let newFx = liveFx;
-
-      if (successData) {
-          successData.forEach(quote => {
-              if (quote.symbol === 'TWD=X') {
-                  newFx = quote.regularMarketPrice || liveFx;
-              } else {
-                  newPrices[quote.symbol] = quote.regularMarketPrice;
-              }
-          });
-
-          holdingSymbols.forEach(sym => {
-              if (newPrices[sym] === undefined) newPrices[sym] = -1;
-          });
-
-          setLiveFx(newFx);
-          setLivePrices(newPrices);
-          const now = new Date();
-          setLastUpdated(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
-      } else {
-          // 🛡️ 溫柔降級：全部失敗時，只標示 -1，【不再跳出 Alert 視窗】
-          holdingSymbols.forEach(sym => { if (!newPrices[sym]) newPrices[sym] = -1; });
-          setLivePrices(newPrices);
-          console.error("📡 網路連線或 API 伺服器暫時無法使用");
+      } catch (err) {
+          console.error("Google API 抓取失敗:", err);
+          const failPrices = { ...livePrices };
+          holdingSymbols.forEach(sym => { if (!failPrices[sym]) failPrices[sym] = -1; });
+          setLivePrices(failPrices);
       }
 
       setIsFetching(false);
