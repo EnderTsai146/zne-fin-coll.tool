@@ -53,8 +53,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [stockSymbol, setStockSymbol] = useState('');
   const [stockShares, setStockShares] = useState('');
   const [stockPrice, setStockPrice] = useState('');
-  
-  // ★ 新增：美股精準輸入狀態
   const [usTotalUsd, setUsTotalUsd] = useState(''); 
   const [usFxRate, setUsFxRate] = useState('31.5');
   
@@ -62,7 +60,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // 智慧搜尋引擎
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (stockSymbol.length >= 1 && showDropdown) {
@@ -78,24 +75,20 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     return () => clearTimeout(timer);
   }, [stockSymbol, showDropdown]);
 
-  // ★ 台股自動精算引擎 (美股改為手動輸入精準相乘)
   useEffect(() => {
-    if (investType !== 'stock' || investAction === 'day_trade') return;
-    if (stockMarket === 'US') return; // 美股交給手動輸入聯動，不在此自動覆蓋
+    if (investType !== 'stock' || investAction === 'day_trade' || stockMarket === 'US') return;
 
     const p = Number(stockPrice) || 0;
     const s = Number(stockShares) || 0;
     if (p === 0 || s === 0) return;
 
-    if (stockMarket === 'TW') {
-        const baseAmount = p * s;
-        const fee = Math.max(20, Math.floor(baseAmount * 0.001425 * 0.6));
-        if (investAction === 'buy') {
-            setInvestAmount(Math.round(baseAmount + fee).toString());
-        } else if (investAction === 'sell') {
-            const tax = Math.floor(baseAmount * 0.003); 
-            setInvestAmount(Math.round(baseAmount - fee - tax).toString());
-        }
+    const baseAmount = p * s;
+    const fee = Math.max(20, Math.floor(baseAmount * 0.001425 * 0.6));
+    if (investAction === 'buy') {
+        setInvestAmount(Math.round(baseAmount + fee).toString());
+    } else if (investAction === 'sell') {
+        const tax = Math.floor(baseAmount * 0.003); 
+        setInvestAmount(Math.round(baseAmount - fee - tax).toString());
     }
   }, [stockPrice, stockShares, stockMarket, investAction, investType]);
 
@@ -127,14 +120,25 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
 
   const handleInvestSubmit = () => {
     const val = parseInt(investAmount); 
-    if (!val || val <= 0) return alert("請確認最終台幣金額！");
+    if (!val || val <= 0) return alert("請確認最終交割總額！");
 
     const newAssets = { ...assets };
     if (!newAssets.userInvestments) newAssets.userInvestments = { userA: { stock:0, fund:0, deposit:0, other:0 }, userB: { stock:0, fund:0, deposit:0, other:0 } };
 
     const isJoint = investAccount === 'jointCash';
     const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '恆恆🐶' : '得得🐕');
-    const label = investType === 'stock' && stockSymbol ? `${stockSymbol.toUpperCase()}` : { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[investType];
+    
+    // ★ 終極防呆機制：自動為台股補齊 .TW
+    let finalSymbol = stockSymbol ? stockSymbol.toUpperCase().trim() : '';
+    if (investType === 'stock' && stockMarket === 'TW' && finalSymbol && !finalSymbol.includes('.')) {
+        finalSymbol += '.TW';
+        // 只有買入時跳出友善提醒，教育使用者
+        if (investAction === 'buy') {
+            window.alert(`💡 系統防呆介入：已自動將代號補齊為「${finalSymbol}」\n\n⚠️ 注意：若您的股票為「上櫃公司」(如群聯、坤悅)，字尾必須是 .TWO 才能抓到股價。\n\n強烈建議下次輸入時，直接「點擊下拉選單」讓系統自動帶入正確代號！`);
+        }
+    }
+
+    const label = investType === 'stock' && finalSymbol ? finalSymbol : { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[investType];
 
     if (investAction === 'day_trade') {
         const isProfit = dayTradeResult === 'profit';
@@ -146,7 +150,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         onTransaction(newAssets, {
             type: isProfit ? 'personal_invest_profit' : 'personal_invest_loss',
             category: '當沖結算', payer: accountName, accountKey: investAccount, investType, total: val,
-            note: `當沖${isProfit ? '賺' : '賠'} - ${label}`, month: txDate.slice(0, 7), date: txDate, symbol: stockSymbol.toUpperCase()
+            note: `當沖${isProfit ? '賺' : '賠'} - ${label}`, month: txDate.slice(0, 7), date: txDate, symbol: finalSymbol
         });
         alert(`⚡ 當沖結算完成！`);
         setInvestAmount(''); setStockSymbol(''); setStockPrice(''); setStockShares(''); setUsTotalUsd('');
@@ -164,8 +168,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
             type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy',
             category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType,
             total: val, note: `買入 ${label}`, month: txDate.slice(0, 7), date: txDate,
-            symbol: stockSymbol.toUpperCase(), shares: Number(stockShares), market: stockMarket,
-            buyPrice: Number(stockPrice)
+            symbol: finalSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice)
         });
         alert(`✅ 成功買入 ${label}！`);
 
@@ -187,7 +190,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
             type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell',
             category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType,
             total: val, principal: principalVal, note: `賣出 ${label} ${profitNote}`, month: txDate.slice(0, 7), date: txDate,
-            symbol: stockSymbol.toUpperCase(), shares: Number(stockShares)
+            symbol: finalSymbol, shares: Number(stockShares)
         });
         alert(`🔄 成功變現 ${formatMoney(val)}！結算：${profitNote}`);
     }
@@ -259,7 +262,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                 <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
                    <div style={{flex:1, position: 'relative'}}>
                      <label style={{fontSize:'0.8rem', color:'#666'}}>股票代號/名稱</label>
-                     <input type="text" className="glass-input" value={stockSymbol} onChange={e => { setStockSymbol(e.target.value.toUpperCase()); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onBlur={() => setTimeout(() => setShowDropdown(false), 200)} placeholder="例: AAPL" />
+                     <input type="text" className="glass-input" value={stockSymbol} onChange={e => { setStockSymbol(e.target.value.toUpperCase()); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onBlur={() => setTimeout(() => setShowDropdown(false), 200)} placeholder="例: 2330 或 台積電" />
                      {showDropdown && (searchResults.length > 0 || isSearching) && (
                          <div style={{position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', zIndex: 50, borderRadius: '8px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', overflow: 'hidden', marginTop: '4px', border: '1px solid #ddd'}}>
                              {isSearching ? <div style={{padding:'10px', fontSize:'0.85rem', color:'#888', textAlign:'center'}}>📡 尋找股號中...</div> : searchResults.map((item, idx) => ( <div key={idx} onClick={() => { setStockSymbol(item.symbol); setShowDropdown(false); }} style={{padding: '10px 12px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}> <strong style={{color:'#8e44ad', fontSize:'0.9rem'}}>{item.symbol}</strong> <span style={{color:'#666', fontSize:'0.75rem', textAlign:'right', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginLeft:'10px'}}> {item.shortname || item.longname} </span> </div> ))}
@@ -268,11 +271,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                    </div>
                    <div style={{flex:1}}>
                      <label style={{fontSize:'0.8rem', color:'#666'}}>交易股數</label>
-                     <input type="number" className="glass-input" value={stockShares} onChange={e=>setStockShares(e.target.value)} placeholder="例: 10" />
+                     <input type="number" className="glass-input" value={stockShares} onChange={e=>setStockShares(e.target.value)} placeholder="例: 1000" />
                    </div>
                 </div>
 
-                {/* ★ 美股精準輸入區塊 */}
                 {stockMarket === 'US' ? (
                     <div style={{display:'flex', flexWrap:'wrap', gap:'10px'}}>
                        <div style={{flex:1, minWidth:'100px'}}>
@@ -280,14 +282,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                          <input type="number" className="glass-input" value={stockPrice} onChange={e=>setStockPrice(e.target.value)} placeholder="170" />
                        </div>
                        <div style={{flex:1, minWidth:'120px'}}>
-                         <label style={{fontSize:'0.8rem', color:'#666', color:'#e67e22', fontWeight:'bold'}}>總額含息費 (USD)</label>
+                         <label style={{fontSize:'0.8rem', color:'#e67e22', fontWeight:'bold'}}>總額含息費 (USD)</label>
                          <input type="number" className="glass-input" style={{borderColor:'#e67e22'}} value={usTotalUsd} onChange={e=>{
                             setUsTotalUsd(e.target.value);
                             setInvestAmount(Math.round(Number(e.target.value) * Number(usFxRate)).toString());
                          }} placeholder="依元大輸入" />
                        </div>
                        <div style={{flex:1, minWidth:'80px'}}>
-                         <label style={{fontSize:'0.8rem', color:'#666', color:'#e67e22', fontWeight:'bold'}}>成交匯率</label>
+                         <label style={{fontSize:'0.8rem', color:'#e67e22', fontWeight:'bold'}}>成交匯率</label>
                          <input type="number" className="glass-input" style={{borderColor:'#e67e22'}} value={usFxRate} onChange={e=>{
                             setUsFxRate(e.target.value);
                             setInvestAmount(Math.round(Number(usTotalUsd) * Number(e.target.value)).toString());
