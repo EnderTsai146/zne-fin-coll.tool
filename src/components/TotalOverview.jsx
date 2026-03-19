@@ -22,17 +22,16 @@ const TotalOverview = ({ assets, setAssets }) => {
   const [activeHistory, setActiveHistory] = useState(null); 
   const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
   
-  // 🌟 新增狀態：備份警示與折線圖點擊
   const [backupWarning, setBackupWarning] = useState(false);
   const [selectedChartDate, setSelectedChartDate] = useState(null);
 
   const isBackingUpRef = useRef(false);
   const todayStr = formatDate(today);
 
-  // --- 0. 🚀 自動無感備份引擎 ---
+  // --- 0. 自動無感備份引擎 ---
   useEffect(() => {
       if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
-      if (assets.lastBackupDate === todayStr || isBackingUpRef.current) return; // 每天只備份一次
+      if (assets.lastBackupDate === todayStr || isBackingUpRef.current) return; 
 
       const runBackup = async () => {
           isBackingUpRef.current = true;
@@ -44,14 +43,13 @@ const TotalOverview = ({ assets, setAssets }) => {
               const data = await res.json();
               if (data.success) {
                   setBackupWarning(false);
-                  // 備份成功，紀錄今天的日期，今天就不會再備份了
                   setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
               } else {
                   throw new Error("Google回傳失敗");
               }
           } catch (e) {
               console.error("雲端備份失敗:", e);
-              setBackupWarning(true); // 觸發紅色警示
+              setBackupWarning(true); 
           } finally {
               isBackingUpRef.current = false;
           }
@@ -215,7 +213,6 @@ const TotalOverview = ({ assets, setAssets }) => {
           x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } } },
           y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: (value) => '$' + (value/10000).toFixed(0) + '萬', font: { size: 10 } } }
       },
-      // 🌟 點擊折線圖的互動引擎
       onClick: (evt, elements) => {
           if (elements.length > 0) {
               const dataIndex = elements[0].index;
@@ -226,29 +223,46 @@ const TotalOverview = ({ assets, setAssets }) => {
       }
   };
 
-  // --- 4. 精準科目的歷史軌跡 (含時間戳記與科目扣除明細) ---
+  // --- 4. 🚀 精準科目的歷史軌跡 (完美修復排序與過濾) ---
   const formatTime = (ts) => {
       if (!ts) return ''; const d = new Date(ts);
       return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+  };
+
+  // 🛡️ 數學加總比對法：徹底根除 JavaScript 物件排序陷阱
+  const hasInvDiff = (b, a) => {
+      const bInv = b || {}; const aInv = a || {};
+      return (bInv.stock || 0) !== (aInv.stock || 0) ||
+             (bInv.fund || 0) !== (aInv.fund || 0) ||
+             (bInv.deposit || 0) !== (aInv.deposit || 0) ||
+             (bInv.other || 0) !== (aInv.other || 0);
   };
 
   const getAccountHistory = () => {
       if (!activeHistory) return [];
       let filtered = (assets.monthlyExpenses || []).filter(r => !r.isDeleted);
       
-      // 🎯 最嚴格的過濾：只看該科目的資產數字有沒有變動！
+      // 🎯 最嚴格的過濾：只看該科目的資產數字「加減後」有沒有變動！
       filtered = filtered.filter(r => {
           if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) return false;
           const b = r.auditTrail.before; const a = r.auditTrail.after;
-          if (activeHistory === 'userA') return b.userA !== a.userA || JSON.stringify(b.userInvestments?.userA) !== JSON.stringify(a.userInvestments?.userA);
-          if (activeHistory === 'userB') return b.userB !== a.userB || JSON.stringify(b.userInvestments?.userB) !== JSON.stringify(a.userInvestments?.userB);
-          if (activeHistory === 'jointCash') return b.jointCash !== a.jointCash || JSON.stringify(b.jointInvestments) !== JSON.stringify(a.jointInvestments);
+          if (activeHistory === 'userA') return b.userA !== a.userA || hasInvDiff(b.userInvestments?.userA, a.userInvestments?.userA);
+          if (activeHistory === 'userB') return b.userB !== a.userB || hasInvDiff(b.userInvestments?.userB, a.userInvestments?.userB);
+          if (activeHistory === 'jointCash') return b.jointCash !== a.jointCash || hasInvDiff(b.jointInvestments, a.jointInvestments);
           return false;
       });
 
       if (historyDateRange.start) filtered = filtered.filter(r => (r.date || r.month) >= historyDateRange.start);
       if (historyDateRange.end) filtered = filtered.filter(r => (r.date || r.month) <= historyDateRange.end);
-      filtered.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+      
+      // 🎯 修正排序邏輯：優先使用「日曆日期」排序，同一天的再用「輸入時間」排序
+      filtered.sort((a, b) => {
+          const dateA = a.date || a.month || '';
+          const dateB = b.date || b.month || '';
+          if (dateA !== dateB) return dateB.localeCompare(dateA); // 日期新的在上面
+          return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime(); // 同一天，越晚輸入的在上面
+      });
+      
       return filtered;
   };
 
@@ -266,9 +280,8 @@ const TotalOverview = ({ assets, setAssets }) => {
 
       const currentVal = historyData.data[idx];
       const prevVal = idx > 0 ? historyData.data[idx - 1] : currentVal;
-      const diff = currentVal - prevVal; // 今天跟昨天的總資產差距
+      const diff = currentVal - prevVal; 
 
-      // 找出當天的所有記帳操作
       const dayRecords = (assets.monthlyExpenses || []).filter(r => !r.isDeleted && r.date === selectedChartDate);
       
       let netTransactions = 0;
@@ -277,7 +290,6 @@ const TotalOverview = ({ assets, setAssets }) => {
           else if (['sell', 'liquidate', 'income', 'profit', 'transfer'].some(k => r.type.includes(k))) netTransactions += Number(r.total);
       });
 
-      // 核心邏輯：總變動 扣掉 人為記帳 = 純粹的股票市場波動
       const marketFluctuation = diff - netTransactions;
 
       return (
@@ -377,7 +389,7 @@ const TotalOverview = ({ assets, setAssets }) => {
         </div>
       </div>
 
-      {/* 【第二點五層】專屬科目的歷史軌跡面板 (點擊後展開) */}
+      {/* 【第二點五層】專屬科目的歷史軌跡面板 */}
       {activeHistory && (
         <div className="glass-card" style={{ marginBottom: '20px', borderLeft: `5px solid ${activeHistory === 'userA' ? '#ff9a9e' : activeHistory === 'userB' ? '#a8e6cf' : '#f6d365'}` }}>
           <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '10px', fontSize: '1rem' }}>
@@ -394,7 +406,6 @@ const TotalOverview = ({ assets, setAssets }) => {
           <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '5px' }}>
             {specificHistory.length > 0 ? (
                 specificHistory.map((record, idx) => {
-                    // 🎯 計算精準的帳戶扣除/增加金額
                     const b = record.auditTrail?.before;
                     const a = record.auditTrail?.after;
                     let accountChangeText = ""; let accountChangeAmount = 0;
@@ -474,7 +485,7 @@ const TotalOverview = ({ assets, setAssets }) => {
       {/* 【第四層】互動式資產成長趨勢折線圖 */}
       <div className="glass-card" style={{ marginBottom: '20px', padding: '15px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <div style={{ fontWeight: 'bold', color: '#555', fontSize: '1rem' }}>📈 資產成長趨勢 (點擊節點查看明細)</div>
+            <div style={{ fontWeight: 'bold', color: '#555', fontSize: '1rem' }}>📈 資產成長趨勢 (點擊圖表節點查看明細)</div>
         </div>
         
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
