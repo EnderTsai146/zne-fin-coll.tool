@@ -1,205 +1,269 @@
 // src/components/TotalOverview.jsx
-import React, { useState } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
+import { 
+  Chart as ChartJS, ArcElement, Tooltip, Legend, 
+  CategoryScale, LinearScale, PointElement, LineElement, Title, Filler 
+} from 'chart.js';
+import { Doughnut, Line } from 'react-chartjs-2';
+
+// 註冊所有 Chart.js 需要的元件
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, Title, Filler);
+
+const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
+
+// 🚀 請把下面這串換成你自己的 Google API 網址！
+const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const TotalOverview = ({ assets, setAssets }) => {
-  const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
-  const roi = assets.roi || { stock: 0, fund: 0, deposit: 0, other: 0 };
-  const history = assets.monthlyExpenses || [];
+  // --- 1. 計算各項資產現況 (本金視角) ---
+  const cashHeng = assets.userA || 0;
+  const cashDe = assets.userB || 0;
+  const cashJoint = assets.jointCash || 0;
+  const totalCash = cashHeng + cashDe + cashJoint;
+
+  const sumInvestments = (invObj) => Object.values(invObj || {}).reduce((sum, val) => sum + val, 0);
+  const investHeng = sumInvestments(assets.userInvestments?.userA);
+  const investDe = sumInvestments(assets.userInvestments?.userB);
+  const investJoint = sumInvestments(assets.jointInvestments);
+  const totalInvest = investHeng + investDe + investJoint;
+
+  const totalAssets = totalCash + totalInvest; // 這是「帳面本金總資產」
+
+  // --- 2. 🛡️ 完美修復：圓餅圖動態過濾 (解決文字重疊與顏色錯亂) ---
+  const assetTypes = [
+    { key: 'cash', label: '現金', color: '#2ecc71', val: totalCash },
+    { key: 'stock', label: '股票', color: '#ff9f43', val: (assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0) },
+    { key: 'fund', label: '基金', color: '#54a0ff', val: (assets.userInvestments?.userA?.fund || 0) + (assets.userInvestments?.userB?.fund || 0) + (assets.jointInvestments?.fund || 0) },
+    { key: 'deposit', label: '定存', color: '#9b59b6', val: (assets.userInvestments?.userA?.deposit || 0) + (assets.userInvestments?.userB?.deposit || 0) + (assets.jointInvestments?.deposit || 0) },
+    { key: 'other', label: '其他', color: '#c8d6e5', val: (assets.userInvestments?.userA?.other || 0) + (assets.userInvestments?.userB?.other || 0) + (assets.jointInvestments?.other || 0) }
+  ];
+
+  // 只保留大於 0 的項目，並精準對應顏色
+  const activeAssets = assetTypes.filter(a => a.val > 0);
+  const doughnutData = {
+    labels: activeAssets.map(a => a.label),
+    datasets: [{
+      data: activeAssets.map(a => a.val),
+      backgroundColor: activeAssets.map(a => a.color),
+      borderWidth: 0, hoverOffset: 4
+    }]
+  };
+
+  // --- 3. 取得目前持股股數 (為快照引擎準備) ---
+  const stockHoldings = useMemo(() => {
+      const holdings = {};
+      (assets.monthlyExpenses || []).filter(r => !r.isDeleted).forEach(r => {
+          if (!r.symbol) return; 
+          const sym = r.symbol;
+          if (!holdings[sym]) holdings[sym] = { shares: 0, market: r.market || 'TW' };
+          if (r.type.includes('buy')) holdings[sym].shares += (Number(r.shares) || 0);
+          else if (r.type.includes('sell')) holdings[sym].shares -= (Number(r.shares) || 0);
+      });
+      Object.keys(holdings).forEach(k => { if (holdings[k].shares <= 0) delete holdings[k]; });
+      return holdings;
+  }, [assets.monthlyExpenses]);
+
+  // --- 4. 🚀 神級功能：每日打卡快照引擎 (Idempotent Snapshot Engine) ---
+  // 計算「昨天」的日期字串
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const recordDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
   
-  const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
-  // ★ 新增：讀取個人投資本金
-  const safeUserAInvest = assets.userInvestments?.userA || { stock: 0, fund: 0, deposit: 0, other: 0 };
-  const safeUserBInvest = assets.userInvestments?.userB || { stock: 0, fund: 0, deposit: 0, other: 0 };
+  // 檢查資料庫是否已經有昨天的打卡紀錄
+  const hasSnapshot = (assets.dailyNetWorth || {})[recordDate];
+  const isFetchingRef = useRef(false); // 防連點機制
 
-  const [ledgerModal, setLedgerModal] = useState(null); 
-  const [ledgerMonth, setLedgerMonth] = useState(new Date().toISOString().slice(0, 7));
+  useEffect(() => {
+      if (hasSnapshot || isFetchingRef.current) return;
 
-  const getEstValue = (type) => {
-    const principal = safeInvestments[type] || 0;
-    const rate = roi[type] || 0;
-    return principal * (1 + rate / 100);
-  };
+      const runDailySnapshot = async () => {
+          isFetchingRef.current = true;
+          try {
+              const symbols = Object.keys(stockHoldings);
+              let stockMarketValue = 0;
 
-  const handleRoiChange = (type, value) => {
-    const newAssets = { ...assets };
-    if (!newAssets.roi) newAssets.roi = {};
-    newAssets.roi[type] = parseFloat(value) || 0;
-    setAssets(newAssets);
-  };
+              // 如果有股票，就去呼叫 Google API 拿「昨日收盤價」
+              if (symbols.length > 0) {
+                  const allSymbols = [...symbols, 'TWD=X'].join(',');
+                  const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${allSymbols}`, { redirect: 'follow' });
+                  if (!res.ok) throw new Error('API 連線失敗');
+                  const data = await res.json();
+                  
+                  if (data?.quoteResponse?.result) {
+                      let fxRate = 31.5;
+                      const quotes = data.quoteResponse.result;
+                      const fxQuote = quotes.find(q => q.symbol === 'TWD=X');
+                      // 優先拿昨日收盤價 regularMarketPreviousClose
+                      if (fxQuote) fxRate = fxQuote.regularMarketPreviousClose || fxQuote.regularMarketPrice || 31.5;
 
-  const totalJointInvestPrincipal = Object.values(safeInvestments).reduce((a, b) => a + b, 0);
-  const totalEstValue = getEstValue('stock') + getEstValue('fund') + getEstValue('deposit') + getEstValue('other');
-  const totalUnrealizedPL = totalEstValue - totalJointInvestPrincipal;
-  
-  // ★ 更新：將個人投資本金加入總資產計算，避免買股後總資產視覺縮水
-  const totalUserAInvestPrincipal = Object.values(safeUserAInvest).reduce((a, b) => a + b, 0);
-  const totalUserBInvestPrincipal = Object.values(safeUserBInvest).reduce((a, b) => a + b, 0);
-  const totalAssets = (assets.userA || 0) + totalUserAInvestPrincipal + (assets.userB || 0) + totalUserBInvestPrincipal + (assets.jointCash || 0) + totalEstValue;
+                      symbols.forEach(sym => {
+                          const q = quotes.find(q => q.symbol === sym);
+                          if (q) {
+                              const price = q.regularMarketPreviousClose || q.regularMarketPrice || 0;
+                              const holding = stockHoldings[sym];
+                              let val = price * holding.shares;
+                              // 扣除未來賣出會產生的預估稅費
+                              if (holding.market === 'TW') {
+                                  const fee = Math.max(20, Math.floor(val * 0.001425 * 0.6));
+                                  const tax = Math.floor(val * 0.003);
+                                  stockMarketValue += (val - fee - tax);
+                              } else {
+                                  const feeUsd = val * 0.001;
+                                  stockMarketValue += (val - feeUsd) * fxRate;
+                              }
+                          }
+                      });
+                  }
+              }
 
-  const getLedgerRecords = (accountKey) => {
-    let records = [];
-    history.forEach(r => {
-      if (r.auditTrail) {
-        const diff = (r.auditTrail.after[accountKey] || 0) - (r.auditTrail.before[accountKey] || 0);
-        if (diff !== 0) {
-            records.push({ 
-                ...r, isReversal: false, diff, balance: r.auditTrail.after[accountKey], 
-                filterMonth: r.timestamp.slice(0, 7) 
-            });
-        }
+              // 計算最終現值：總現金 + (非股票的投資本金) + 股票真實市值
+              const nonStockInvest = totalInvest - ((assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0));
+              const finalNetWorth = Math.round(totalCash + nonStockInvest + stockMarketValue);
+
+              // 寫入 Firebase 資料庫 (打卡完成！)
+              setAssets({
+                  ...assets,
+                  dailyNetWorth: {
+                      ...(assets.dailyNetWorth || {}),
+                      [recordDate]: finalNetWorth
+                  }
+              });
+
+          } catch (e) {
+              console.error("背景快照引擎執行失敗，明日將自動重試:", e);
+          } finally {
+              isFetchingRef.current = false;
+          }
+      };
+
+      runDailySnapshot();
+  }, [hasSnapshot, stockHoldings, totalCash, totalInvest, assets, setAssets, recordDate]);
+
+  // --- 5. 繪製「歷史與現實交織」的完美折線圖 ---
+  const historyData = useMemo(() => {
+      const chartDataPoints = {};
+      
+      // 階段一：用過去的記帳歷史 (AuditTrail) 鋪底，畫出「本金成長階梯」
+      const sortedRecords = [...(assets.monthlyExpenses || [])]
+          .filter(r => !r.isDeleted && r.auditTrail?.after)
+          .sort((a, b) => new Date(a.timestamp || a.date) - new Date(b.timestamp || b.date));
+
+      sortedRecords.forEach(record => {
+          const state = record.auditTrail.after;
+          const pastCash = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
+          const pastInvest = sumInvestments(state.jointInvestments) + sumInvestments(state.userInvestments?.userA) + sumInvestments(state.userInvestments?.userB);
+          chartDataPoints[record.date] = pastCash + pastInvest;
+      });
+
+      // 階段二：將我們每天打卡算好的「真實市值 (dailyNetWorth)」覆蓋上去
+      if (assets.dailyNetWorth) {
+          Object.keys(assets.dailyNetWorth).forEach(date => {
+              chartDataPoints[date] = assets.dailyNetWorth[date];
+          });
       }
-      if (r.isDeleted && r.deleteAuditTrail) {
-        const diff = (r.deleteAuditTrail.after[accountKey] || 0) - (r.deleteAuditTrail.before[accountKey] || 0);
-        if (diff !== 0) {
-           records.push({ 
-             ...r, isReversal: true, diff, balance: r.deleteAuditTrail.after[accountKey], 
-             actionName: '作廢退款', timestamp: r.deleteTimestamp,
-             filterMonth: r.deleteTimestamp.slice(0, 7) 
-           });
-        }
-      }
-    });
 
-    if (ledgerMonth !== 'all') {
-        records = records.filter(r => r.filterMonth === ledgerMonth);
-    }
-    return records.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // 如果資料庫完全沒資料，給個初始點防呆
+      if (Object.keys(chartDataPoints).length === 0) {
+          chartDataPoints[new Date().toISOString().split('T')[0]] = totalAssets;
+      }
+
+      const labels = Object.keys(chartDataPoints).sort();
+      const data = labels.map(d => chartDataPoints[d]);
+
+      return { labels, data };
+  }, [assets.monthlyExpenses, assets.dailyNetWorth, totalAssets]);
+
+  const lineChartData = {
+      labels: historyData.labels,
+      datasets: [{
+          label: '總資產現值',
+          data: historyData.data,
+          borderColor: '#667eea',
+          backgroundColor: 'rgba(102, 126, 234, 0.15)', // 絕美漸層紫底色
+          fill: true, tension: 0.3, pointRadius: 3,
+          pointBackgroundColor: '#764ba2', borderWidth: 2
+      }]
   };
 
-  const accountNames = { jointCash: '共同現金', userA: '恆恆🐶', userB: '得得🐕' };
+  const lineChartOptions = {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => formatMoney(ctx.raw) } } },
+      scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } } },
+          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: (value) => '$' + (value/10000).toFixed(0) + '萬', font: { size: 10 } } }
+      }
+  };
 
   return (
-    <div>
-      <h1 className="page-title">資產總覽</h1>
+    <div style={{animation: 'fadeIn 0.5s'}}>
+      <h1 className="page-title">總資產概況</h1>
 
-      <div className="glass-card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', color: '#fff', border: 'none' }}>
-        <h2 style={{ color: '#fff', marginBottom: '10px', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>💰 雙人總資產</h2>
-        <div style={{ fontSize: '3rem', fontWeight: '800', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-          {formatMoney(totalAssets)}
+      {/* 總資產大看板 */}
+      <div className="glass-card" style={{ marginBottom: '20px', textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '25px 15px' }}>
+        <div style={{ fontSize: '0.9rem', opacity: 0.9, marginBottom: '5px' }}>雙人總資產 (帳面現值)</div>
+        <div style={{ fontSize: '2.5rem', fontWeight: 'bold', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+          {/* 取折線圖最後一天的數字，代表最新現值 */}
+          {formatMoney(historyData.data[historyData.data.length - 1] || totalAssets)}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '15px', fontSize: '0.85rem' }}>
+           <div style={{background:'rgba(255,255,255,0.2)', padding:'4px 12px', borderRadius:'15px'}}>💰 總現金 {formatMoney(totalCash)}</div>
+           <div style={{background:'rgba(255,255,255,0.2)', padding:'4px 12px', borderRadius:'15px'}}>📈 總投入本金 {formatMoney(totalInvest)}</div>
         </div>
       </div>
 
-      <div className="glass-card">
-        <h3>🏫 共同資產</h3>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: 'rgba(255,255,255,0.5)', borderRadius: '16px', marginBottom: '15px' }}>
-          <div>
-            <div style={{fontSize:'1rem', fontWeight:'bold', color:'#555', display:'flex', alignItems:'center', gap:'10px'}}>
-              共同現金
-              <button className="glass-btn" style={{padding:'2px 8px', fontSize:'0.75rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('jointCash')}>🔍 詳情</button>
+      {/* 📈 歷史資產折線圖 */}
+      <div className="glass-card" style={{ marginBottom: '20px', padding: '15px' }}>
+        <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '10px', fontSize: '1rem' }}>📈 資產成長趨勢</div>
+        <div style={{ height: '180px', width: '100%' }}>
+            <Line data={lineChartData} options={lineChartOptions} />
+        </div>
+      </div>
+
+      {/* 🛡️ 修復版：資產分佈圓餅圖 */}
+      <div className="glass-card" style={{ marginBottom: '20px', display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: '15px' }}>
+        <div style={{ flexShrink: 0, width: '120px', height: '120px', display: 'flex', justifyContent: 'center' }}>
+          {activeAssets.length > 0 ? (
+              <Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }} />
+          ) : (
+              <div style={{display:'flex', alignItems:'center', color:'#ccc'}}>尚無資產</div>
+          )}
+        </div>
+        
+        {/* 修正文字重疊：改成上下列表排列，並允許換行 */}
+        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {activeAssets.map((asset) => (
+            <div key={asset.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: asset.color, flexShrink: 0 }}></div>
+                <span style={{ fontWeight: 'bold', color: '#555', fontSize: '0.9rem' }}>{asset.label}</span>
+              </div>
+              <div style={{ fontWeight: 'bold', color: '#333', fontSize: '0.95rem' }}>
+                {formatMoney(asset.val)}
+              </div>
             </div>
-            <div style={{fontSize:'1.8rem', fontWeight:'bold', color:'#17c9b2'}}>{formatMoney(assets.jointCash || 0)}</div>
-          </div>
-        </div>
-
-        <div style={{ padding: '15px', background: 'rgba(255,255,255,0.5)', borderRadius: '16px' }}>
-          <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px', alignItems:'flex-end'}}>
-             <div style={{fontSize:'1rem', fontWeight:'bold', color:'#555'}}>共同投資部位</div>
-             <div style={{textAlign:'right'}}>
-                <div style={{fontSize:'1.3rem', fontWeight:'bold', color:'#8e44ad'}}>{formatMoney(totalEstValue)}</div>
-                <div style={{fontSize:'0.8rem', color: totalUnrealizedPL >= 0 ? '#e67e22' : '#2ecc71'}}>
-                    (未實現損益: {totalUnrealizedPL >= 0 ? '+' : ''}{formatMoney(totalUnrealizedPL)})
-                </div>
-             </div>
-          </div>
-
-          <div style={{display:'grid', gap:'10px'}}>
-            {['stock', 'fund', 'deposit', 'other'].map(type => {
-                const typeLabel = { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[type];
-                return (
-                    <div key={type} style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(255,255,255,0.6)', padding:'8px 12px', borderRadius:'10px'}}>
-                        <span style={{fontWeight:'bold', width:'50px'}}>{typeLabel}</span>
-                        <div style={{display:'flex', alignItems:'center', gap:'5px', flex:1, justifyContent:'center'}}>
-                            <span style={{fontSize:'0.8rem', color:'#888'}}>投報率</span>
-                            <input type="number" value={roi[type] || ''} onChange={(e)=>handleRoiChange(type, e.target.value)} placeholder="0" style={{width:'45px', padding:'4px', borderRadius:'6px', border:'1px solid #ddd', textAlign:'center', fontSize:'0.9rem'}} />
-                            <span style={{fontSize:'0.8rem', color:'#888'}}>%</span>
-                        </div>
-                        <span style={{fontWeight:'500', minWidth:'60px', textAlign:'right'}}>{formatMoney(getEstValue(type))}</span>
-                    </div>
-                );
-            })}
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="glass-card">
-        <h3>🐶 個人資產 (未劃撥)</h3>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'rgba(255,255,255,0.5)', borderRadius: '16px' }}>
-          <div style={{textAlign:'center', width:'48%'}}>
-              <div style={{fontSize:'1.1rem', fontWeight:'bold', marginBottom:'5px', display:'flex', justifyContent:'center', alignItems:'center', gap:'5px'}}>
-                  恆恆🐶
-                  <button className="glass-btn" style={{padding:'2px 6px', fontSize:'0.7rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('userA')}>🔍</button>
-              </div>
-              <div style={{fontSize:'1.5rem', color:'#667eea'}}>{formatMoney((assets.userA || 0) + totalUserAInvestPrincipal)}</div>
-              <div style={{fontSize:'0.75rem', color:'#888', marginTop:'4px'}}>現金: {formatMoney(assets.userA || 0)}</div>
-              <div style={{fontSize:'0.75rem', color:'#888'}}>投資: {formatMoney(totalUserAInvestPrincipal)}</div>
-          </div>
-          <div style={{width:'1px', background:'#ddd'}}></div>
-          <div style={{textAlign:'center', width:'48%'}}>
-              <div style={{fontSize:'1.1rem', fontWeight:'bold', marginBottom:'5px', display:'flex', justifyContent:'center', alignItems:'center', gap:'5px'}}>
-                  得得🐕
-                  <button className="glass-btn" style={{padding:'2px 6px', fontSize:'0.7rem', background:'rgba(0,0,0,0.05)', color:'#666', boxShadow:'none'}} onClick={() => setLedgerModal('userB')}>🔍</button>
-              </div>
-              <div style={{fontSize:'1.5rem', color:'#764ba2'}}>{formatMoney((assets.userB || 0) + totalUserBInvestPrincipal)}</div>
-              <div style={{fontSize:'0.75rem', color:'#888', marginTop:'4px'}}>現金: {formatMoney(assets.userB || 0)}</div>
-              <div style={{fontSize:'0.75rem', color:'#888'}}>投資: {formatMoney(totalUserBInvestPrincipal)}</div>
-          </div>
+      {/* 個人資產明細 */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <div className="glass-card" style={{ flex: 1, minWidth: '140px', padding: '15px', borderTop: '4px solid #ff9a9e' }}>
+          <div style={{ fontSize: '0.85rem', color: '#666' }}>🐶 恆恆總資產</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(cashHeng + investHeng)}</div>
+          <div style={{ fontSize: '0.75rem', color: '#888' }}>現 {formatMoney(cashHeng)} | 投 {formatMoney(investHeng)}</div>
+        </div>
+        <div className="glass-card" style={{ flex: 1, minWidth: '140px', padding: '15px', borderTop: '4px solid #a8e6cf' }}>
+          <div style={{ fontSize: '0.85rem', color: '#666' }}>🐕 得得總資產</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(cashDe + investDe)}</div>
+          <div style={{ fontSize: '0.75rem', color: '#888' }}>現 {formatMoney(cashDe)} | 投 {formatMoney(investDe)}</div>
+        </div>
+        <div className="glass-card" style={{ flex: 1, minWidth: '140px', padding: '15px', borderTop: '4px solid #f6d365' }}>
+          <div style={{ fontSize: '0.85rem', color: '#666' }}>🏫 共同總資產</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(cashJoint + investJoint)}</div>
+          <div style={{ fontSize: '0.75rem', color: '#888' }}>現 {formatMoney(cashJoint)} | 投 {formatMoney(investJoint)}</div>
         </div>
       </div>
 
-      {ledgerModal && (
-         <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', justifyContent:'center', alignItems:'center', padding:'20px' }} onClick={() => setLedgerModal(null)}>
-             <div className="glass-card" style={{width:'100%', maxWidth:'500px', height:'80vh', display:'flex', flexDirection:'column', background:'white', padding:0, overflow:'hidden'}} onClick={e => e.stopPropagation()}>
-                 
-                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'15px 20px', borderBottom:'1px solid #eee', background:'#f8f9fa'}}>
-                    <div>
-                        <h3 style={{margin:0, marginBottom:'8px'}}>📖 {accountNames[ledgerModal]} 的變動紀錄</h3>
-                        <div style={{display:'flex', gap:'5px', alignItems:'center'}}>
-                            <input 
-                                type="month" 
-                                value={ledgerMonth === 'all' ? '' : ledgerMonth} 
-                                onChange={(e) => setLedgerMonth(e.target.value || 'all')}
-                                style={{padding:'4px 8px', borderRadius:'6px', border:'1px solid #ccc', fontSize:'0.85rem'}}
-                            />
-                            <button 
-                                onClick={() => setLedgerMonth('all')} 
-                                style={{padding:'4px 8px', borderRadius:'6px', border:'1px solid #ccc', background: ledgerMonth === 'all' ? '#e2e8f0' : '#fff', cursor:'pointer', fontSize:'0.85rem'}}
-                            >
-                                看全部
-                            </button>
-                        </div>
-                    </div>
-                    <button style={{background:'transparent', border:'none', fontSize:'1.5rem', cursor:'pointer', color:'#888', lineHeight:1}} onClick={() => setLedgerModal(null)}>✖</button>
-                 </div>
-                 
-                 <div style={{flex:1, overflowY:'auto', padding:'0 20px 20px 20px'}}>
-                     {getLedgerRecords(ledgerModal).length === 0 ? (
-                         <div style={{textAlign:'center', color:'#888', padding:'30px'}}>
-                            {ledgerMonth === 'all' ? '目前尚無變動紀錄' : '本月份查無變動紀錄。'}
-                         </div>
-                     ) : (
-                         getLedgerRecords(ledgerModal).map((r, idx) => (
-                             <div key={idx} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'15px 0', borderBottom:'1px dashed #eee'}}>
-                                 <div style={{flex: 1}}>
-                                     <div style={{fontSize:'0.8rem', color:'#888'}}>{new Date(r.timestamp).toLocaleString('zh-TW', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</div>
-                                     <div style={{fontWeight:'bold', color: r.isReversal ? '#e74c3c' : '#444'}}>
-                                         {r.isReversal ? r.actionName : (r.note === '月結記帳' ? '日記帳' : r.note)}
-                                     </div>
-                                 </div>
-                                 <div style={{textAlign:'right'}}>
-                                     <div style={{fontWeight:'bold', fontSize:'1.1rem', color: r.diff > 0 ? '#2ecc71' : '#e74c3c'}}>
-                                         {r.diff > 0 ? '+' : ''}{formatMoney(r.diff)}
-                                     </div>
-                                     <div style={{fontSize:'0.8rem', color:'#666'}}>
-                                         餘額: {formatMoney(r.balance)}
-                                     </div>
-                                 </div>
-                             </div>
-                         ))
-                     )}
-                 </div>
-             </div>
-         </div>
-       )}
     </div>
   );
 };
