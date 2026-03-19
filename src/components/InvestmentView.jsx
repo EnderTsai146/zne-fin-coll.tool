@@ -1,13 +1,9 @@
 // src/components/InvestmentView.jsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-import { Doughnut } from 'react-chartjs-2';
-
-ChartJS.register(ArcElement, Tooltip, Legend);
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 
-// 🚀 請把下面這串引號內的網址，換成你剛剛在 Google 部署出來的「網頁應用程式網址」！
+// ⚠️ 請把下面這串換成你自己的 Google API 網址！
 const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const InvestmentView = ({ assets }) => {
@@ -82,7 +78,6 @@ const InvestmentView = ({ assets }) => {
 
   const holdingSymbols = Object.keys(stockHoldings);
 
-  // ★ 核心大升級：透過自己的 Google 專屬後端抓取資料，永不被擋！
   const fetchLivePrices = async () => {
       if (holdingSymbols.length === 0) return;
       setIsFetching(true);
@@ -90,8 +85,7 @@ const InvestmentView = ({ assets }) => {
       const allSymbols = [...holdingSymbols, 'TWD=X'].join(',');
       
       try {
-          // 直接呼叫我們架設好的 Google Apps Script API
-          const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${allSymbols}`);
+          const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${allSymbols}`, { redirect: 'follow' });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           
           const data = await res.json();
@@ -193,15 +187,6 @@ const InvestmentView = ({ assets }) => {
       });
   };
 
-  const chartData = {
-      labels: ['股票', '基金', '定存', '其他'],
-      datasets: [{
-          data: [currentData.stock, currentData.fund, currentData.deposit, currentData.other],
-          backgroundColor: ['#ff9f43', '#54a0ff', '#2ecc71', '#c8d6e5'],
-          borderWidth: 0, hoverOffset: 4
-      }]
-  };
-
   const isAllTime = !dateRange.start && !dateRange.end;
   const displayHistory = isAllTime ? [...filteredHistory].reverse().slice(0, 30) : [...filteredHistory].reverse(); 
 
@@ -254,29 +239,6 @@ const InvestmentView = ({ assets }) => {
              </div>
           )}
       </div>
-
-      {totalPrincipal > 0 && (
-          <div className="glass-card" style={{marginBottom:'20px', display:'flex', flexWrap:'wrap', alignItems:'center'}}>
-              <div style={{flex:1, minWidth:'150px', height:'150px', display:'flex', justifyContent:'center'}}>
-                  <Doughnut data={chartData} options={{ maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }} />
-              </div>
-              <div style={{flex:1, minWidth:'150px', padding:'10px'}}>
-                  {['stock', 'fund', 'deposit', 'other'].map((type, idx) => {
-                      const colors = ['#ff9f43', '#54a0ff', '#2ecc71', '#c8d6e5'];
-                      const labels = ['股票', '基金', '定存', '其他'];
-                      const val = currentData[type];
-                      if (val === 0) return null;
-                      const percentage = ((val / totalPrincipal) * 100).toFixed(1);
-                      return (
-                          <div key={type} style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-                              <div style={{display:'flex', alignItems:'center', gap:'8px'}}><div style={{width:'12px', height:'12px', borderRadius:'50%', background:colors[idx]}}></div><span style={{fontWeight:'bold', color:'#555', fontSize:'0.9rem'}}>{labels[idx]}</span></div>
-                              <div style={{fontWeight:'bold', color:'#333', fontSize:'0.9rem'}}>{formatMoney(val)}</div>
-                          </div>
-                      );
-                  })}
-              </div>
-          </div>
-      )}
 
       <div className="glass-card" style={{ padding: '12px 15px', marginBottom: '20px', borderLeft: '5px solid #3498db' }}>
           <div style={{color:'#555', fontWeight:'bold', marginBottom:'8px', fontSize:'0.9rem'}}>🔍 歷史買賣區間</div>
