@@ -63,17 +63,18 @@ const TotalOverview = ({ assets, setAssets }) => {
       return holdings;
   }, [assets.monthlyExpenses]);
 
-  // --- 4. 🚀 神級功能：每日打卡快照引擎 (Idempotent Snapshot Engine) ---
-  // 計算「昨天」的日期字串
+  // --- 4. 🚀 神級功能：每日打卡快照引擎 (已上安全鎖) ---
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const recordDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
   
-  // 檢查資料庫是否已經有昨天的打卡紀錄
   const hasSnapshot = (assets.dailyNetWorth || {})[recordDate];
-  const isFetchingRef = useRef(false); // 防連點機制
+  const isFetchingRef = useRef(false); 
 
   useEffect(() => {
+      // 🛑 終極安全鎖：如果連一筆歷史紀錄都沒有，絕對不准執行打卡！
+      if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
+
       if (hasSnapshot || isFetchingRef.current) return;
 
       const runDailySnapshot = async () => {
@@ -82,7 +83,6 @@ const TotalOverview = ({ assets, setAssets }) => {
               const symbols = Object.keys(stockHoldings);
               let stockMarketValue = 0;
 
-              // 如果有股票，就去呼叫 Google API 拿「昨日收盤價」
               if (symbols.length > 0) {
                   const allSymbols = [...symbols, 'TWD=X'].join(',');
                   const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${allSymbols}`, { redirect: 'follow' });
@@ -93,7 +93,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                       let fxRate = 31.5;
                       const quotes = data.quoteResponse.result;
                       const fxQuote = quotes.find(q => q.symbol === 'TWD=X');
-                      // 優先拿昨日收盤價 regularMarketPreviousClose
                       if (fxQuote) fxRate = fxQuote.regularMarketPreviousClose || fxQuote.regularMarketPrice || 31.5;
 
                       symbols.forEach(sym => {
@@ -102,7 +101,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                               const price = q.regularMarketPreviousClose || q.regularMarketPrice || 0;
                               const holding = stockHoldings[sym];
                               let val = price * holding.shares;
-                              // 扣除未來賣出會產生的預估稅費
                               if (holding.market === 'TW') {
                                   const fee = Math.max(20, Math.floor(val * 0.001425 * 0.6));
                                   const tax = Math.floor(val * 0.003);
@@ -116,11 +114,9 @@ const TotalOverview = ({ assets, setAssets }) => {
                   }
               }
 
-              // 計算最終現值：總現金 + (非股票的投資本金) + 股票真實市值
               const nonStockInvest = totalInvest - ((assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0));
               const finalNetWorth = Math.round(totalCash + nonStockInvest + stockMarketValue);
 
-              // 寫入 Firebase 資料庫 (打卡完成！)
               setAssets({
                   ...assets,
                   dailyNetWorth: {
@@ -130,7 +126,7 @@ const TotalOverview = ({ assets, setAssets }) => {
               });
 
           } catch (e) {
-              console.error("背景快照引擎執行失敗，明日將自動重試:", e);
+              console.error("背景快照引擎執行失敗:", e);
           } finally {
               isFetchingRef.current = false;
           }
@@ -143,7 +139,6 @@ const TotalOverview = ({ assets, setAssets }) => {
   const historyData = useMemo(() => {
       const chartDataPoints = {};
       
-      // 階段一：用過去的記帳歷史 (AuditTrail) 鋪底，畫出「本金成長階梯」
       const sortedRecords = [...(assets.monthlyExpenses || [])]
           .filter(r => !r.isDeleted && r.auditTrail?.after)
           .sort((a, b) => new Date(a.timestamp || a.date) - new Date(b.timestamp || b.date));
@@ -155,14 +150,12 @@ const TotalOverview = ({ assets, setAssets }) => {
           chartDataPoints[record.date] = pastCash + pastInvest;
       });
 
-      // 階段二：將我們每天打卡算好的「真實市值 (dailyNetWorth)」覆蓋上去
       if (assets.dailyNetWorth) {
           Object.keys(assets.dailyNetWorth).forEach(date => {
               chartDataPoints[date] = assets.dailyNetWorth[date];
           });
       }
 
-      // 如果資料庫完全沒資料，給個初始點防呆
       if (Object.keys(chartDataPoints).length === 0) {
           chartDataPoints[new Date().toISOString().split('T')[0]] = totalAssets;
       }
@@ -179,7 +172,7 @@ const TotalOverview = ({ assets, setAssets }) => {
           label: '總資產現值',
           data: historyData.data,
           borderColor: '#667eea',
-          backgroundColor: 'rgba(102, 126, 234, 0.15)', // 絕美漸層紫底色
+          backgroundColor: 'rgba(102, 126, 234, 0.15)', 
           fill: true, tension: 0.3, pointRadius: 3,
           pointBackgroundColor: '#764ba2', borderWidth: 2
       }]
@@ -202,7 +195,6 @@ const TotalOverview = ({ assets, setAssets }) => {
       <div className="glass-card" style={{ marginBottom: '20px', textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '25px 15px' }}>
         <div style={{ fontSize: '0.9rem', opacity: 0.9, marginBottom: '5px' }}>雙人總資產 (帳面現值)</div>
         <div style={{ fontSize: '2.5rem', fontWeight: 'bold', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-          {/* 取折線圖最後一天的數字，代表最新現值 */}
           {formatMoney(historyData.data[historyData.data.length - 1] || totalAssets)}
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '15px', fontSize: '0.85rem' }}>
@@ -262,6 +254,48 @@ const TotalOverview = ({ assets, setAssets }) => {
           <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(cashJoint + investJoint)}</div>
           <div style={{ fontSize: '0.75rem', color: '#888' }}>現 {formatMoney(cashJoint)} | 投 {formatMoney(investJoint)}</div>
         </div>
+      </div>
+
+      {/* 🚀 找回來的：最近變動軌跡 */}
+      <div className="glass-card" style={{ marginBottom: '20px' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '15px', color: '#555', fontSize: '1.05rem', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+          🕒 最近資產變動軌跡
+        </h3>
+        {assets.monthlyExpenses && assets.monthlyExpenses.filter(r => !r.isDeleted).length > 0 ? (
+          assets.monthlyExpenses
+            .filter(r => !r.isDeleted)
+            .sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date))
+            .slice(0, 6) // 取最新 6 筆
+            .map((record, idx) => {
+              // 判斷資金流向與顏色
+              let amountStr = ''; let amountColor = '#333';
+              if (['buy', 'spend', 'expense', 'loss'].some(k => record.type.includes(k))) { 
+                  amountStr = `-${formatMoney(record.total)}`; 
+                  amountColor = '#e74c3c'; 
+              } else if (['sell', 'liquidate', 'income', 'profit'].some(k => record.type.includes(k))) { 
+                  amountStr = `+${formatMoney(record.total)}`; 
+                  amountColor = '#2ecc71'; 
+              } else { 
+                  amountStr = `🔄 ${formatMoney(record.total)}`; 
+                  amountColor = '#3498db'; 
+              }
+
+              return (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px dashed #eee' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '2px' }}>{record.date} | {record.operator}</div>
+                    <div style={{ fontWeight: 'bold', color: '#444', fontSize: '0.9rem' }}>{record.note}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#667eea', marginTop: '2px' }}>{record.category} ({record.payer})</div>
+                  </div>
+                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: amountColor }}>
+                    {amountStr}
+                  </div>
+                </div>
+              );
+            })
+        ) : (
+          <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>尚無變動紀錄</div>
+        )}
       </div>
 
     </div>
