@@ -14,14 +14,53 @@ const formatDate = (date) => date.toISOString().split('T')[0];
 const today = new Date();
 const lastYear = new Date(); lastYear.setFullYear(today.getFullYear() - 1);
 
-// 🚀 已經幫你自動套入你的專屬 Google API！
+// 🚀 請換成你的 Google API 網址！
 const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const TotalOverview = ({ assets, setAssets }) => {
   const [chartDateRange, setChartDateRange] = useState({ start: formatDate(lastYear), end: formatDate(today) });
   const [activeHistory, setActiveHistory] = useState(null); 
   const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
+  
+  // 🌟 新增狀態：備份警示與折線圖點擊
+  const [backupWarning, setBackupWarning] = useState(false);
+  const [selectedChartDate, setSelectedChartDate] = useState(null);
 
+  const isBackingUpRef = useRef(false);
+  const todayStr = formatDate(today);
+
+  // --- 0. 🚀 自動無感備份引擎 ---
+  useEffect(() => {
+      if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
+      if (assets.lastBackupDate === todayStr || isBackingUpRef.current) return; // 每天只備份一次
+
+      const runBackup = async () => {
+          isBackingUpRef.current = true;
+          try {
+              const res = await fetch(MY_GOOGLE_API_URL, {
+                  method: 'POST',
+                  body: JSON.stringify({ action: 'backup', date: todayStr, assets: assets })
+              });
+              const data = await res.json();
+              if (data.success) {
+                  setBackupWarning(false);
+                  // 備份成功，紀錄今天的日期，今天就不會再備份了
+                  setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
+              } else {
+                  throw new Error("Google回傳失敗");
+              }
+          } catch (e) {
+              console.error("雲端備份失敗:", e);
+              setBackupWarning(true); // 觸發紅色警示
+          } finally {
+              isBackingUpRef.current = false;
+          }
+      };
+      runBackup();
+  }, [assets.monthlyExpenses, assets.lastBackupDate, todayStr, setAssets, assets]);
+
+
+  // --- 1. 計算資產現況 ---
   const cashHeng = assets.userA || 0;
   const cashDe = assets.userB || 0;
   const cashJoint = assets.jointCash || 0;
@@ -44,10 +83,7 @@ const TotalOverview = ({ assets, setAssets }) => {
   ];
 
   const activeAssets = assetTypes.filter(a => a.val > 0);
-  const doughnutData = {
-    labels: activeAssets.map(a => a.label),
-    datasets: [{ data: activeAssets.map(a => a.val), backgroundColor: activeAssets.map(a => a.color), borderWidth: 0, hoverOffset: 4 }]
-  };
+  const doughnutData = { labels: activeAssets.map(a => a.label), datasets: [{ data: activeAssets.map(a => a.val), backgroundColor: activeAssets.map(a => a.color), borderWidth: 0, hoverOffset: 4 }] };
 
   const stockHoldings = useMemo(() => {
       const holdings = {};
@@ -62,19 +98,19 @@ const TotalOverview = ({ assets, setAssets }) => {
       return holdings;
   }, [assets.monthlyExpenses]);
 
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
+  // --- 2. 每日打卡快照引擎 ---
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
   const recordDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
   
   const hasSnapshot = (assets.dailyNetWorth || {})[recordDate];
-  const isFetchingRef = useRef(false); 
+  const isFetchingSnapshotRef = useRef(false); 
 
   useEffect(() => {
       if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
-      if (hasSnapshot || isFetchingRef.current) return;
+      if (hasSnapshot || isFetchingSnapshotRef.current) return;
 
       const runDailySnapshot = async () => {
-          isFetchingRef.current = true;
+          isFetchingSnapshotRef.current = true;
           try {
               const symbols = Object.keys(stockHoldings);
               let stockMarketValue = 0;
@@ -109,26 +145,25 @@ const TotalOverview = ({ assets, setAssets }) => {
                       });
                   }
               }
-
               const nonStockInvest = totalInvest - ((assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0));
               const finalNetWorth = Math.round(totalCash + nonStockInvest + stockMarketValue);
 
-              setAssets({ ...assets, dailyNetWorth: { ...(assets.dailyNetWorth || {}), [recordDate]: finalNetWorth } });
-          } catch (e) { console.error("背景快照引擎執行失敗:", e); } 
-          finally { isFetchingRef.current = false; }
+              setAssets(prev => ({ ...prev, dailyNetWorth: { ...(prev.dailyNetWorth || {}), [recordDate]: finalNetWorth } }));
+          } catch (e) { console.error("快照失敗:", e); } 
+          finally { isFetchingSnapshotRef.current = false; }
       };
       runDailySnapshot();
   }, [hasSnapshot, stockHoldings, totalCash, totalInvest, assets, setAssets, recordDate]);
 
-  // 🚀 秘密按鈕：刪除快照，強制重新結算！
   const handleRecalculate = () => {
-    if (window.confirm("⚠️ 確定要重新結算「歷史資產快照」嗎？\n(這將使用正確的股票代號重新抓取昨日股價，把消失的三萬塊找回來！)")) {
+    if (window.confirm("⚠️ 確定要重新結算「昨日」的資產快照嗎？\n(這只會重新抓取並覆蓋最近一天的數值，絕對不會影響更早之前的歷史現值！)")) {
         const newAssets = { ...assets };
-        delete newAssets.dailyNetWorth; // 撕掉錯誤的照片
+        if (newAssets.dailyNetWorth && newAssets.dailyNetWorth[recordDate]) delete newAssets.dailyNetWorth[recordDate];
         setAssets(newAssets);
     }
   };
 
+  // --- 3. 繪製折線圖資料 ---
   const historyData = useMemo(() => {
       const chartDataPoints = {};
       const sortedRecords = [...(assets.monthlyExpenses || [])]
@@ -164,14 +199,13 @@ const TotalOverview = ({ assets, setAssets }) => {
               chartDataPoints[chartDateRange.end] = endValue;
           }
       }
-
       const data = labels.map(d => chartDataPoints[d]);
       return { labels, data };
   }, [assets.monthlyExpenses, assets.dailyNetWorth, totalAssets, chartDateRange]);
 
   const lineChartData = {
       labels: historyData.labels,
-      datasets: [{ label: '總資產現值', data: historyData.data, borderColor: '#667eea', backgroundColor: 'rgba(102, 126, 234, 0.15)', fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#764ba2', borderWidth: 2 }]
+      datasets: [{ label: '總資產現值', data: historyData.data, borderColor: '#667eea', backgroundColor: 'rgba(102, 126, 234, 0.15)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#764ba2', borderWidth: 2, pointHoverRadius: 6 }]
   };
 
   const lineChartOptions = {
@@ -180,19 +214,31 @@ const TotalOverview = ({ assets, setAssets }) => {
       scales: {
           x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } } },
           y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: (value) => '$' + (value/10000).toFixed(0) + '萬', font: { size: 10 } } }
+      },
+      // 🌟 點擊折線圖的互動引擎
+      onClick: (evt, elements) => {
+          if (elements.length > 0) {
+              const dataIndex = elements[0].index;
+              setSelectedChartDate(historyData.labels[dataIndex]);
+          } else {
+              setSelectedChartDate(null);
+          }
       }
+  };
+
+  // --- 4. 精準科目的歷史軌跡 (含時間戳記與科目扣除明細) ---
+  const formatTime = (ts) => {
+      if (!ts) return ''; const d = new Date(ts);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
   };
 
   const getAccountHistory = () => {
       if (!activeHistory) return [];
       let filtered = (assets.monthlyExpenses || []).filter(r => !r.isDeleted);
+      
+      // 🎯 最嚴格的過濾：只看該科目的資產數字有沒有變動！
       filtered = filtered.filter(r => {
-          if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) {
-              if (activeHistory === 'jointCash') return r.payer === '共同帳戶' || r.advancedBy === 'jointCash';
-              if (activeHistory === 'userA') return r.payer?.includes('恆恆') || r.advancedBy === 'userA' || r.accountKey === 'userA';
-              if (activeHistory === 'userB') return r.payer?.includes('得得') || r.advancedBy === 'userB' || r.accountKey === 'userB';
-              return false;
-          }
+          if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) return false;
           const b = r.auditTrail.before; const a = r.auditTrail.after;
           if (activeHistory === 'userA') return b.userA !== a.userA || JSON.stringify(b.userInvestments?.userA) !== JSON.stringify(a.userInvestments?.userA);
           if (activeHistory === 'userB') return b.userB !== a.userB || JSON.stringify(b.userInvestments?.userB) !== JSON.stringify(a.userInvestments?.userB);
@@ -210,11 +256,84 @@ const TotalOverview = ({ assets, setAssets }) => {
       if (activeHistory === account) { setActiveHistory(null); } 
       else { setActiveHistory(account); setHistoryDateRange({ start: '', end: '' }); }
   };
-
   const specificHistory = getAccountHistory();
+
+  // --- 5. 繪製折線圖點擊後的「變動分析卡片」 ---
+  const renderChartDetails = () => {
+      if (!selectedChartDate) return null;
+      const idx = historyData.labels.indexOf(selectedChartDate);
+      if (idx === -1) return null;
+
+      const currentVal = historyData.data[idx];
+      const prevVal = idx > 0 ? historyData.data[idx - 1] : currentVal;
+      const diff = currentVal - prevVal; // 今天跟昨天的總資產差距
+
+      // 找出當天的所有記帳操作
+      const dayRecords = (assets.monthlyExpenses || []).filter(r => !r.isDeleted && r.date === selectedChartDate);
+      
+      let netTransactions = 0;
+      dayRecords.forEach(r => {
+          if (['buy', 'spend', 'expense', 'loss'].some(k => r.type.includes(k))) netTransactions -= Number(r.total);
+          else if (['sell', 'liquidate', 'income', 'profit', 'transfer'].some(k => r.type.includes(k))) netTransactions += Number(r.total);
+      });
+
+      // 核心邏輯：總變動 扣掉 人為記帳 = 純粹的股票市場波動
+      const marketFluctuation = diff - netTransactions;
+
+      return (
+          <div style={{ marginTop: '15px', padding: '15px', borderRadius: '12px', borderLeft: '5px solid #9b59b6', background: 'linear-gradient(to right, rgba(155, 89, 182, 0.1), rgba(255,255,255,0.5))', animation: 'fadeIn 0.3s' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ margin: 0, color: '#555', fontSize: '1.05rem' }}>📅 {selectedChartDate} 資產變動分析</h4>
+                  <button onClick={() => setSelectedChartDate(null)} style={{ background:'transparent', border:'none', cursor:'pointer', fontSize:'1.2rem' }}>✖</button>
+              </div>
+              
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: '15px' }}>
+                 <div style={{ fontSize: '0.9rem', color: '#666' }}>總資產: <span style={{fontWeight:'bold', color:'#333'}}>{formatMoney(currentVal)}</span></div>
+                 <div style={{ padding:'2px 8px', borderRadius:'10px', fontSize: '0.85rem', fontWeight: 'bold', background: diff >= 0 ? 'rgba(46, 204, 113, 0.2)' : 'rgba(231, 76, 60, 0.2)', color: diff >= 0 ? '#27ae60' : '#c0392b' }}>
+                     較昨日 {diff >= 0 ? '+' : ''}{formatMoney(diff)}
+                 </div>
+              </div>
+
+              {dayRecords.length > 0 && (
+                  <div style={{ marginBottom: '12px', background:'rgba(255,255,255,0.7)', padding:'10px', borderRadius:'8px' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#888', borderBottom: '1px solid #ddd', paddingBottom: '4px', marginBottom: '6px' }}>
+                          📝 當日人為記帳 (淨額: <span style={{color: netTransactions>=0?'#27ae60':'#c0392b', fontWeight:'bold'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
+                      </div>
+                      {dayRecords.map((r, i) => {
+                          let sign = ['buy', 'spend', 'expense', 'loss'].some(k => r.type.includes(k)) ? '-' : '+';
+                          let color = sign === '-' ? '#e74c3c' : '#2ecc71';
+                          if (r.type === 'transfer') { sign = ''; color = '#3498db'; }
+                          return (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px' }}>
+                                  <span style={{color:'#444', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'75%'}}>{r.note || r.category}</span>
+                                  <span style={{ color: color, fontWeight:'bold' }}>{sign}{formatMoney(r.total)}</span>
+                              </div>
+                          );
+                      })}
+                  </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', fontSize: '0.9rem', color: '#555', borderTop: '1px dashed #ccc', paddingTop: '10px' }}>
+                  <span>📈 市場波動估算 (未實現損益)</span>
+                  <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: marketFluctuation >= 0 ? '#2ecc71' : '#e74c3c' }}>
+                      {marketFluctuation >= 0 ? '+' : ''}{formatMoney(marketFluctuation)}
+                  </span>
+              </div>
+          </div>
+      );
+  };
 
   return (
     <div style={{animation: 'fadeIn 0.5s'}}>
+      
+      {/* 🚨 備份失敗紅色警示 */}
+      {backupWarning && (
+          <div style={{ background: '#e74c3c', color: 'white', padding: '10px 15px', borderRadius: '8px', marginBottom: '15px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>⚠️ 警告：昨日的雲端自動備份失敗！請檢查您的網路或 Google 權限，或進行手動備份。</span>
+              <button onClick={() => setBackupWarning(false)} style={{ background:'transparent', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer' }}>×</button>
+          </div>
+      )}
+
       <h1 className="page-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
         總資產概況
         <button onClick={handleRecalculate} style={{background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'}}>
@@ -272,37 +391,51 @@ const TotalOverview = ({ assets, setAssets }) => {
               <button onClick={() => setHistoryDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'6px 12px', fontSize:'0.85rem', background: '#fff', color:'#333', border:'1px solid #ccc'}}>清除</button>
           </div>
 
-          <div style={{ maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
+          <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '5px' }}>
             {specificHistory.length > 0 ? (
                 specificHistory.map((record, idx) => {
+                    // 🎯 計算精準的帳戶扣除/增加金額
+                    const b = record.auditTrail?.before;
                     const a = record.auditTrail?.after;
-                    let bCash = 0; let bInv = 0;
-                    if (a) {
-                        if (activeHistory === 'userA') { bCash = a.userA || 0; bInv = sumInvestments(a.userInvestments?.userA); }
-                        else if (activeHistory === 'userB') { bCash = a.userB || 0; bInv = sumInvestments(a.userInvestments?.userB); }
-                        else if (activeHistory === 'jointCash') { bCash = a.jointCash || 0; bInv = sumInvestments(a.jointInvestments); }
+                    let accountChangeText = ""; let accountChangeAmount = 0;
+                    
+                    if (b && a) {
+                        if (activeHistory === 'userA') {
+                            const cashDiff = (a.userA || 0) - (b.userA || 0);
+                            const invDiff = sumInvestments(a.userInvestments?.userA) - sumInvestments(b.userInvestments?.userA);
+                            if (cashDiff !== 0) { accountChangeText = `[恆恆現鈔] ${cashDiff > 0 ? '增加' : '扣除'}`; accountChangeAmount = cashDiff; } 
+                            else if (invDiff !== 0) { accountChangeText = `[恆恆投資] ${invDiff > 0 ? '增加' : '扣除'}`; accountChangeAmount = invDiff; }
+                        } else if (activeHistory === 'userB') {
+                            const cashDiff = (a.userB || 0) - (b.userB || 0);
+                            const invDiff = sumInvestments(a.userInvestments?.userB) - sumInvestments(b.userInvestments?.userB);
+                            if (cashDiff !== 0) { accountChangeText = `[得得現鈔] ${cashDiff > 0 ? '增加' : '扣除'}`; accountChangeAmount = cashDiff; } 
+                            else if (invDiff !== 0) { accountChangeText = `[得得投資] ${invDiff > 0 ? '增加' : '扣除'}`; accountChangeAmount = invDiff; }
+                        } else if (activeHistory === 'jointCash') {
+                            const cashDiff = (a.jointCash || 0) - (b.jointCash || 0);
+                            const invDiff = sumInvestments(a.jointInvestments) - sumInvestments(b.jointInvestments);
+                            if (cashDiff !== 0) { accountChangeText = `[共同現金] ${cashDiff > 0 ? '增加' : '扣除'}`; accountChangeAmount = cashDiff; } 
+                            else if (invDiff !== 0) { accountChangeText = `[共同投資] ${invDiff > 0 ? '增加' : '扣除'}`; accountChangeAmount = invDiff; }
+                        }
                     }
 
-                    let amountStr = `💰 ${formatMoney(record.total)}`;
-                    let amountColor = '#333';
-                    if (['buy', 'spend', 'expense', 'loss'].some(k => record.type.includes(k))) { amountColor = '#e74c3c'; } 
-                    else if (['sell', 'liquidate', 'income', 'profit'].some(k => record.type.includes(k))) { amountColor = '#2ecc71'; } 
-                    else { amountColor = '#3498db'; }
-
                     return (
-                        <div key={idx} style={{ padding: '12px 0', borderBottom: '1px dashed #ccc', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#888' }}>{record.date} | 操作: {record.operator || '系統'}</div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ fontWeight: 'bold', color: '#444', fontSize: '0.95rem', lineHeight: '1.4', paddingRight: '10px', wordBreak: 'break-word' }}>
-                                    {record.note}
-                                </div>
-                                <div style={{ fontWeight: 'bold', fontSize: '1rem', color: amountColor, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                    {amountStr}
-                                </div>
+                        <div key={idx} style={{ padding: '15px 0', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', display:'flex', justifyContent:'space-between' }}>
+                                <span>📅 {record.date} | ⏱ {formatTime(record.timestamp)}</span>
+                                <span>👤 操作: {record.operator || '系統'}</span>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#667eea' }}>
-                                <span>{record.category}</span>
-                                {a && <span style={{ color: '#888' }}>現 {formatMoney(bCash)} | 投 {formatMoney(bInv)}</span>}
+                            
+                            {accountChangeText && (
+                                <div style={{ color: accountChangeAmount > 0 ? '#2ecc71' : '#e74c3c', fontWeight: 'bold', fontSize: '1rem' }}>
+                                    {accountChangeText} {accountChangeAmount > 0 ? '+' : ''}{formatMoney(accountChangeAmount)}
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '8px 10px', borderRadius: '8px' }}>
+                                <div style={{ color: '#444', fontSize: '0.9rem', wordBreak: 'break-word', paddingRight: '10px' }}>📝 {record.note}</div>
+                                <div style={{ fontSize: '0.85rem', color: '#666', whiteSpace: 'nowrap' }}>
+                                    單筆總額: {formatMoney(record.total)}
+                                </div>
                             </div>
                         </div>
                     );
@@ -338,10 +471,10 @@ const TotalOverview = ({ assets, setAssets }) => {
         </div>
       </div>
 
-      {/* 【第四層】資產成長趨勢折線圖 */}
+      {/* 【第四層】互動式資產成長趨勢折線圖 */}
       <div className="glass-card" style={{ marginBottom: '20px', padding: '15px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <div style={{ fontWeight: 'bold', color: '#555', fontSize: '1rem' }}>📈 資產成長趨勢</div>
+            <div style={{ fontWeight: 'bold', color: '#555', fontSize: '1rem' }}>📈 資產成長趨勢 (點擊節點查看明細)</div>
         </div>
         
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
@@ -354,9 +487,13 @@ const TotalOverview = ({ assets, setAssets }) => {
             <button onClick={() => setChartDateRange({ start: '', end: '' })} className="glass-btn" style={{flex:1, padding:'6px', fontSize:'0.85rem', background: '#fff', color:'#333', border:'1px solid #ccc'}}>全部時間</button>
         </div>
 
-        <div style={{ height: '220px', width: '100%' }}>
+        {/* 折線圖本體 */}
+        <div style={{ height: '220px', width: '100%', cursor: 'pointer' }}>
             <Line data={lineChartData} options={lineChartOptions} />
         </div>
+
+        {/* 🌟 點擊折線圖後彈出的分析卡片 */}
+        {renderChartDetails()}
       </div>
 
     </div>
