@@ -14,15 +14,12 @@ const formatDate = (date) => date.toISOString().split('T')[0];
 const today = new Date();
 const lastYear = new Date(); lastYear.setFullYear(today.getFullYear() - 1);
 
-// ⚠️ 記得換成你的 API
+// 🚀 已經幫你自動套入你的專屬 Google API！
 const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const TotalOverview = ({ assets, setAssets }) => {
-  // 趨勢圖專用時間
   const [chartDateRange, setChartDateRange] = useState({ start: formatDate(lastYear), end: formatDate(today) });
-  
-  // 獨立科目軌跡專用狀態
-  const [activeHistory, setActiveHistory] = useState(null); // 'userA' | 'userB' | 'jointCash'
+  const [activeHistory, setActiveHistory] = useState(null); 
   const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
 
   const cashHeng = assets.userA || 0;
@@ -123,6 +120,15 @@ const TotalOverview = ({ assets, setAssets }) => {
       runDailySnapshot();
   }, [hasSnapshot, stockHoldings, totalCash, totalInvest, assets, setAssets, recordDate]);
 
+  // 🚀 秘密按鈕：刪除快照，強制重新結算！
+  const handleRecalculate = () => {
+    if (window.confirm("⚠️ 確定要重新結算「歷史資產快照」嗎？\n(這將使用正確的股票代號重新抓取昨日股價，把消失的三萬塊找回來！)")) {
+        const newAssets = { ...assets };
+        delete newAssets.dailyNetWorth; // 撕掉錯誤的照片
+        setAssets(newAssets);
+    }
+  };
+
   const historyData = useMemo(() => {
       const chartDataPoints = {};
       const sortedRecords = [...(assets.monthlyExpenses || [])]
@@ -177,12 +183,9 @@ const TotalOverview = ({ assets, setAssets }) => {
       }
   };
 
-  // 🔍 精準獲取特定科目的變動軌跡
   const getAccountHistory = () => {
       if (!activeHistory) return [];
       let filtered = (assets.monthlyExpenses || []).filter(r => !r.isDeleted);
-      
-      // 過濾出屬於該科目的變動
       filtered = filtered.filter(r => {
           if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) {
               if (activeHistory === 'jointCash') return r.payer === '共同帳戶' || r.advancedBy === 'jointCash';
@@ -190,41 +193,34 @@ const TotalOverview = ({ assets, setAssets }) => {
               if (activeHistory === 'userB') return r.payer?.includes('得得') || r.advancedBy === 'userB' || r.accountKey === 'userB';
               return false;
           }
-          const b = r.auditTrail.before;
-          const a = r.auditTrail.after;
-          if (activeHistory === 'userA') {
-              return b.userA !== a.userA || JSON.stringify(b.userInvestments?.userA) !== JSON.stringify(a.userInvestments?.userA);
-          }
-          if (activeHistory === 'userB') {
-              return b.userB !== a.userB || JSON.stringify(b.userInvestments?.userB) !== JSON.stringify(a.userInvestments?.userB);
-          }
-          if (activeHistory === 'jointCash') {
-              return b.jointCash !== a.jointCash || JSON.stringify(b.jointInvestments) !== JSON.stringify(a.jointInvestments);
-          }
+          const b = r.auditTrail.before; const a = r.auditTrail.after;
+          if (activeHistory === 'userA') return b.userA !== a.userA || JSON.stringify(b.userInvestments?.userA) !== JSON.stringify(a.userInvestments?.userA);
+          if (activeHistory === 'userB') return b.userB !== a.userB || JSON.stringify(b.userInvestments?.userB) !== JSON.stringify(a.userInvestments?.userB);
+          if (activeHistory === 'jointCash') return b.jointCash !== a.jointCash || JSON.stringify(b.jointInvestments) !== JSON.stringify(a.jointInvestments);
           return false;
       });
 
       if (historyDateRange.start) filtered = filtered.filter(r => (r.date || r.month) >= historyDateRange.start);
       if (historyDateRange.end) filtered = filtered.filter(r => (r.date || r.month) <= historyDateRange.end);
-
       filtered.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
       return filtered;
   };
 
   const handleToggleHistory = (account) => {
-      if (activeHistory === account) {
-          setActiveHistory(null);
-      } else {
-          setActiveHistory(account);
-          setHistoryDateRange({ start: '', end: '' }); // 切換時重置搜尋時間
-      }
+      if (activeHistory === account) { setActiveHistory(null); } 
+      else { setActiveHistory(account); setHistoryDateRange({ start: '', end: '' }); }
   };
 
   const specificHistory = getAccountHistory();
 
   return (
     <div style={{animation: 'fadeIn 0.5s'}}>
-      <h1 className="page-title">總資產概況</h1>
+      <h1 className="page-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+        總資產概況
+        <button onClick={handleRecalculate} style={{background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'}}>
+            <span>🔄</span>重新結算
+        </button>
+      </h1>
 
       {/* 【第一層】雙人總資產大看板 */}
       <div className="glass-card" style={{ marginBottom: '20px', textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '25px 15px' }}>
