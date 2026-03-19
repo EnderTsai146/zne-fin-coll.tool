@@ -72,9 +72,7 @@ const TotalOverview = ({ assets, setAssets }) => {
   const isFetchingRef = useRef(false); 
 
   useEffect(() => {
-      // 🛑 終極安全鎖：如果連一筆歷史紀錄都沒有，絕對不准執行打卡！
       if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
-
       if (hasSnapshot || isFetchingRef.current) return;
 
       const runDailySnapshot = async () => {
@@ -221,7 +219,7 @@ const TotalOverview = ({ assets, setAssets }) => {
           )}
         </div>
         
-        {/* 修正文字重疊：改成上下列表排列，並允許換行 */}
+        {/* 上下列表排列 */}
         <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {activeAssets.map((asset) => (
             <div key={asset.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -256,7 +254,7 @@ const TotalOverview = ({ assets, setAssets }) => {
         </div>
       </div>
 
-      {/* 🚀 找回來的：最近變動軌跡 */}
+      {/* 🚀 升級版：最近變動軌跡 (防跑版、顯示餘額、清晰操作者) */}
       <div className="glass-card" style={{ marginBottom: '20px' }}>
         <h3 style={{ marginTop: 0, marginBottom: '15px', color: '#555', fontSize: '1.05rem', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
           🕒 最近資產變動軌跡
@@ -267,7 +265,7 @@ const TotalOverview = ({ assets, setAssets }) => {
             .sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date))
             .slice(0, 6) // 取最新 6 筆
             .map((record, idx) => {
-              // 判斷資金流向與顏色
+              // 1. 判斷資金流向與顏色
               let amountStr = ''; let amountColor = '#333';
               if (['buy', 'spend', 'expense', 'loss'].some(k => record.type.includes(k))) { 
                   amountStr = `-${formatMoney(record.total)}`; 
@@ -280,15 +278,54 @@ const TotalOverview = ({ assets, setAssets }) => {
                   amountColor = '#3498db'; 
               }
 
+              // 2. 精準抓取變動後的帳戶餘額 (透過 auditTrail)
+              let balanceLabel = '';
+              let balanceAmount = null;
+              const stateAfter = record.auditTrail?.after;
+              
+              if (stateAfter) {
+                  if (record.advancedBy) {
+                      if (record.advancedBy === 'userA') { balanceLabel = '恆恆現鈔'; balanceAmount = stateAfter.userA; }
+                      else if (record.advancedBy === 'userB') { balanceLabel = '得得現鈔'; balanceAmount = stateAfter.userB; }
+                      else if (record.advancedBy === 'jointCash') { balanceLabel = '共同現金'; balanceAmount = stateAfter.jointCash; }
+                  } else if (record.accountKey) {
+                      if (record.accountKey === 'userA') { balanceLabel = '恆恆現鈔'; balanceAmount = stateAfter.userA; }
+                      else if (record.accountKey === 'userB') { balanceLabel = '得得現鈔'; balanceAmount = stateAfter.userB; }
+                      else if (record.accountKey === 'jointCash') { balanceLabel = '共同現金'; balanceAmount = stateAfter.jointCash; }
+                  } else {
+                      if (record.payer?.includes('恆恆')) { balanceLabel = '恆恆現鈔'; balanceAmount = stateAfter.userA; }
+                      else if (record.payer?.includes('得得')) { balanceLabel = '得得現鈔'; balanceAmount = stateAfter.userB; }
+                      else if (record.payer?.includes('共同')) { balanceLabel = '共同現金'; balanceAmount = stateAfter.jointCash; }
+                  }
+              }
+
+              // 3. 全新三層式清晰排版
               return (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px dashed #eee' }}>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '2px' }}>{record.date} | {record.operator}</div>
-                    <div style={{ fontWeight: 'bold', color: '#444', fontSize: '0.9rem' }}>{record.note}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#667eea', marginTop: '2px' }}>{record.category} ({record.payer})</div>
+                <div key={idx} style={{ padding: '12px 0', borderBottom: '1px dashed #eee', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {/* 第一層：時間與操作者 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#888' }}>
+                      <span>📅 {record.date}</span>
+                      <span>👤 操作: {record.operator || '系統'}</span>
                   </div>
-                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: amountColor }}>
-                    {amountStr}
+                  
+                  {/* 第二層：明細與金額 (Flexbox 保護，金額絕對不換行) */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flex: 1, wordBreak: 'break-word', paddingRight: '15px' }}>
+                          <span style={{ fontWeight: 'bold', color: '#444', fontSize: '0.95rem', lineHeight: '1.4' }}>{record.note}</span>
+                      </div>
+                      <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: amountColor, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          {amountStr}
+                      </div>
+                  </div>
+
+                  {/* 第三層：分類與交易後真實餘額 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                      <span style={{ color: '#667eea', background: 'rgba(102, 126, 234, 0.1)', padding: '2px 8px', borderRadius: '10px' }}>
+                          {record.category}
+                      </span>
+                      {balanceAmount !== null && (
+                          <span style={{ color: '#7f8c8d' }}>💳 {balanceLabel}: {formatMoney(balanceAmount)}</span>
+                      )}
                   </div>
                 </div>
               );
