@@ -1,5 +1,5 @@
 // src/components/TotalOverview.jsx
-import React, { useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { 
   Chart as ChartJS, ArcElement, Tooltip, Legend, 
   CategoryScale, LinearScale, PointElement, LineElement, Title, Filler 
@@ -15,6 +15,8 @@ const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const TotalOverview = ({ assets, setAssets }) => {
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+
   // --- 1. 計算各項資產現況 (本金視角) ---
   const cashHeng = assets.userA || 0;
   const cashDe = assets.userB || 0;
@@ -27,9 +29,9 @@ const TotalOverview = ({ assets, setAssets }) => {
   const investJoint = sumInvestments(assets.jointInvestments);
   const totalInvest = investHeng + investDe + investJoint;
 
-  const totalAssets = totalCash + totalInvest; // 這是「帳面本金總資產」
+  const totalAssets = totalCash + totalInvest; 
 
-  // --- 2. 🛡️ 完美修復：圓餅圖動態過濾 (解決文字重疊與顏色錯亂) ---
+  // --- 2. 🛡️ 圓餅圖動態過濾 ---
   const assetTypes = [
     { key: 'cash', label: '現金', color: '#2ecc71', val: totalCash },
     { key: 'stock', label: '股票', color: '#ff9f43', val: (assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0) },
@@ -38,7 +40,6 @@ const TotalOverview = ({ assets, setAssets }) => {
     { key: 'other', label: '其他', color: '#c8d6e5', val: (assets.userInvestments?.userA?.other || 0) + (assets.userInvestments?.userB?.other || 0) + (assets.jointInvestments?.other || 0) }
   ];
 
-  // 只保留大於 0 的項目，並精準對應顏色
   const activeAssets = assetTypes.filter(a => a.val > 0);
   const doughnutData = {
     labels: activeAssets.map(a => a.label),
@@ -49,7 +50,7 @@ const TotalOverview = ({ assets, setAssets }) => {
     }]
   };
 
-  // --- 3. 取得目前持股股數 (為快照引擎準備) ---
+  // --- 3. 取得目前持股股數 ---
   const stockHoldings = useMemo(() => {
       const holdings = {};
       (assets.monthlyExpenses || []).filter(r => !r.isDeleted).forEach(r => {
@@ -63,7 +64,7 @@ const TotalOverview = ({ assets, setAssets }) => {
       return holdings;
   }, [assets.monthlyExpenses]);
 
-  // --- 4. 🚀 神級功能：每日打卡快照引擎 (已上安全鎖) ---
+  // --- 4. 🚀 每日打卡快照引擎 ---
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const recordDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
@@ -133,7 +134,7 @@ const TotalOverview = ({ assets, setAssets }) => {
       runDailySnapshot();
   }, [hasSnapshot, stockHoldings, totalCash, totalInvest, assets, setAssets, recordDate]);
 
-  // --- 5. 繪製「歷史與現實交織」的完美折線圖 ---
+  // --- 5. 繪製折線圖 ---
   const historyData = useMemo(() => {
       const chartDataPoints = {};
       
@@ -185,6 +186,21 @@ const TotalOverview = ({ assets, setAssets }) => {
       }
   };
 
+  // --- 6. 軌跡過濾邏輯 ---
+  const displayExpenses = useMemo(() => {
+      let filtered = (assets.monthlyExpenses || []).filter(r => !r.isDeleted);
+      if (dateRange.start) filtered = filtered.filter(r => (r.date || r.month) >= dateRange.start);
+      if (dateRange.end) filtered = filtered.filter(r => (r.date || r.month) <= dateRange.end);
+      
+      filtered.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+      
+      // 如果沒有設定搜尋範圍，預設顯示最新 8 筆；如果有搜尋，就顯示全部符合的結果
+      if (!dateRange.start && !dateRange.end) {
+          return filtered.slice(0, 8);
+      }
+      return filtered;
+  }, [assets.monthlyExpenses, dateRange]);
+
   return (
     <div style={{animation: 'fadeIn 0.5s'}}>
       <h1 className="page-title">總資產概況</h1>
@@ -219,7 +235,6 @@ const TotalOverview = ({ assets, setAssets }) => {
           )}
         </div>
         
-        {/* 上下列表排列 */}
         <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {activeAssets.map((asset) => (
             <div key={asset.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -254,17 +269,22 @@ const TotalOverview = ({ assets, setAssets }) => {
         </div>
       </div>
 
-      {/* 🚀 升級版：最近變動軌跡 (防跑版、顯示餘額、清晰操作者) */}
+      {/* 🚀 找回搜尋與極簡排版的：最近變動軌跡 */}
       <div className="glass-card" style={{ marginBottom: '20px' }}>
         <h3 style={{ marginTop: 0, marginBottom: '15px', color: '#555', fontSize: '1.05rem', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
           🕒 最近資產變動軌跡
         </h3>
-        {assets.monthlyExpenses && assets.monthlyExpenses.filter(r => !r.isDeleted).length > 0 ? (
-          assets.monthlyExpenses
-            .filter(r => !r.isDeleted)
-            .sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date))
-            .slice(0, 6) // 取最新 6 筆
-            .map((record, idx) => {
+
+        {/* 找回來的時間範圍搜尋功能 */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
+            <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
+            <span style={{color:'#888', fontSize:'0.85rem'}}>至</span>
+            <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
+            <button onClick={() => setDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'6px 12px', fontSize:'0.85rem', background: (!dateRange.start && !dateRange.end) ? '#e2e8f0' : '#fff', color:'#333', border:'1px solid #ccc'}}>清除</button>
+        </div>
+
+        {displayExpenses.length > 0 ? (
+          displayExpenses.map((record, idx) => {
               // 1. 判斷資金流向與顏色
               let amountStr = ''; let amountColor = '#333';
               if (['buy', 'spend', 'expense', 'loss'].some(k => record.type.includes(k))) { 
@@ -285,53 +305,51 @@ const TotalOverview = ({ assets, setAssets }) => {
               
               if (stateAfter) {
                   if (record.advancedBy) {
-                      if (record.advancedBy === 'userA') { balanceLabel = '恆恆現鈔'; balanceAmount = stateAfter.userA; }
-                      else if (record.advancedBy === 'userB') { balanceLabel = '得得現鈔'; balanceAmount = stateAfter.userB; }
-                      else if (record.advancedBy === 'jointCash') { balanceLabel = '共同現金'; balanceAmount = stateAfter.jointCash; }
+                      if (record.advancedBy === 'userA') { balanceLabel = '恆恆'; balanceAmount = stateAfter.userA; }
+                      else if (record.advancedBy === 'userB') { balanceLabel = '得得'; balanceAmount = stateAfter.userB; }
+                      else if (record.advancedBy === 'jointCash') { balanceLabel = '共同'; balanceAmount = stateAfter.jointCash; }
                   } else if (record.accountKey) {
-                      if (record.accountKey === 'userA') { balanceLabel = '恆恆現鈔'; balanceAmount = stateAfter.userA; }
-                      else if (record.accountKey === 'userB') { balanceLabel = '得得現鈔'; balanceAmount = stateAfter.userB; }
-                      else if (record.accountKey === 'jointCash') { balanceLabel = '共同現金'; balanceAmount = stateAfter.jointCash; }
+                      if (record.accountKey === 'userA') { balanceLabel = '恆恆'; balanceAmount = stateAfter.userA; }
+                      else if (record.accountKey === 'userB') { balanceLabel = '得得'; balanceAmount = stateAfter.userB; }
+                      else if (record.accountKey === 'jointCash') { balanceLabel = '共同'; balanceAmount = stateAfter.jointCash; }
                   } else {
-                      if (record.payer?.includes('恆恆')) { balanceLabel = '恆恆現鈔'; balanceAmount = stateAfter.userA; }
-                      else if (record.payer?.includes('得得')) { balanceLabel = '得得現鈔'; balanceAmount = stateAfter.userB; }
-                      else if (record.payer?.includes('共同')) { balanceLabel = '共同現金'; balanceAmount = stateAfter.jointCash; }
+                      if (record.payer?.includes('恆恆')) { balanceLabel = '恆恆'; balanceAmount = stateAfter.userA; }
+                      else if (record.payer?.includes('得得')) { balanceLabel = '得得'; balanceAmount = stateAfter.userB; }
+                      else if (record.payer?.includes('共同')) { balanceLabel = '共同'; balanceAmount = stateAfter.jointCash; }
                   }
               }
 
-              // 3. 全新三層式清晰排版
+              // 3. 極簡直觀排版 (加深分隔線 #ccc)
               return (
-                <div key={idx} style={{ padding: '12px 0', borderBottom: '1px dashed #eee', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {/* 第一層：時間與操作者 */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#888' }}>
-                      <span>📅 {record.date}</span>
-                      <span>👤 操作: {record.operator || '系統'}</span>
+                <div key={idx} style={{ padding: '12px 0', borderBottom: '1px dashed #ccc', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  
+                  {/* 第一行：日期與操作者 */}
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>
+                      {record.date} | {record.operator || '系統'}
                   </div>
                   
-                  {/* 第二層：明細與金額 (Flexbox 保護，金額絕對不換行) */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ flex: 1, wordBreak: 'break-word', paddingRight: '15px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#444', fontSize: '0.95rem', lineHeight: '1.4' }}>{record.note}</span>
+                  {/* 第二行：明細內容與金額 (確保金額絕不換行) */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ fontWeight: 'bold', color: '#444', fontSize: '0.95rem', lineHeight: '1.4', paddingRight: '10px', wordBreak: 'break-word' }}>
+                          {record.note}
                       </div>
-                      <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: amountColor, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '1.15rem', color: amountColor, whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {amountStr}
                       </div>
                   </div>
 
-                  {/* 第三層：分類與交易後真實餘額 */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                      <span style={{ color: '#667eea', background: 'rgba(102, 126, 234, 0.1)', padding: '2px 8px', borderRadius: '10px' }}>
-                          {record.category}
-                      </span>
+                  {/* 第三行：分類與餘額 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#667eea' }}>
+                      <span>{record.category} ({record.payer})</span>
                       {balanceAmount !== null && (
-                          <span style={{ color: '#7f8c8d' }}>💳 {balanceLabel}: {formatMoney(balanceAmount)}</span>
+                          <span style={{ color: '#888' }}>💳 {balanceLabel}餘額: {formatMoney(balanceAmount)}</span>
                       )}
                   </div>
                 </div>
               );
             })
         ) : (
-          <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>尚無變動紀錄</div>
+          <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>尚無符合條件的紀錄</div>
         )}
       </div>
 
