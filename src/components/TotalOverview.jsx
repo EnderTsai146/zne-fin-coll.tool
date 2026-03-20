@@ -28,7 +28,7 @@ const TotalOverview = ({ assets, setAssets }) => {
   const isBackingUpRef = useRef(false);
   const todayStr = formatDate(today);
 
-  // --- 0. 自動無感備份引擎 (修復假警報 CORS 錯誤) ---
+  // --- 0. 自動無感備份引擎 ---
   useEffect(() => {
       if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
       if (assets.lastBackupDate === todayStr || isBackingUpRef.current) return; 
@@ -43,7 +43,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                   redirect: 'follow'
               });
               const text = await res.text();
-              // 只要回傳的文字包含 success 就代表 Google 已經存檔成功
               if (text.includes('success')) {
                   setBackupWarning(false);
                   setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
@@ -225,28 +224,40 @@ const TotalOverview = ({ assets, setAssets }) => {
       }
   };
 
-  // --- 4. 🚀 精準科目的歷史軌跡 (支援自動修補過去的淺拷貝 Bug) ---
-  const formatTime = (ts) => {
-      if (!ts) return ''; const d = new Date(ts);
-      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+  // --- 4. 🚀 精準科目的歷史軌跡 (高對比＋時空分離版) ---
+  
+  // 🌟 將 Timestamp 轉換為完整的「登錄日期與時間」
+  const formatDateTime = (ts) => {
+      if (!ts) return ''; 
+      const d = new Date(ts);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
   };
 
-  // 用於判斷投資是否改變 (忽略被淺拷貝損壞的資料，直接依靠總額邏輯)
-  const isTargetAccountTransaction = (record, target) => {
-      if (target === 'userA') return record.payer?.includes('恆恆') || record.advancedBy === 'userA' || record.accountKey === 'userA';
-      if (target === 'userB') return record.payer?.includes('得得') || record.advancedBy === 'userB' || record.accountKey === 'userB';
-      if (target === 'jointCash') return record.payer === '共同帳戶' || record.advancedBy === 'jointCash' || record.accountKey === 'jointCash';
-      return false;
+  const hasInvDiff = (b, a) => {
+      const bInv = b || {}; const aInv = a || {};
+      return (bInv.stock || 0) !== (aInv.stock || 0) ||
+             (bInv.fund || 0) !== (aInv.fund || 0) ||
+             (bInv.deposit || 0) !== (aInv.deposit || 0) ||
+             (bInv.other || 0) !== (aInv.other || 0);
   };
 
   const getAccountHistory = () => {
       if (!activeHistory) return [];
       let filtered = (assets.monthlyExpenses || []).filter(r => !r.isDeleted);
       
-      // 不再單純依賴 aInv 和 bInv 字串比對，而是直接看這筆交易是誰做的
       filtered = filtered.filter(r => {
           if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) return false;
-          return isTargetAccountTransaction(r, activeHistory);
+          const b = r.auditTrail.before; const a = r.auditTrail.after;
+          if (activeHistory === 'userA') return b.userA !== a.userA || hasInvDiff(b.userInvestments?.userA, a.userInvestments?.userA);
+          if (activeHistory === 'userB') return b.userB !== a.userB || hasInvDiff(b.userInvestments?.userB, a.userInvestments?.userB);
+          if (activeHistory === 'jointCash') return b.jointCash !== a.jointCash || hasInvDiff(b.jointInvestments, a.jointInvestments);
+          return false;
       });
 
       if (historyDateRange.start) filtered = filtered.filter(r => (r.date || r.month) >= historyDateRange.start);
@@ -407,64 +418,72 @@ const TotalOverview = ({ assets, setAssets }) => {
                     
                     let bCash = 0, aCash = 0, bInv = 0, aInv = 0;
                     let cashDiff = 0, invDiff = 0;
+                    let label = "";
                     
                     if (b && a) {
                         if (activeHistory === 'userA') {
+                            label = "恆恆";
                             bCash = b.userA || 0; aCash = a.userA || 0;
                             bInv = sumInvestments(b.userInvestments?.userA); aInv = sumInvestments(a.userInvestments?.userA);
                         } else if (activeHistory === 'userB') {
+                            label = "得得";
                             bCash = b.userB || 0; aCash = a.userB || 0;
                             bInv = sumInvestments(b.userInvestments?.userB); aInv = sumInvestments(a.userInvestments?.userB);
                         } else if (activeHistory === 'jointCash') {
+                            label = "共同";
                             bCash = b.jointCash || 0; aCash = a.jointCash || 0;
                             bInv = sumInvestments(b.jointInvestments); aInv = sumInvestments(a.jointInvestments);
                         }
                         cashDiff = aCash - bCash;
                         invDiff = aInv - bInv;
 
-                        // 🛠️ 歷史快照 BUG 強制修補邏輯！
-                        // 如果是投資操作，但 invDiff 卻顯示 0，強制把數字算回去，讓歷史畫面也完美！
                         if (invDiff === 0 && (record.type.includes('invest_buy') || record.type.includes('invest_sell'))) {
                             if (record.type.includes('buy')) invDiff = Number(record.total);
                             if (record.type.includes('sell')) invDiff = -Number(record.principal);
-                            bInv = aInv - invDiff; // 偷偷把變動前的本金修好
+                            bInv = aInv - invDiff; 
                         }
                     }
 
                     return (
-                        <div key={idx} style={{ padding: '15px 0', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#888', display:'flex', justifyContent:'space-between' }}>
-                                <span>📅 {record.date} | ⏱ {formatTime(record.timestamp)}</span>
-                                <span>👤 操作: {record.operator || '系統'}</span>
+                        <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {/* 第一行：時空分離顯示區 */}
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', display:'flex', justifyContent:'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.4)', padding: '4px 8px', borderRadius: '6px' }}>
+                                <span style={{fontWeight: 'bold', color: '#475569'}}>📅 帳單日: {record.date}</span>
+                                <span>⏱ 登錄: {formatDateTime(record.timestamp)} | 👤 {record.operator || '系統'}</span>
                             </div>
                             
+                            {/* 第二行：雙向動態顯示「現金」與「投資」的增減 */}
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
                                 {cashDiff !== 0 && (
-                                    <div style={{ color: cashDiff > 0 ? '#2ecc71' : '#e74c3c', fontWeight: 'bold', fontSize: '0.95rem' }}>
-                                        [現鈔] {cashDiff > 0 ? '增加' : '扣除'} {cashDiff > 0 ? '+' : ''}{formatMoney(cashDiff)}
+                                    <div style={{ color: cashDiff > 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold', fontSize: '1rem' }}>
+                                        [{label}現鈔] {cashDiff > 0 ? '增加' : '扣除'} {cashDiff > 0 ? '+' : ''}{formatMoney(cashDiff)}
                                     </div>
                                 )}
                                 {invDiff !== 0 && (
-                                    <div style={{ color: invDiff > 0 ? '#2ecc71' : '#e74c3c', fontWeight: 'bold', fontSize: '0.95rem' }}>
-                                        [投資] {invDiff > 0 ? '增加' : '扣除'} {invDiff > 0 ? '+' : ''}{formatMoney(invDiff)}
+                                    <div style={{ color: invDiff > 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold', fontSize: '1rem' }}>
+                                        [{label}投資] {invDiff > 0 ? '增加' : '扣除'} {invDiff > 0 ? '+' : ''}{formatMoney(invDiff)}
                                     </div>
                                 )}
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '8px 10px', borderRadius: '8px', marginTop: '2px' }}>
-                                <div style={{ color: '#444', fontSize: '0.9rem', wordBreak: 'break-word', paddingRight: '10px' }}>📝 {record.note}</div>
-                                <div style={{ fontSize: '0.85rem', color: '#666', whiteSpace: 'nowrap' }}>
+                            {/* 第三行：操作明細 */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ color: '#334155', fontSize: '0.95rem', wordBreak: 'break-word', paddingRight: '10px', fontWeight: 'bold' }}>
+                                    📝 {record.note}
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap' }}>
                                     總額: {formatMoney(record.total)}
                                 </div>
                             </div>
                             
+                            {/* 第四行：完美高對比「變動前後」的狀態表 */}
                             {b && a && (
-                                <div style={{ fontSize: '0.8rem', color: '#666', background: '#f8f9fa', padding: '8px 12px', borderRadius: '8px', border: '1px solid #eee', marginTop: '4px' }}>
+                                <div style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.6)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.05)', marginTop: '4px' }}>
                                     <div style={{ marginBottom: '4px', display:'flex', justifyContent:'space-between' }}>
-                                        <span style={{color:'#999'}}>變動前：</span>
-                                        <span style={{color:'#999'}}>現 {formatMoney(bCash)} ｜ 投 {formatMoney(bInv)}</span>
+                                        <span style={{color:'#94a3b8'}}>變動前：</span>
+                                        <span style={{color:'#94a3b8'}}>現 {formatMoney(bCash)} ｜ 投 {formatMoney(bInv)}</span>
                                     </div>
-                                    <div style={{ display:'flex', justifyContent:'space-between', fontWeight:'bold', color:'#555' }}>
+                                    <div style={{ display:'flex', justifyContent:'space-between', fontWeight:'bold', color:'#475569' }}>
                                         <span>變動後：</span>
                                         <span>現 {formatMoney(aCash)} ｜ 投 {formatMoney(aInv)}</span>
                                     </div>
