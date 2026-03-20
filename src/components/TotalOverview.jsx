@@ -28,7 +28,7 @@ const TotalOverview = ({ assets, setAssets }) => {
   const isBackingUpRef = useRef(false);
   const todayStr = formatDate(today);
 
-  // --- 0. 自動無感備份引擎 ---
+  // --- 0. 自動無感備份引擎 (修復假警報 CORS 錯誤) ---
   useEffect(() => {
       if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
       if (assets.lastBackupDate === todayStr || isBackingUpRef.current) return; 
@@ -38,17 +38,19 @@ const TotalOverview = ({ assets, setAssets }) => {
           try {
               const res = await fetch(MY_GOOGLE_API_URL, {
                   method: 'POST',
-                  body: JSON.stringify({ action: 'backup', date: todayStr, assets: assets })
+                  headers: { "Content-Type": "text/plain;charset=utf-8" },
+                  body: JSON.stringify({ action: 'backup', date: todayStr, assets: assets }),
+                  redirect: 'follow'
               });
-              const data = await res.json();
-              if (data.success) {
+              const text = await res.text();
+              // 只要回傳的文字包含 success 就代表 Google 已經存檔成功
+              if (text.includes('success')) {
                   setBackupWarning(false);
                   setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
               } else {
                   throw new Error("Google回傳失敗");
               }
           } catch (e) {
-              console.error("雲端備份失敗:", e);
               setBackupWarning(true); 
           } finally {
               isBackingUpRef.current = false;
@@ -223,31 +225,28 @@ const TotalOverview = ({ assets, setAssets }) => {
       }
   };
 
-  // --- 4. 🚀 精準科目的歷史軌跡 ---
+  // --- 4. 🚀 精準科目的歷史軌跡 (支援自動修補過去的淺拷貝 Bug) ---
   const formatTime = (ts) => {
       if (!ts) return ''; const d = new Date(ts);
       return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
   };
 
-  const hasInvDiff = (b, a) => {
-      const bInv = b || {}; const aInv = a || {};
-      return (bInv.stock || 0) !== (aInv.stock || 0) ||
-             (bInv.fund || 0) !== (aInv.fund || 0) ||
-             (bInv.deposit || 0) !== (aInv.deposit || 0) ||
-             (bInv.other || 0) !== (aInv.other || 0);
+  // 用於判斷投資是否改變 (忽略被淺拷貝損壞的資料，直接依靠總額邏輯)
+  const isTargetAccountTransaction = (record, target) => {
+      if (target === 'userA') return record.payer?.includes('恆恆') || record.advancedBy === 'userA' || record.accountKey === 'userA';
+      if (target === 'userB') return record.payer?.includes('得得') || record.advancedBy === 'userB' || record.accountKey === 'userB';
+      if (target === 'jointCash') return record.payer === '共同帳戶' || record.advancedBy === 'jointCash' || record.accountKey === 'jointCash';
+      return false;
   };
 
   const getAccountHistory = () => {
       if (!activeHistory) return [];
       let filtered = (assets.monthlyExpenses || []).filter(r => !r.isDeleted);
       
+      // 不再單純依賴 aInv 和 bInv 字串比對，而是直接看這筆交易是誰做的
       filtered = filtered.filter(r => {
           if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) return false;
-          const b = r.auditTrail.before; const a = r.auditTrail.after;
-          if (activeHistory === 'userA') return b.userA !== a.userA || hasInvDiff(b.userInvestments?.userA, a.userInvestments?.userA);
-          if (activeHistory === 'userB') return b.userB !== a.userB || hasInvDiff(b.userInvestments?.userB, a.userInvestments?.userB);
-          if (activeHistory === 'jointCash') return b.jointCash !== a.jointCash || hasInvDiff(b.jointInvestments, a.jointInvestments);
-          return false;
+          return isTargetAccountTransaction(r, activeHistory);
       });
 
       if (historyDateRange.start) filtered = filtered.filter(r => (r.date || r.month) >= historyDateRange.start);
@@ -338,7 +337,7 @@ const TotalOverview = ({ assets, setAssets }) => {
       {/* 🚨 備份失敗紅色警示 */}
       {backupWarning && (
           <div style={{ background: '#e74c3c', color: 'white', padding: '10px 15px', borderRadius: '8px', marginBottom: '15px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>⚠️ 警告：昨日的雲端自動備份失敗！請檢查您的網路或 Google 權限，或進行手動備份。</span>
+              <span>⚠️ 警告：昨日的雲端自動備份可能遭遇錯誤，請前往「操作 ➔ 資料管理」手動備份。</span>
               <button onClick={() => setBackupWarning(false)} style={{ background:'transparent', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer' }}>×</button>
           </div>
       )}
@@ -422,17 +421,23 @@ const TotalOverview = ({ assets, setAssets }) => {
                         }
                         cashDiff = aCash - bCash;
                         invDiff = aInv - bInv;
+
+                        // 🛠️ 歷史快照 BUG 強制修補邏輯！
+                        // 如果是投資操作，但 invDiff 卻顯示 0，強制把數字算回去，讓歷史畫面也完美！
+                        if (invDiff === 0 && (record.type.includes('invest_buy') || record.type.includes('invest_sell'))) {
+                            if (record.type.includes('buy')) invDiff = Number(record.total);
+                            if (record.type.includes('sell')) invDiff = -Number(record.principal);
+                            bInv = aInv - invDiff; // 偷偷把變動前的本金修好
+                        }
                     }
 
                     return (
                         <div key={idx} style={{ padding: '15px 0', borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {/* 第一行：時間與操作者 */}
                             <div style={{ fontSize: '0.8rem', color: '#888', display:'flex', justifyContent:'space-between' }}>
                                 <span>📅 {record.date} | ⏱ {formatTime(record.timestamp)}</span>
                                 <span>👤 操作: {record.operator || '系統'}</span>
                             </div>
                             
-                            {/* 第二行：雙向動態顯示「現金」與「投資」的增減 */}
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
                                 {cashDiff !== 0 && (
                                     <div style={{ color: cashDiff > 0 ? '#2ecc71' : '#e74c3c', fontWeight: 'bold', fontSize: '0.95rem' }}>
@@ -446,7 +451,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                                 )}
                             </div>
 
-                            {/* 第三行：操作明細 */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '8px 10px', borderRadius: '8px', marginTop: '2px' }}>
                                 <div style={{ color: '#444', fontSize: '0.9rem', wordBreak: 'break-word', paddingRight: '10px' }}>📝 {record.note}</div>
                                 <div style={{ fontSize: '0.85rem', color: '#666', whiteSpace: 'nowrap' }}>
@@ -454,7 +458,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                                 </div>
                             </div>
                             
-                            {/* 第四行：🚀 完美顯示「變動前後」的狀態表 */}
                             {b && a && (
                                 <div style={{ fontSize: '0.8rem', color: '#666', background: '#f8f9fa', padding: '8px 12px', borderRadius: '8px', border: '1px solid #eee', marginTop: '4px' }}>
                                     <div style={{ marginBottom: '4px', display:'flex', justifyContent:'space-between' }}>

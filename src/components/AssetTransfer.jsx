@@ -3,6 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
+// 🚀 你的專屬 Google API
+const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
+
 const SegmentedControl = ({ options, value, onChange, disabledValue }) => (
   <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: '12px', padding: '4px', gap: '4px', flexWrap: 'wrap' }}>
     {options.map(opt => {
@@ -60,83 +63,45 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // ★ 升級：裝甲級多重備援智慧搜尋引擎
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (stockSymbol.length >= 1 && showDropdown) {
         setIsSearching(true);
-        
-        // 🛡️ 自建 100% 相容的 Timeout 機制 (3秒沒反應就切換)
-        const fetchWithTimeout = (resource, timeout = 3000) => {
-            return Promise.race([
-                fetch(resource),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('搜尋連線逾時')), timeout))
-            ]);
-        };
-
-        const targetUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(stockSymbol)}&quotesCount=6`;
-        
-        // 🚀 多重代理伺服器輪替陣列
-        const proxies = [
-            (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
-        ];
-
-        let successData = null;
-
-        for (const proxy of proxies) {
-            try {
-                const res = await fetchWithTimeout(proxy(targetUrl), 3000);
-                if (!res.ok) continue; // 如果失敗，直接換下一條通道
-                const data = await res.json();
-                if (data && data.quotes) {
-                    successData = data.quotes;
-                    break; // 成功就跳出迴圈
-                }
-            } catch(err) {
-                console.warn("搜尋 Proxy 切換中..."); 
-            }
-        }
-
-        if (successData) {
-            // 過濾出股票或ETF
-            setSearchResults(successData.filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF' || q.quoteType === 'MUTUALFUND'));
-        } else {
-            setSearchResults([]); // 全部失敗則清空
-        }
-        
+        try {
+          const res = await fetch(`${MY_GOOGLE_API_URL}?search=${encodeURIComponent(stockSymbol)}`, { redirect: 'follow' });
+          const data = await res.json();
+          if (data && data.quotes) setSearchResults(data.quotes.filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF' || q.quoteType === 'MUTUALFUND'));
+          else setSearchResults([]); 
+        } catch(err) { setSearchResults([]); }
         setIsSearching(false);
-      } else { 
-        setSearchResults([]); 
-      }
-    }, 600); // 延長到 0.6 秒防手震，避免打字太快被 Yahoo 鎖 IP
+      } else { setSearchResults([]); }
+    }, 600); 
     return () => clearTimeout(timer);
   }, [stockSymbol, showDropdown]);
 
   useEffect(() => {
     if (investType !== 'stock' || investAction === 'day_trade' || stockMarket === 'US') return;
-
     const p = Number(stockPrice) || 0;
     const s = Number(stockShares) || 0;
     if (p === 0 || s === 0) return;
-
     const baseAmount = p * s;
     const fee = Math.max(20, Math.floor(baseAmount * 0.001425 * 0.6));
-    if (investAction === 'buy') {
-        setInvestAmount(Math.round(baseAmount + fee).toString());
-    } else if (investAction === 'sell') {
+    if (investAction === 'buy') setInvestAmount(Math.round(baseAmount + fee).toString());
+    else if (investAction === 'sell') {
         const tax = Math.floor(baseAmount * 0.003); 
         setInvestAmount(Math.round(baseAmount - fee - tax).toString());
     }
   }, [stockPrice, stockShares, stockMarket, investAction, investType]);
+
+  // 🛡️ 修復：全面採用「深拷貝 (Deep Copy)」防止快照異常
+  const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
 
   const handleIncomeSubmit = () => {
     const val = parseInt(incomeAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
     const userName = incomeUser === 'userA' ? '恆恆🐶' : '得得🐕';
     if (!window.confirm(`確定要記錄 ${userName} 收入 ${formatMoney(val)} 嗎？`)) return;
-    const newAssets = { ...assets };
+    const newAssets = getDeepCopy(assets);
     newAssets[incomeUser] += val;
     onTransaction(newAssets, { type: 'income', category: '個人收入', payer: userName, total: val, note: incomeNote.trim() || '一般收入', month: txDate.slice(0, 7), date: txDate });
     alert(`✅ 已記錄收入：${formatMoney(val)}`);
@@ -149,7 +114,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     if (assets[transSource] < val) return alert("❌ 個人餘額不足！");
     const userName = transSource === 'userA' ? '恆恆🐶' : '得得🐕';
     if (!window.confirm(`確定要從 ${userName} 上繳 ${formatMoney(val)} 至共同帳戶嗎？`)) return;
-    const newAssets = { ...assets };
+    const newAssets = getDeepCopy(assets);
     newAssets[transSource] -= val;
     newAssets.jointCash += val;
     onTransaction(newAssets, { type: 'transfer', category: '資產劃撥', payer: userName, total: val, note: `轉移至 共同現金`, month: txDate.slice(0, 7), date: txDate });
@@ -161,19 +126,17 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     const val = parseInt(investAmount); 
     if (!val || val <= 0) return alert("請確認最終交割總額！");
 
-    const newAssets = { ...assets };
+    const newAssets = getDeepCopy(assets);
     if (!newAssets.userInvestments) newAssets.userInvestments = { userA: { stock:0, fund:0, deposit:0, other:0 }, userB: { stock:0, fund:0, deposit:0, other:0 } };
 
     const isJoint = investAccount === 'jointCash';
     const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '恆恆🐶' : '得得🐕');
     
-    // ★ 終極防呆機制：自動為台股補齊 .TW
     let finalSymbol = stockSymbol ? stockSymbol.toUpperCase().trim() : '';
     if (investType === 'stock' && stockMarket === 'TW' && finalSymbol && !finalSymbol.includes('.')) {
         finalSymbol += '.TW';
-        // 只有買入時跳出友善提醒，教育使用者
         if (investAction === 'buy') {
-            window.alert(`💡 系統防呆介入：已自動將代號補齊為「${finalSymbol}」\n\n⚠️ 注意：若您的股票為「上櫃公司」(如群聯、坤悅)，字尾必須是 .TWO 才能抓到股價。\n\n強烈建議下次輸入時，直接「點擊下拉選單」讓系統自動帶入正確代號！`);
+            window.alert(`💡 系統防呆介入：已自動將代號補齊為「${finalSymbol}」\n\n⚠️ 注意：若您的股票為「上櫃公司」(如群聯、坤悅)，字尾必須是 .TWO 才能抓到股價。`);
         }
     }
 
@@ -200,6 +163,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         if (newAssets[investAccount] < val) return alert(`❌ ${accountName} 現金餘額不足以交割！`);
         if (!window.confirm(`確定用「${accountName}」買入「${label}」\n總交割金額：${formatMoney(val)} 嗎？`)) return;
 
+        // 這裡就是原本造成 Bug 的地方，因為換成深拷貝，現在改動不會污染原始 assets 了！
         newAssets[investAccount] -= val;
         if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
 
@@ -243,7 +207,9 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     link.href = URL.createObjectURL(blob); link.download = `雙人資產備份_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
+
   const handleImportClick = () => fileInputRef.current.click();
+  
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -256,6 +222,27 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
       } catch (err) { alert("❌ 讀取失敗。"); }
     };
     reader.readAsText(file); e.target.value = '';
+  };
+
+  // 🚀 新增功能：手動雲端備份
+  const [isManualBackingUp, setIsManualBackingUp] = useState(false);
+  const handleManualBackup = async () => {
+      setIsManualBackingUp(true);
+      try {
+          const res = await fetch(MY_GOOGLE_API_URL, {
+              method: 'POST',
+              headers: { "Content-Type": "text/plain;charset=utf-8" },
+              body: JSON.stringify({ action: 'backup', date: new Date().toISOString().split('T')[0], assets: assets }),
+              redirect: 'follow'
+          });
+          const text = await res.text();
+          if(text.includes('success')) alert('✅ 成功備份至 Google 雲端硬碟！');
+          else throw new Error("API 錯誤");
+      } catch(e) {
+          alert('❌ 備份失敗，請檢查網路');
+      } finally {
+          setIsManualBackingUp(false);
+      }
   };
 
   return (
@@ -302,8 +289,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                    <div style={{flex:1, position: 'relative'}}>
                      <label style={{fontSize:'0.8rem', color:'#666'}}>股票代號/名稱</label>
                      <input type="text" className="glass-input" value={stockSymbol} onChange={e => { setStockSymbol(e.target.value.toUpperCase()); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onBlur={() => setTimeout(() => setShowDropdown(false), 200)} placeholder="例: 2330 或 台積電" />
-                     
-                     {/* ★ 搜尋結果下拉選單 */}
                      {showDropdown && (searchResults.length > 0 || isSearching) && (
                          <div style={{position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', zIndex: 50, borderRadius: '8px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', overflow: 'hidden', marginTop: '4px', border: '1px solid #ddd'}}>
                              {isSearching ? <div style={{padding:'10px', fontSize:'0.85rem', color:'#888', textAlign:'center'}}>📡 尋找股號中...</div> : searchResults.map((item, idx) => ( <div key={idx} onClick={() => { setStockSymbol(item.symbol); setShowDropdown(false); }} style={{padding: '10px 12px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}> <strong style={{color:'#8e44ad', fontSize:'0.9rem'}}>{item.symbol}</strong> <span style={{color:'#666', fontSize:'0.75rem', textAlign:'right', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginLeft:'10px'}}> {item.shortname || item.longname} </span> </div> ))}
@@ -360,11 +345,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
                <span>{investAction === 'buy' ? '最終交割總額 (台幣)' : investAction === 'sell' ? '最終拿回現金 (台幣)' : '結算淨差額 (台幣)'}</span>
             </label>
             <input type="number" inputMode="numeric" className="glass-input" style={{fontSize:'1.2rem', fontWeight:'bold', color:'#2c3e50'}} value={investAmount} onChange={(e)=>setInvestAmount(e.target.value)} placeholder="0" />
-            {investType === 'stock' && investAction !== 'day_trade' && (
-                <div style={{fontSize:'0.75rem', color:'#888', marginTop:'4px'}}>
-                   {stockMarket === 'US' ? '* 系統已根據美金總額與匯率精準換算' : '* 系統已為您試算手續費，若有尾數落差可直接修改上方金額'}
-                </div>
-            )}
           </div>
 
           {investAction === 'sell' && (
@@ -396,13 +376,17 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
+      {/* 💾 資料管理 ＋ 手動備份區 */}
       <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
         <h3 style={{color:'#666', marginBottom:'15px'}}>💾 資料管理</h3>
-        <div style={{display:'flex', gap:'15px'}}>
+        <div style={{display:'flex', gap:'15px', marginBottom:'10px'}}>
             <button className="glass-btn" style={{flex:1, background: '#1d1d1f', color:'white', fontSize:'0.9rem'}} onClick={handleExport}>📥 匯出</button>
             <button className="glass-btn" style={{flex:1, background: 'rgba(255,255,255,0.8)', color:'#1d1d1f', border:'1px solid #ccc', fontSize:'0.9rem'}} onClick={handleImportClick}>📤 匯入</button>
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept=".json" onChange={handleFileChange} />
         </div>
+        <button onClick={handleManualBackup} disabled={isManualBackingUp} className="glass-btn" style={{width:'100%', background: '#3498db', color:'white', fontWeight:'bold', border:'none'}}>
+            {isManualBackingUp ? '備份中...' : '☁️ 手動備份至雲端'}
+        </button>
       </div>
     </div>
   );
