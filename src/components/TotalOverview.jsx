@@ -29,6 +29,7 @@ const TotalOverview = ({ assets, setAssets }) => {
   const todayStr = formatDate(today);
 
   // --- 0. 自動無感備份引擎 ---
+  // --- 0. 自動無感備份引擎 ---
   useEffect(() => {
       if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
       if (assets.lastBackupDate === todayStr || isBackingUpRef.current) return; 
@@ -39,7 +40,13 @@ const TotalOverview = ({ assets, setAssets }) => {
               const res = await fetch(MY_GOOGLE_API_URL, {
                   method: 'POST',
                   headers: { "Content-Type": "text/plain;charset=utf-8" },
-                  body: JSON.stringify({ action: 'backup', date: todayStr, assets: assets }),
+                  // 🚀 加入專屬的自動備份檔名
+                  body: JSON.stringify({ 
+                      action: 'backup', 
+                      date: todayStr, 
+                      fileName: `自動備份_${todayStr}.json`,
+                      assets: assets 
+                  }),
                   redirect: 'follow'
               });
               const text = await res.text();

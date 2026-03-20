@@ -225,18 +225,29 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   };
 
   // 🚀 新增功能：手動雲端備份
+  // 🚀 新增功能：手動雲端備份 (加上時分秒，絕對不覆蓋！)
   const [isManualBackingUp, setIsManualBackingUp] = useState(false);
   const handleManualBackup = async () => {
       setIsManualBackingUp(true);
       try {
+          const now = new Date();
+          const todayDate = now.toISOString().split('T')[0];
+          // 產生例如：14點30分22秒
+          const timeStr = `${String(now.getHours()).padStart(2, '0')}點${String(now.getMinutes()).padStart(2, '0')}分${String(now.getSeconds()).padStart(2, '0')}秒`;
+          
           const res = await fetch(MY_GOOGLE_API_URL, {
               method: 'POST',
               headers: { "Content-Type": "text/plain;charset=utf-8" },
-              body: JSON.stringify({ action: 'backup', date: new Date().toISOString().split('T')[0], assets: assets }),
+              body: JSON.stringify({ 
+                  action: 'backup', 
+                  date: todayDate, 
+                  fileName: `手動備份_${todayDate}_${timeStr}.json`,
+                  assets: assets 
+              }),
               redirect: 'follow'
           });
           const text = await res.text();
-          if(text.includes('success')) alert('✅ 成功備份至 Google 雲端硬碟！');
+          if(text.includes('success')) alert('✅ 成功備份至 Google 雲端硬碟！請至雲端硬碟確認檔案。');
           else throw new Error("API 錯誤");
       } catch(e) {
           alert('❌ 備份失敗，請檢查網路');
