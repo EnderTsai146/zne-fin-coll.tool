@@ -14,7 +14,7 @@ const formatDate = (date) => date.toISOString().split('T')[0];
 const today = new Date();
 const lastYear = new Date(); lastYear.setFullYear(today.getFullYear() - 1);
 
-// 🚀 請換成你的 Google API 網址！
+// 🚀 你的專屬 Google API 網址 (已自動帶入)
 const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const TotalOverview = ({ assets, setAssets }) => {
@@ -28,42 +28,40 @@ const TotalOverview = ({ assets, setAssets }) => {
   const isBackingUpRef = useRef(false);
   const todayStr = formatDate(today);
 
-  // --- 0. 自動無感備份引擎 ---
-  // --- 0. 自動無感備份引擎 ---
+  // --- 0. 🚀 自動無感備份引擎 (加入 3 秒防抖冷卻機制) ---
   useEffect(() => {
       if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
-      if (assets.lastBackupDate === todayStr || isBackingUpRef.current) return; 
+      if (assets.lastBackupDate === todayStr) return; // 今天已備份過就不再備份
 
-      const runBackup = async () => {
+      // 🌟 核心修復：延遲 3 秒執行。確保 App 剛開啟時的各項資料更新都已完成，避免網路請求被中斷而產生假警報
+      const timer = setTimeout(async () => {
+          if (isBackingUpRef.current) return;
           isBackingUpRef.current = true;
           try {
               const res = await fetch(MY_GOOGLE_API_URL, {
                   method: 'POST',
                   headers: { "Content-Type": "text/plain;charset=utf-8" },
-                  // 🚀 加入專屬的自動備份檔名
-                  body: JSON.stringify({ 
-                      action: 'backup', 
-                      date: todayStr, 
-                      fileName: `自動備份_${todayStr}.json`,
-                      assets: assets 
-                  }),
+                  body: JSON.stringify({ action: 'backup', date: todayStr, fileName: `自動備份_${todayStr}.json`, assets: assets }),
                   redirect: 'follow'
               });
               const text = await res.text();
               if (text.includes('success')) {
                   setBackupWarning(false);
-                  setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
+                  setAssets(prev => ({ ...prev, lastBackupDate: todayStr })); // 標記今天已完成
               } else {
-                  throw new Error("Google回傳失敗");
+                  throw new Error("Google回傳狀態異常");
               }
           } catch (e) {
+              console.error("雲端自動備份失敗:", e);
               setBackupWarning(true); 
           } finally {
               isBackingUpRef.current = false;
           }
-      };
-      runBackup();
-  }, [assets.monthlyExpenses, assets.lastBackupDate, todayStr, setAssets, assets]);
+      }, 3000); // 等待 3 秒
+
+      // 如果 3 秒內 assets 又有變動，就取消上一次的計時，重新倒數 3 秒 (這就是防抖 Debounce)
+      return () => clearTimeout(timer);
+  }, [assets, todayStr, setAssets]);
 
 
   // --- 1. 計算資產現況 ---
@@ -231,27 +229,16 @@ const TotalOverview = ({ assets, setAssets }) => {
       }
   };
 
-  // --- 4. 🚀 精準科目的歷史軌跡 (高對比＋時空分離版) ---
-  
-  // 🌟 將 Timestamp 轉換為完整的「登錄日期與時間」
+  // --- 4. 🚀 精準科目的歷史軌跡 ---
   const formatDateTime = (ts) => {
       if (!ts) return ''; 
       const d = new Date(ts);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      const hh = String(d.getHours()).padStart(2, '0');
-      const min = String(d.getMinutes()).padStart(2, '0');
-      const ss = String(d.getSeconds()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
   };
 
   const hasInvDiff = (b, a) => {
       const bInv = b || {}; const aInv = a || {};
-      return (bInv.stock || 0) !== (aInv.stock || 0) ||
-             (bInv.fund || 0) !== (aInv.fund || 0) ||
-             (bInv.deposit || 0) !== (aInv.deposit || 0) ||
-             (bInv.other || 0) !== (aInv.other || 0);
+      return (bInv.stock || 0) !== (aInv.stock || 0) || (bInv.fund || 0) !== (aInv.fund || 0) || (bInv.deposit || 0) !== (aInv.deposit || 0) || (bInv.other || 0) !== (aInv.other || 0);
   };
 
   const getAccountHistory = () => {
@@ -276,7 +263,6 @@ const TotalOverview = ({ assets, setAssets }) => {
           if (dateA !== dateB) return dateB.localeCompare(dateA); 
           return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime(); 
       });
-      
       return filtered;
   };
 
@@ -300,8 +286,15 @@ const TotalOverview = ({ assets, setAssets }) => {
       
       let netTransactions = 0;
       dayRecords.forEach(r => {
-          if (['buy', 'spend', 'expense', 'loss'].some(k => r.type.includes(k))) netTransactions -= Number(r.total);
-          else if (['sell', 'liquidate', 'income', 'profit', 'transfer'].some(k => r.type.includes(k))) netTransactions += Number(r.total);
+          const isRealOutflow = ['spend', 'expense', 'fixed'].includes(r.type);
+          const isRealInflow = ['income', 'personal_invest_profit'].includes(r.type);
+          const isRealLoss = ['personal_invest_loss'].includes(r.type);
+          
+          if (isRealOutflow || isRealLoss) {
+              netTransactions -= Number(r.total);
+          } else if (isRealInflow) {
+              netTransactions += Number(r.total);
+          }
       });
 
       const marketFluctuation = diff - netTransactions;
@@ -323,16 +316,27 @@ const TotalOverview = ({ assets, setAssets }) => {
               {dayRecords.length > 0 && (
                   <div style={{ marginBottom: '12px', background:'rgba(255,255,255,0.7)', padding:'10px', borderRadius:'8px' }}>
                       <div style={{ fontSize: '0.8rem', color: '#888', borderBottom: '1px solid #ddd', paddingBottom: '4px', marginBottom: '6px' }}>
-                          📝 當日人為記帳 (淨額: <span style={{color: netTransactions>=0?'#27ae60':'#c0392b', fontWeight:'bold'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
+                          📝 當日人為操作 (實質淨額影響: <span style={{color: netTransactions>=0?'#27ae60':'#c0392b', fontWeight:'bold'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
                       </div>
                       {dayRecords.map((r, i) => {
-                          let sign = ['buy', 'spend', 'expense', 'loss'].some(k => r.type.includes(k)) ? '-' : '+';
-                          let color = sign === '-' ? '#e74c3c' : '#2ecc71';
-                          if (r.type === 'transfer') { sign = ''; color = '#3498db'; }
+                          const isExternalOut = ['spend', 'expense', 'fixed', 'personal_invest_loss'].includes(r.type);
+                          const isExternalIn = ['income', 'personal_invest_profit'].includes(r.type);
+                          
+                          let sign = ''; let color = '#888'; let isNeutral = true;
+                          
+                          if (isExternalOut) { sign = '-'; color = '#e74c3c'; isNeutral = false; }
+                          else if (isExternalIn) { sign = '+'; color = '#2ecc71'; isNeutral = false; }
+                          else if (r.type.includes('sell')) { sign = '+'; color = '#3498db'; } 
+                          else if (r.type.includes('buy')) { sign = '-'; color = '#3498db'; } 
+                          else { sign = '🔄 '; color = '#9b59b6'; } 
+                          
                           return (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px' }}>
-                                  <span style={{color:'#444', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'75%'}}>{r.note || r.category}</span>
-                                  <span style={{ color: color, fontWeight:'bold' }}>{sign}{formatMoney(r.total)}</span>
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px', alignItems: 'center' }}>
+                                  <span style={{color: isNeutral ? '#888' : '#444', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%'}}>
+                                      {r.note || r.category} 
+                                      {isNeutral && <span style={{fontSize:'0.7rem', color:'#aaa', marginLeft:'5px'}}>(內部轉換)</span>}
+                                  </span>
+                                  <span style={{ color: color, fontWeight: isNeutral ? 'normal' : 'bold' }}>{sign}{formatMoney(r.total)}</span>
                               </div>
                           );
                       })}
@@ -453,13 +457,11 @@ const TotalOverview = ({ assets, setAssets }) => {
 
                     return (
                         <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {/* 第一行：時空分離顯示區 */}
                             <div style={{ fontSize: '0.8rem', color: '#64748b', display:'flex', justifyContent:'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.4)', padding: '4px 8px', borderRadius: '6px' }}>
                                 <span style={{fontWeight: 'bold', color: '#475569'}}>📅 帳單日: {record.date}</span>
                                 <span>⏱ 登錄: {formatDateTime(record.timestamp)} | 👤 {record.operator || '系統'}</span>
                             </div>
                             
-                            {/* 第二行：雙向動態顯示「現金」與「投資」的增減 */}
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
                                 {cashDiff !== 0 && (
                                     <div style={{ color: cashDiff > 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold', fontSize: '1rem' }}>
@@ -473,7 +475,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                                 )}
                             </div>
 
-                            {/* 第三行：操作明細 */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ color: '#334155', fontSize: '0.95rem', wordBreak: 'break-word', paddingRight: '10px', fontWeight: 'bold' }}>
                                     📝 {record.note}
@@ -483,7 +484,6 @@ const TotalOverview = ({ assets, setAssets }) => {
                                 </div>
                             </div>
                             
-                            {/* 第四行：完美高對比「變動前後」的狀態表 */}
                             {b && a && (
                                 <div style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.6)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.05)', marginTop: '4px' }}>
                                     <div style={{ marginBottom: '4px', display:'flex', justifyContent:'space-between' }}>
