@@ -19,7 +19,6 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [settlementTarget, setSettlementTarget] = useState(null); 
 
-  // ★ 快速編輯狀態
   const [editModalData, setEditModalData] = useState(null);
 
   const [isEditingBudget, setIsEditingBudget] = useState(false);
@@ -28,11 +27,13 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
 
   const handleSaveBudget = () => { setAssets({ ...assets, monthlyBudget: Number(tempBudget) }); setIsEditingBudget(false); };
 
+  // ★ 增加校正專屬顏色標籤
   const getTypeColor = (type) => {
     if (type === 'income') return '#2ecc71'; 
     if (type === 'expense') return '#ff6b6b'; 
     if (type === 'spend') return '#ff9f43'; 
     if (type === 'transfer' || type === 'exchange') return '#3498db'; 
+    if (type === 'calibrate') return '#95a5a6'; // 校正為低調的灰色
     if (type === 'settle') return '#00b894'; 
     if (type === 'liquidate' || type === 'joint_invest_sell' || type === 'personal_invest_sell') return '#f1c40f'; 
     if (type === 'joint_invest_buy' || type === 'personal_invest_buy') return '#8e44ad'; 
@@ -88,6 +89,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
 
     monthRecords.forEach(r => {
         const day = parseInt(r.date.split('-')[2]); 
+        // ★ 校正並不會被算入任何 income 或 expense
         if (r.type === 'income') {
             stats.income.total += r.total;
             if (r.payer.includes('恆恆')) stats.income.userA += r.total; else if (r.payer.includes('得得')) stats.income.userB += r.total;
@@ -142,7 +144,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
     if (filterType === 'income') { if (record.type !== 'income') return false; } 
     else if (filterType === 'expense') { if (record.type !== 'expense' && record.type !== 'spend') return false; } 
     else if (filterType === 'invest') {
-        const investTypes = ['liquidate', 'joint_invest_buy', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_loss', 'personal_invest_buy', 'personal_invest_sell', 'exchange'];
+        const investTypes = ['liquidate', 'joint_invest_buy', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_loss', 'personal_invest_buy', 'personal_invest_sell', 'exchange', 'calibrate'];
         if (!investTypes.includes(record.type)) return false;
     }
     if (filterUser !== 'all') {
@@ -287,7 +289,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                         <option value="all">全部類型</option>
                         <option value="expense">支出</option>
                         <option value="income">收入</option>
-                        <option value="invest">投資與外幣</option>
+                        <option value="invest">投資、外幣與系統</option>
                     </select>
                     <select className="glass-input" style={{flex:'1', minWidth:'80px', margin:0, padding:'8px'}} value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
                         <option value="all">所有人</option>
@@ -305,7 +307,11 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                   let showSign = ''; let amountColor = '#1d1d1f';
                   if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) { showSign = '+'; amountColor = '#2ecc71'; } 
                   else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy', 'personal_invest_buy'].includes(record.type)) { showSign = '-'; amountColor = '#1d1d1f'; } 
-                  else if (['settle', 'transfer', 'exchange'].includes(record.type)) { showSign = '🔄 '; amountColor = '#3498db'; }
+                  else if (['settle', 'transfer', 'exchange', 'calibrate'].includes(record.type)) { 
+                      showSign = '🔄 '; 
+                      // ★ 校正為灰色，其他轉換為藍色
+                      amountColor = record.type === 'calibrate' ? '#95a5a6' : '#3498db'; 
+                  }
                   
                   const isDeleted = record.isDeleted;
                   const opacity = isDeleted ? 0.6 : 1;
@@ -315,11 +321,8 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
 
                   return (
                     <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
-                        
-                        {/* ★ 編輯與刪除按鈕區 */}
                         <div style={{ position: 'absolute', top: '15px', right: '15px', display:'flex', gap:'8px', alignItems:'center', zIndex: 10 }}>
                             {record.type === 'settle' && !isDeleted && ( <div style={{ background: '#e0f7fa', color: '#00b894', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>✅ 系統結算</div> )}
-                            
                             {!isDeleted ? (
                                 <>
                                   <button onClick={() => setEditModalData({ index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(52, 152, 219, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: '#3498db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
@@ -391,7 +394,6 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
          </>
        )}
 
-       {/* ★ 快速編輯彈窗 */}
        {editModalData && (
          <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', justifyContent:'center', alignItems:'center', padding:'20px' }} onClick={() => setEditModalData(null)}>
              <div className="glass-card" style={{width:'100%', maxWidth:'400px', background:'white'}} onClick={e => e.stopPropagation()}>

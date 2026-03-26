@@ -128,6 +128,7 @@ function App() {
     else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
     else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
     else if (historyRecord.type === 'exchange') { color = "#3498db"; title = "外幣換匯"; }
+    else if (historyRecord.type === 'calibrate') { color = "#95a5a6"; title = "餘額校正"; } // ★ 校正系統通知
     else if (historyRecord.type.includes('invest_sell')) { color = "#f1c40f"; title = "投資變現"; }
     else if (historyRecord.type.includes('invest_buy')) { color = "#8e44ad"; title = "買入投資"; }
 
@@ -149,7 +150,7 @@ function App() {
     let signPrefix = '';
     if (['income', 'joint_invest_sell', 'personal_invest_sell', 'personal_invest_profit', 'liquidate'].includes(historyRecord.type)) { signPrefix = '+'; }
     else if (['spend', 'expense', 'joint_invest_buy', 'personal_invest_buy', 'personal_invest_loss'].includes(historyRecord.type)) { signPrefix = '-'; }
-    else if (['transfer', 'settle', 'exchange'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
+    else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; } // ★ 中性標籤
 
     sendLineNotification({ 
       title: title, 
@@ -243,7 +244,6 @@ function App() {
     sendLineNotification({ title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName });
   };
 
-  // 🌟 核心修復：這段就是上次漏掉的快速編輯大腦！
   const handleEditTransaction = (indexToEdit, newData) => {
     const newAssets = { ...assets };
     const updatedExpenses = [...newAssets.monthlyExpenses];
@@ -251,10 +251,10 @@ function App() {
     updatedExpenses[indexToEdit] = {
       ...updatedExpenses[indexToEdit],
       date: newData.date,
-      month: newData.date.slice(0, 7), // 同步更新月份，這樣圖表過濾才不會跑掉
+      month: newData.date.slice(0, 7), 
       category: newData.category,
       note: newData.note,
-      operator: operatorName // 標記最後是誰修改的
+      operator: operatorName 
     };
 
     newAssets.monthlyExpenses = updatedExpenses;
@@ -309,6 +309,12 @@ function App() {
          } else {
              newAssets[record.accountKey] -= record.total; 
              if(record.usdAmount) newAssets[`${record.accountKey}_usd`] += record.usdAmount;
+         }
+         break;
+      case 'calibrate': // ★ 完美復原校正產生的差額
+         if (record.accountKey) {
+             if (record.twdDiff !== undefined) newAssets[record.accountKey] -= record.twdDiff;
+             if (record.usdDiff !== undefined) newAssets[`${record.accountKey}_usd`] -= record.usdDiff;
          }
          break;
       case 'joint_invest_buy':
@@ -417,7 +423,6 @@ function App() {
         
         {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
         
-        {/* 🌟 核心修復：這裡把 onEdit 正確傳遞給 MonthlyView 了！ */}
         {currentPage === 'monthly' && (
            <MonthlyView 
              assets={assets} 
