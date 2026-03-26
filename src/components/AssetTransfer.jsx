@@ -51,7 +51,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
   const [exchangeTwd, setExchangeTwd] = useState('');
   const [exchangeUsd, setExchangeUsd] = useState('');
 
-  // ★ ⚖️ 餘額校正專屬 State
+  // ⚖️ 餘額校正專屬 State
   const [calibAccount, setCalibAccount] = useState('userA');
   const [calibTwd, setCalibTwd] = useState('');
   const [calibUsd, setCalibUsd] = useState('');
@@ -157,7 +157,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     setExchangeTwd(''); setExchangeUsd('');
   };
 
-  // ★ 處理餘額校正邏輯
   const handleCalibrate = () => {
     if (calibTwd === '' && calibUsd === '') return alert("請至少輸入一項實際餘額");
 
@@ -189,7 +188,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         category: '餘額校正', 
         payer: accountName, 
         accountKey: calibAccount, 
-        total: Math.abs(twdDiff), // 外層 total 顯示台幣變動絕對值
+        total: Math.abs(twdDiff),
         twdDiff: twdDiff,
         usdDiff: usdDiff,
         note: `系統校正 (${diffNotes.join(', ')})`, 
@@ -369,13 +368,32 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
     <div>
       <h1 className="page-title">資產操作</h1>
       
-      {/* 導覽列加入校正功能 */}
-      <div style={{display:'flex', gap:'10px', marginBottom:'20px', flexWrap: 'wrap'}}>
-        <button className={`glass-btn ${activeTab==='invest'?'':'inactive'}`} onClick={()=>setActiveTab('invest')} style={{flex:1, minWidth:'80px'}}>投資買賣</button>
-        <button className={`glass-btn ${activeTab==='exchange'?'':'inactive'}`} onClick={()=>setActiveTab('exchange')} style={{flex:1, minWidth:'80px', background: activeTab==='exchange' ? '#a0d2eb' : ''}}>💱 換匯</button>
-        <button className={`glass-btn ${activeTab==='transfer'?'':'inactive'}`} onClick={()=>setActiveTab('transfer')} style={{flex:1, minWidth:'80px'}}>上繳公庫</button>
-        <button className={`glass-btn ${activeTab==='income'?'':'inactive'}`} onClick={()=>setActiveTab('income')} style={{flex:1, minWidth:'80px'}}>一般收入</button>
-        <button className={`glass-btn ${activeTab==='calibrate'?'':'inactive'}`} onClick={()=>setActiveTab('calibrate')} style={{flex:1, minWidth:'80px'}}>⚖️ 校正</button>
+      {/* 🌟 手機版優化：水平單行滑動導覽列，隱藏醜陋捲軸 */}
+      <style>
+        {`
+          .scroll-tabs::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
+      <div 
+        className="scroll-tabs"
+        style={{
+          display: 'flex', 
+          gap: '10px', 
+          marginBottom: '20px', 
+          overflowX: 'auto', 
+          paddingBottom: '5px',
+          msOverflowStyle: 'none', 
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch'
+        }}
+      >
+        <button className={`glass-btn ${activeTab==='invest'?'':'inactive'}`} onClick={()=>setActiveTab('invest')} style={{flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px'}}>📈 投資</button>
+        <button className={`glass-btn ${activeTab==='exchange'?'':'inactive'}`} onClick={()=>setActiveTab('exchange')} style={{flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px', background: activeTab==='exchange' ? '#a0d2eb' : ''}}>💱 換匯</button>
+        <button className={`glass-btn ${activeTab==='transfer'?'':'inactive'}`} onClick={()=>setActiveTab('transfer')} style={{flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px'}}>💸 上繳</button>
+        <button className={`glass-btn ${activeTab==='income'?'':'inactive'}`} onClick={()=>setActiveTab('income')} style={{flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px'}}>💰 收入</button>
+        <button className={`glass-btn ${activeTab==='calibrate'?'':'inactive'}`} onClick={()=>setActiveTab('calibrate')} style={{flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px'}}>⚖️ 校正</button>
       </div>
 
       <div className="glass-card" style={{ padding: '15px 20px', marginBottom: '20px', borderLeft: '5px solid #667eea', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -506,7 +524,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* 💱 外幣換匯中心 */}
       {activeTab === 'exchange' && (
         <div className="glass-card" style={{border:'1px solid #3498db'}}>
           <h3 style={{marginBottom: '15px', marginTop:0}}>💱 外幣換匯中心</h3>
@@ -536,7 +553,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         </div>
       )}
 
-      {/* ★ ⚖️ 餘額校正中心 */}
       {activeTab === 'calibrate' && (
         <div className="glass-card" style={{border:'1px solid #95a5a6'}}>
           <h3 style={{marginBottom: '15px', marginTop:0}}>⚖️ 餘額校正回歸</h3>
