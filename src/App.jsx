@@ -128,7 +128,7 @@ function App() {
     else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
     else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
     else if (historyRecord.type === 'exchange') { color = "#3498db"; title = "外幣換匯"; }
-    else if (historyRecord.type === 'calibrate') { color = "#95a5a6"; title = "餘額校正"; } // ★ 校正系統通知
+    else if (historyRecord.type === 'calibrate') { color = "#95a5a6"; title = "餘額校正"; }
     else if (historyRecord.type.includes('invest_sell')) { color = "#f1c40f"; title = "投資變現"; }
     else if (historyRecord.type.includes('invest_buy')) { color = "#8e44ad"; title = "買入投資"; }
 
@@ -150,13 +150,16 @@ function App() {
     let signPrefix = '';
     if (['income', 'joint_invest_sell', 'personal_invest_sell', 'personal_invest_profit', 'liquidate'].includes(historyRecord.type)) { signPrefix = '+'; }
     else if (['spend', 'expense', 'joint_invest_buy', 'personal_invest_buy', 'personal_invest_loss'].includes(historyRecord.type)) { signPrefix = '-'; }
-    else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; } // ★ 中性標籤
+    else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
+
+    // ★ 若有美金金額，Line 通知也一併備註
+    const usdNote = historyRecord.usdAmount ? ` (含 $${historyRecord.usdAmount} USD)` : '';
 
     sendLineNotification({ 
       title: title, 
       amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`, 
       category: historyRecord.category, 
-      note: historyRecord.note || '無', 
+      note: `${historyRecord.note || '無'}${usdNote}`, 
       date: historyRecord.date, 
       color: color, 
       operator: operatorName 
@@ -244,6 +247,7 @@ function App() {
     sendLineNotification({ title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName });
   };
 
+  // ★ 嚴格防護的修改功能：只准改文字與日期，金額絕不可動
   const handleEditTransaction = (indexToEdit, newData) => {
     const newAssets = { ...assets };
     const updatedExpenses = [...newAssets.monthlyExpenses];
@@ -259,17 +263,18 @@ function App() {
 
     newAssets.monthlyExpenses = updatedExpenses;
     saveToCloud(newAssets);
-    alert("✅ 紀錄修改成功！");
+    alert("✅ 紀錄修改成功！(金額與帳戶已受保護不可修改)");
   };
 
+  // ★ 完美還原的作廢功能
   const handleDeleteTransaction = (indexToDelete) => {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
     if (record.isSettled) return alert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
 
-    const reason = window.prompt("⚠️ 即將作廢此紀錄，請輸入刪除原因（必填）：");
-    if (!reason || !reason.trim()) return alert("❌ 必須輸入刪除原因才能作廢紀錄。");
+    const reason = window.prompt("⚠️ 即將作廢此紀錄，系統將自動還原對應的金額。\n請輸入作廢原因（必填）：");
+    if (!reason || !reason.trim()) return alert("❌ 必須輸入作廢原因才能繼續。");
 
     const snapshotBefore = getSnapshot(assets);
     const newAssets = { ...assets };
@@ -278,6 +283,7 @@ function App() {
 
     let updatedExpenses = [...(assets.monthlyExpenses || [])];
 
+    // 依據交易類型，進行精準的反向加減 (包含美金與台幣)
     switch (record.type) {
       case 'settle':
          if (record.settledUser) { 
@@ -311,14 +317,16 @@ function App() {
              if(record.usdAmount) newAssets[`${record.accountKey}_usd`] += record.usdAmount;
          }
          break;
-      case 'calibrate': // ★ 完美復原校正產生的差額
+      case 'calibrate': 
          if (record.accountKey) {
              if (record.twdDiff !== undefined) newAssets[record.accountKey] -= record.twdDiff;
              if (record.usdDiff !== undefined) newAssets[`${record.accountKey}_usd`] -= record.usdDiff;
          }
          break;
       case 'joint_invest_buy':
-         newAssets.jointCash += record.total;
+         if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) + record.usdAmount;
+         else newAssets.jointCash += record.total;
+         
          if (record.investType && newAssets.jointInvestments[record.investType] !== undefined) {
            newAssets.jointInvestments[record.investType] -= record.total;
          }
@@ -335,7 +343,9 @@ function App() {
          break;
       case 'joint_invest_sell': 
       case 'liquidate': 
-         newAssets.jointCash -= record.total;
+         if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
+         else newAssets.jointCash -= record.total;
+
          const sellType = record.investType || (record.note && record.note.split(' ')[1]); 
          if (sellType && newAssets.jointInvestments[sellType] !== undefined) {
            newAssets.jointInvestments[sellType] += (record.principal || record.total); 
@@ -368,7 +378,7 @@ function App() {
 
     saveToCloud(newAssets);
     sendLineNotification({ title: "🗑️ 刪除/作廢紀錄", amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`, category: record.category, note: `已作廢: ${record.note} (原因: ${reason.trim()})`, date: new Date().toISOString().split('T')[0], color: "#666666", operator: operatorName });
-    alert("🗑️ 紀錄已作廢並完成復原。");
+    alert("🗑️ 紀錄已作廢，相關金額與投資本金已完全復原。");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };

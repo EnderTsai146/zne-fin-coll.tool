@@ -28,6 +28,8 @@ const TotalOverview = ({ assets, setAssets }) => {
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
   // ★ 儲存包含股票漲跌的「真實總市值」
   const [liveMarketNetWorth, setLiveMarketNetWorth] = useState(0);
+  // ★ 新增：背景抓取即時報價的 UI 狀態
+  const [isFetchingLive, setIsFetchingLive] = useState(false);
   
   const isBackingUpRef = useRef(false);
   const todayStr = formatDate(today);
@@ -89,7 +91,7 @@ const TotalOverview = ({ assets, setAssets }) => {
   const investJoint = sumInvestments(assets.jointInvestments);
   const totalInvest = investHeng + investDe + investJoint;
 
-  // ★ 核心變更：總資產 = 絕對等於下面三個卡片的「現金 + 本金」相加！
+  // 總資產本金 (現金 + 投入本金)
   const totalAssets = totalCashConverted + totalInvest; 
 
   const assetTypes = [
@@ -142,6 +144,7 @@ const TotalOverview = ({ assets, setAssets }) => {
 
       const runDailySnapshot = async () => {
           isFetchingSnapshotRef.current = true;
+          setIsFetchingLive(true); // ★ 顯示載入中 UI
           try {
               const symbols = Object.keys(stockHoldings);
               let stockMarketValue = 0; 
@@ -186,16 +189,16 @@ const TotalOverview = ({ assets, setAssets }) => {
             console.error("快照失敗:", e); 
           } finally { 
             isFetchingSnapshotRef.current = false; 
+            setIsFetchingLive(false); // ★ 隱藏載入中 UI
           }
       };
       runDailySnapshot();
   }, [hasSnapshot, stockHoldings, totalTwdCash, totalInvest, assets, setAssets, recordDate]);
 
-  // ★ 升級版的重新結算：一鍵清除所有幽靈快照！
   const handleRecalculate = () => {
     if (window.confirm("⚠️ 確定要「清除並重置」所有的歷史快照嗎？\n\n這會消除過去記帳錯誤產生的幽靈金額(如52萬)，讓折線圖恢復平順，並以今天的正確餘額重新開始記錄！")) {
         const newAssets = { ...assets };
-        newAssets.dailyNetWorth = {}; // 直接核彈級清空
+        newAssets.dailyNetWorth = {}; 
         setAssets(newAssets);
     }
   };
@@ -374,7 +377,7 @@ const TotalOverview = ({ assets, setAssets }) => {
               </div>
               
               <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: '15px' }}>
-                 <div style={{ fontSize: '0.9rem', color: '#666' }}>總本金變動: </div>
+                 <div style={{ fontSize: '0.9rem', color: '#666' }}>總資產變動: </div>
                  <div style={{ padding:'2px 8px', borderRadius:'10px', fontSize: '0.85rem', fontWeight: 'bold', background: diff >= 0 ? 'rgba(46, 204, 113, 0.2)' : 'rgba(231, 76, 60, 0.2)', color: diff >= 0 ? '#27ae60' : '#c0392b' }}>
                      較昨日 {diff >= 0 ? '+' : ''}{formatMoney(diff)}
                  </div>
@@ -435,40 +438,45 @@ const TotalOverview = ({ assets, setAssets }) => {
 
       {/* 【第一層】雙人總資產大看板 */}
       <div className="glass-card" style={{ marginBottom: '20px', textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '25px 15px' }}>
-        <div style={{ fontSize: '0.9rem', opacity: 0.9, marginBottom: '5px' }}>雙人帳面總資產 (三科目相加)</div>
+        <div style={{ fontSize: '0.9rem', opacity: 0.9, marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}>
+          雙人總資產 (即時市值估算)
+          {/* ★ 新增：明確的報價更新提示 */}
+          {isFetchingLive && <span style={{fontSize:'0.75rem', background: 'rgba(255,255,255,0.2)', padding:'2px 6px', borderRadius:'10px'}}>🔄 更新報價中...</span>}
+        </div>
+        {/* ★ 更新：直接把最大的數字設定為包含漲跌的即時市值 */}
         <div style={{ fontSize: '2.5rem', fontWeight: 'bold', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-          {formatMoney(totalAssets)}
+          {formatMoney(liveMarketNetWorth > 0 ? liveMarketNetWorth : totalAssets)}
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '15px', fontSize: '0.85rem' }}>
            <div style={{background:'rgba(255,255,255,0.2)', padding:'4px 12px', borderRadius:'15px'}}>💰 總現金 {formatMoney(totalCashConverted)}</div>
-           <div style={{background:'rgba(255,255,255,0.2)', padding:'4px 12px', borderRadius:'15px'}}>📈 總本金 {formatMoney(totalInvest)}</div>
+           <div style={{background:'rgba(255,255,255,0.2)', padding:'4px 12px', borderRadius:'15px'}}>📥 總投入本金 {formatMoney(totalInvest)}</div>
         </div>
         
-        {/* 🌟 核心變更：市值估算獨立拉出來，完美解決兩難！ */}
+        {/* ★ 清楚標示未實現損益的金額 */}
         {liveMarketNetWorth > 0 && liveMarketNetWorth !== totalAssets && (
             <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px dashed rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>
-                📊 包含股票漲跌的實際總市值估算：<span style={{fontWeight: 'bold', color: '#f1c40f', fontSize: '1rem'}}>{formatMoney(liveMarketNetWorth)}</span>
+                📊 包含股票未實現損益：<span style={{fontWeight: 'bold', color: liveMarketNetWorth >= totalAssets ? '#f1c40f' : '#ff9a9e', fontSize: '1rem'}}>{liveMarketNetWorth >= totalAssets ? '+' : ''}{formatMoney(liveMarketNetWorth - totalAssets)}</span>
             </div>
         )}
       </div>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: activeHistory ? '10px' : '20px', flexWrap: 'wrap' }}>
         <div className="glass-card" style={{ flex: 1, minWidth: '110px', padding: '12px', borderTop: '4px solid #ff9a9e', background: activeHistory === 'userA' ? 'rgba(255,154,158,0.1)' : '#fff' }}>
-          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🐶 恆恆</div>
+          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🐶 恆恆 <span style={{fontSize:'0.65rem', fontWeight:'normal'}}>(依投入本金)</span></div>
           <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(twdHeng + Math.round(usdHeng * currentFxRate) + investHeng)}</div>
           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom:'10px' }}>現 {formatMoney(twdHeng)}<br/>美 ${usdHeng.toFixed(2)}<br/>投 {formatMoney(investHeng)}</div>
           <button onClick={() => setActiveHistory(activeHistory === 'userA' ? null : 'userA')} style={{ width:'100%', padding:'6px', background: activeHistory === 'userA' ? '#ff9a9e' : '#f0f0f0', color: activeHistory === 'userA' ? '#fff' : '#555', border:'none', borderRadius:'8px', fontSize:'0.8rem', cursor:'pointer' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
         </div>
         
         <div className="glass-card" style={{ flex: 1, minWidth: '110px', padding: '12px', borderTop: '4px solid #a8e6cf', background: activeHistory === 'userB' ? 'rgba(168,230,207,0.1)' : '#fff' }}>
-          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🐕 得得</div>
+          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🐕 得得 <span style={{fontSize:'0.65rem', fontWeight:'normal'}}>(依投入本金)</span></div>
           <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(twdDe + Math.round(usdDe * currentFxRate) + investDe)}</div>
           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom:'10px' }}>現 {formatMoney(twdDe)}<br/>美 ${usdDe.toFixed(2)}<br/>投 {formatMoney(investDe)}</div>
           <button onClick={() => setActiveHistory(activeHistory === 'userB' ? null : 'userB')} style={{ width:'100%', padding:'6px', background: activeHistory === 'userB' ? '#a8e6cf' : '#f0f0f0', color: activeHistory === 'userB' ? '#333' : '#555', border:'none', borderRadius:'8px', fontSize:'0.8rem', cursor:'pointer' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
         </div>
         
         <div className="glass-card" style={{ flex: 1, minWidth: '110px', padding: '12px', borderTop: '4px solid #f6d365', background: activeHistory === 'jointCash' ? 'rgba(246,211,101,0.1)' : '#fff' }}>
-          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🏫 共同</div>
+          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🏫 共同 <span style={{fontSize:'0.65rem', fontWeight:'normal'}}>(依投入本金)</span></div>
           <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(twdJoint + Math.round(usdJoint * currentFxRate) + investJoint)}</div>
           <div style={{ fontSize: '0.75rem', color: '#888', marginBottom:'10px' }}>現 {formatMoney(twdJoint)}<br/>美 ${usdJoint.toFixed(2)}<br/>投 {formatMoney(investJoint)}</div>
           <button onClick={() => setActiveHistory(activeHistory === 'jointCash' ? null : 'jointCash')} style={{ width:'100%', padding:'6px', background: activeHistory === 'jointCash' ? '#f6d365' : '#f0f0f0', color: activeHistory === 'jointCash' ? '#333' : '#555', border:'none', borderRadius:'8px', fontSize:'0.8rem', cursor:'pointer' }}>{activeHistory === 'jointCash' ? '收起' : '🔍 紀錄'}</button>

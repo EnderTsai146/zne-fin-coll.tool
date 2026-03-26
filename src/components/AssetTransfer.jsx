@@ -234,52 +234,57 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
         if (investAction === 'buy') {
             if (settleCurrency === 'USD') {
                 if ((newAssets[`${investAccount}_usd`] || 0) < costUsd) return alert(`❌ ${accountName} 美金餘額不足！`);
-                if (!window.confirm(`確定用「美金帳戶」買入「${label}」\n扣除美金：$${costUsd} USD 嗎？`)) return;
+                
+                // ★ 優化買入提示：明確列出雙幣與台幣帳面
+                if (!window.confirm(`【確認買入美股】\n\n標的：${label}\n扣除美金現鈔：$${costUsd} USD\n台幣帳面價值約：${formatMoney(equivalentTwd)}\n\n確定執行嗎？`)) return;
 
                 newAssets[`${investAccount}_usd`] -= costUsd;
                 if (isJoint) newAssets.jointInvestments[investType] += equivalentTwd; else newAssets.userInvestments[investAccount][investType] += equivalentTwd;
 
-                onTransaction(newAssets, { type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, usdAmount: costUsd, note: `買入 ${label} (美金交割 $${costUsd})`, date: txDate, symbol: finalSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice) });
+                onTransaction(newAssets, { type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, usdAmount: costUsd, note: `買入 ${label}`, date: txDate, symbol: finalSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice) });
             } else {
                 const val = parseInt(investAmount); if (!val) return alert("請輸入台幣扣款總額");
                 if (newAssets[investAccount] < val) return alert(`❌ ${accountName} 台幣餘額不足！`);
-                if (!window.confirm(`確定用「台幣帳戶」買入「${label}」\n扣除台幣：${formatMoney(val)} 嗎？`)) return;
+                
+                if (!window.confirm(`【確認買入美股 (台幣交割)】\n\n標的：${label}\n扣除台幣現鈔：${formatMoney(val)}\n包含美金成本約：$${costUsd} USD\n\n確定執行嗎？`)) return;
 
                 newAssets[investAccount] -= val;
                 if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
 
-                onTransaction(newAssets, { type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, note: `買入 ${label} (台幣交割)`, date: txDate, symbol: finalSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice) });
+                // 即使是台幣交割，也要把 usdAmount 傳進去，讓歷史紀錄可以明確知道買了多少美金等值的資產
+                onTransaction(newAssets, { type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, usdAmount: costUsd, note: `買入 ${label} (台幣交割)`, date: txDate, symbol: finalSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice) });
             }
             alert(`✅ 成功買入 ${label}！`);
             
         } else if (investAction === 'sell') {
             const principalTwd = parseInt(investPrincipal);
-            if (!principalTwd) return alert("為維持對帳準確，請輸入這批股票當初大約的「台幣本金」！");
+            if (!principalTwd) return alert("為維持帳面準確，請輸入這批股票當初的「台幣本金」！");
             
             const currentPrincipal = isJoint ? newAssets.jointInvestments[investType] : newAssets.userInvestments[investAccount][investType];
             if (currentPrincipal < principalTwd) return alert(`❌ 帳面本金僅剩 ${formatMoney(currentPrincipal)}，無法扣除 ${formatMoney(principalTwd)}！`);
 
             const principalUsd = parseFloat(usInvestPrincipalUsd);
-            if (!principalUsd) return alert("請輸入元大顯示的「美金成本」以計算獲利！");
+            if (!principalUsd) return alert("請輸入元大顯示的「美金成本」以計算真實獲利！");
 
             const profitUsd = costUsd - principalUsd;
             const profitNote = profitUsd >= 0 ? `(賺 $${profitUsd.toFixed(2)} USD)` : `(賠 $${Math.abs(profitUsd).toFixed(2)} USD)`;
 
             if (settleCurrency === 'USD') {
-                if (!window.confirm(`確定賣出「${label}」？\n美金入帳：$${costUsd}\n結算：${profitNote}\n並從帳面扣除台幣本金：${formatMoney(principalTwd)} 嗎？`)) return;
+                // ★ 優化賣出提示：清楚切割美金入帳與台幣本金扣除
+                if (!window.confirm(`【確認賣出美股】\n\n標的：${label}\n美金入帳：$${costUsd} USD\n損益結算：${profitNote}\n扣除台幣本金：${formatMoney(principalTwd)}\n\n確定執行嗎？`)) return;
 
                 newAssets[`${investAccount}_usd`] = (newAssets[`${investAccount}_usd`] || 0) + costUsd;
                 if (isJoint) newAssets.jointInvestments[investType] -= principalTwd; else newAssets.userInvestments[investAccount][investType] -= principalTwd;
 
-                onTransaction(newAssets, { type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell', category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, principal: principalTwd, usdAmount: costUsd, note: `賣出 ${label} (美金交割) ${profitNote}`, date: txDate, symbol: finalSymbol, shares: Number(stockShares) });
+                onTransaction(newAssets, { type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell', category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, principal: principalTwd, usdAmount: costUsd, note: `賣出 ${label} ${profitNote}`, date: txDate, symbol: finalSymbol, shares: Number(stockShares) });
             } else {
                 const proceedsTwd = parseInt(investAmount); if (!proceedsTwd) return alert("請輸入拿回的台幣總額");
-                if (!window.confirm(`確定賣出「${label}」？\n台幣入帳：${formatMoney(proceedsTwd)}\n結算：${profitNote}\n並從帳面扣除台幣本金：${formatMoney(principalTwd)} 嗎？`)) return;
+                if (!window.confirm(`【確認賣出美股 (台幣交割)】\n\n標的：${label}\n台幣入帳：${formatMoney(proceedsTwd)}\n損益結算：${profitNote}\n扣除台幣本金：${formatMoney(principalTwd)}\n\n確定執行嗎？`)) return;
 
                 newAssets[investAccount] += proceedsTwd;
                 if (isJoint) newAssets.jointInvestments[investType] -= principalTwd; else newAssets.userInvestments[investAccount][investType] -= principalTwd;
 
-                onTransaction(newAssets, { type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell', category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: proceedsTwd, principal: principalTwd, note: `賣出 ${label} (台幣交割) ${profitNote}`, date: txDate, symbol: finalSymbol, shares: Number(stockShares) });
+                onTransaction(newAssets, { type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell', category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: proceedsTwd, principal: principalTwd, usdAmount: costUsd, note: `賣出 ${label} (台幣交割) ${profitNote}`, date: txDate, symbol: finalSymbol, shares: Number(stockShares) });
             }
             alert(`🔄 成功變現！${profitNote}`);
         }
@@ -417,7 +422,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets }) => {
 
           <div style={{ marginBottom: '15px' }}>
             <label style={{display:'block', marginBottom:'8px', color:'#555', fontSize:'0.9rem'}}>標的類型</label>
-            <SegmentedControl options={[{ label: '股票', value: 'stock' }, { label: '基金', value: 'fund' }, { label: '定存', value: 'deposit' }, { label: '其他', value: 'other' }]} value={investType} onChange={setInvestType} />
+            <SegmentedControl options={[{ label: '股票', value: 'stock' }, { label: '基金', value: 'fund' }, { label: '定存', value: '其他', value: 'other' }]} value={investType} onChange={setInvestType} />
           </div>
 
           {investType === 'stock' && (

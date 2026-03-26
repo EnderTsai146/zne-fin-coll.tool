@@ -64,7 +64,7 @@ const InvestmentView = ({ assets }) => {
               
               if (data.error) {
                 console.error("API 回傳錯誤:", data.error);
-                throw new Error("Yahoo Finance 拒絕連線");
+                throw new Error("Yahoo Finance 拒絕連線，請稍後再試");
               }
               
               if (data && data.quoteResponse && data.quoteResponse.result) {
@@ -87,7 +87,7 @@ const InvestmentView = ({ assets }) => {
               }
           } catch (err) {
               console.error("股價更新失敗:", err);
-              // 如果錯誤，不再讓它卡在載入中
+              if (isMounted) alert(`⚠️ 報價更新失敗：${err.message}`);
           } finally {
               if (isMounted) setIsFetching(false);
           }
@@ -113,6 +113,7 @@ const InvestmentView = ({ assets }) => {
           const tax = Math.floor(valTwd * 0.003);
           valTwd = valTwd - fee - tax;
       } else {
+          // 美股換算台幣邏輯
           const feeUsd = valTwd * 0.001;
           valTwd = (valTwd - feeUsd) * liveFx;
       }
@@ -161,11 +162,11 @@ const InvestmentView = ({ assets }) => {
       </div>
 
       <div className="glass-card" style={{ marginBottom: '20px', textAlign: 'center', background: 'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)', padding: '20px 15px' }}>
-        <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: '5px' }}>{currentHistoryFilter} - 投資總市值估算</div>
+        <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: '5px' }}>{currentHistoryFilter} - 投資總市值估算 <span style={{fontSize:'0.7rem'}}>(已統一換算台幣)</span></div>
         <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#2c3e50' }}>{formatMoney(totalMarketValue)}</div>
         <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '15px', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '10px' }}>
-            <div><div style={{fontSize:'0.75rem', color:'#666'}}>投入本金</div><div style={{fontWeight:'bold', color:'#333'}}>{formatMoney(totalPrincipal)}</div></div>
-            <div><div style={{fontSize:'0.75rem', color:'#666'}}>未實現損益</div><div style={{fontWeight:'bold', color: totalUnrealizedProfit >= 0 ? '#27ae60' : '#e74c3c'}}>{totalUnrealizedProfit >= 0 ? '+' : ''}{formatMoney(totalUnrealizedProfit)}</div></div>
+            <div><div style={{fontSize:'0.75rem', color:'#666'}}>投入本金(台幣)</div><div style={{fontWeight:'bold', color:'#333'}}>{formatMoney(totalPrincipal)}</div></div>
+            <div><div style={{fontSize:'0.75rem', color:'#666'}}>未實現損益(台幣)</div><div style={{fontWeight:'bold', color: totalUnrealizedProfit >= 0 ? '#27ae60' : '#e74c3c'}}>{totalUnrealizedProfit >= 0 ? '+' : ''}{formatMoney(totalUnrealizedProfit)}</div></div>
         </div>
       </div>
 
@@ -194,20 +195,25 @@ const InvestmentView = ({ assets }) => {
                       <div>
                           <div style={{fontWeight:'bold', color:'#333', fontSize:'1.1rem'}}>{h.sym}</div>
                           <div style={{fontSize:'0.8rem', color:'#666'}}>庫存: <span style={{fontWeight:'bold'}}>{h.shares}</span> 股</div>
-                          <div style={{fontSize:'0.75rem', color:'#888'}}>均價: {formatMoney(h.avgCost)} | 現價: {h.market==='US'?'$':''}{h.currentPrice.toFixed(2)}</div>
+                          {/* ★ 雙幣標示防呆 */}
+                          <div style={{fontSize:'0.75rem', color:'#888'}}>
+                              台幣均價: {formatMoney(h.avgCost)} <br/>
+                              現價: <span style={{color: h.market==='US'?'#e67e22':'#333', fontWeight: h.market==='US'?'bold':'normal'}}>{h.market==='US'?'USD $':''}{h.currentPrice.toFixed(2)}</span>
+                          </div>
                       </div>
                       <div style={{textAlign:'right'}}>
                           <div style={{fontWeight:'bold', fontSize:'1.1rem', color:'#2c3e50'}}>{formatMoney(h.marketValue)}</div>
                           <div style={{fontSize:'0.85rem', fontWeight:'bold', color: h.profit >= 0 ? '#27ae60' : '#e74c3c'}}>
                               {h.profit >= 0 ? '▲' : '▼'} {formatMoney(Math.abs(h.profit))} ({h.profitPercent.toFixed(1)}%)
                           </div>
+                          {h.market === 'US' && <div style={{fontSize:'0.7rem', color:'#aaa'}}>*已依匯率 {liveFx.toFixed(2)} 換算</div>}
                       </div>
                   </div>
               ))
           )}
 
           <div style={{marginTop:'15px', paddingTop:'15px', borderTop:'2px dashed #ddd'}}>
-              <h4 style={{margin:'0 0 10px 0', color:'#666', fontSize:'0.9rem'}}>非股票資產 (依系統登錄本金)</h4>
+              <h4 style={{margin:'0 0 10px 0', color:'#666', fontSize:'0.9rem'}}>非股票資產 (依系統登錄台幣本金)</h4>
               <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', color:'#555', marginBottom:'5px'}}><span>基金</span><span>{formatMoney(currentData.fund || 0)}</span></div>
               <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', color:'#555', marginBottom:'5px'}}><span>定存</span><span>{formatMoney(currentData.deposit || 0)}</span></div>
               <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', color:'#555'}}><span>其他</span><span>{formatMoney(currentData.other || 0)}</span></div>
@@ -250,6 +256,8 @@ const InvestmentView = ({ assets }) => {
                           </div>
                           <div style={{textAlign:'right'}}>
                               <div style={{fontWeight:'bold', fontSize:'1.1rem', color: amountColor}}>{amountStr}</div>
+                              {/* ★ 歷史紀錄同步防呆：明確標示美金 */}
+                              {r.usdAmount && <div style={{fontSize:'0.75rem', color:'#e67e22', fontWeight:'bold'}}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
                               {profitStr && <div style={{fontSize:'0.75rem', color: profitStr.includes('賺') ? '#2ecc71' : '#e74c3c'}}>{profitStr}</div>}
                           </div>
                       </div>
