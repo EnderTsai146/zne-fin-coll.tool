@@ -24,7 +24,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('overview');
 
-  // ★ 資料庫擴充：加入 userInvestments 追蹤個人投資，並加入 bills 追蹤帳單，還有 _usd 外幣帳戶
   const [assets, setAssets] = useState({
     userA: 0, 
     userB: 0, 
@@ -42,7 +41,6 @@ function App() {
     bills: []
   });
 
-  // 監聽登入狀態
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) { 
@@ -57,14 +55,12 @@ function App() {
     return () => unsubscribeAuth();
   }, []);
 
-  // 監聽 Firebase 資料庫變化
   useEffect(() => {
     if (!currentUser) return;
     const docRef = doc(db, "finance", "data");
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
           const data = docSnap.data();
-          // 防呆：如果舊資料沒有個人投資欄位，自動補齊
           if (!data.userInvestments) {
             data.userInvestments = { 
               userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, 
@@ -80,14 +76,12 @@ function App() {
     // eslint-disable-next-line
   }, [currentUser]);
 
-  // 儲存至雲端
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
     const docRef = doc(db, "finance", "data");
     setDoc(docRef, newAssets).catch((err) => alert("連線錯誤：" + err.message));
   };
 
-  // 發送 Line 通知
   const sendLineNotification = async (data) => {
     try {
       const safeData = {
@@ -113,7 +107,6 @@ function App() {
     if(window.confirm("確定要登出嗎？")) signOut(auth); 
   };
 
-  // ★ 深度快照函數：確保所有投資與外幣帳戶都被精準記錄
   const getSnapshot = (currentAssets) => ({
     userA: currentAssets.userA, 
     userB: currentAssets.userB,
@@ -127,7 +120,6 @@ function App() {
       : { userA: { stock:0, fund:0, deposit:0, other:0 }, userB: { stock:0, fund:0, deposit:0, other:0 } }
   });
 
-  // 處理資產轉移與投資
   const handleTransaction = (newAssets, historyRecord) => {
     const timestamp = new Date().toISOString(); 
     let color = "#17c9b2"; let title = "資產變動";
@@ -170,7 +162,6 @@ function App() {
     });
   };
 
-  // 處理個人支出 (支援更新帳單)
   const handleAddExpense = (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
     const payerKey = payer === 'heng' ? 'userA' : 'userB';
     const payerName = payer === 'heng' ? '恆恆🐶' : '得得🐕';
@@ -182,7 +173,7 @@ function App() {
     
     const finalAssets = {
       ...newAssetsTemp,
-      ...(updatedBills ? { bills: updatedBills } : {}), // 💡 帳單更新同步寫入
+      ...(updatedBills ? { bills: updatedBills } : {}), 
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
         { 
@@ -206,7 +197,6 @@ function App() {
     sendLineNotification({ title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出", note: finalNote, date: date, color: "#ef454d", operator: operatorName });
   };
 
-  // 處理共同支出 (支援更新帳單與代墊)
   const handleAddJointExpense = (date, category, amount, advancedBy, note, updatedBills = null) => {
     const val = Number(amount) || 0;
     const newAssets = { ...assets };
@@ -228,7 +218,7 @@ function App() {
     const safeNote = note ? String(note).trim() : '';
     const finalAssets = {
       ...newAssets,
-      ...(updatedBills ? { bills: updatedBills } : {}), // 💡 帳單更新同步寫入
+      ...(updatedBills ? { bills: updatedBills } : {}), 
       monthlyExpenses: [
         ...(newAssets.monthlyExpenses || []),
         { 
@@ -253,7 +243,25 @@ function App() {
     sendLineNotification({ title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName });
   };
 
-  // ★ 強大的作廢與退款邏輯
+  // 🌟 核心修復：這段就是上次漏掉的快速編輯大腦！
+  const handleEditTransaction = (indexToEdit, newData) => {
+    const newAssets = { ...assets };
+    const updatedExpenses = [...newAssets.monthlyExpenses];
+    
+    updatedExpenses[indexToEdit] = {
+      ...updatedExpenses[indexToEdit],
+      date: newData.date,
+      month: newData.date.slice(0, 7), // 同步更新月份，這樣圖表過濾才不會跑掉
+      category: newData.category,
+      note: newData.note,
+      operator: operatorName // 標記最後是誰修改的
+    };
+
+    newAssets.monthlyExpenses = updatedExpenses;
+    saveToCloud(newAssets);
+    alert("✅ 紀錄修改成功！");
+  };
+
   const handleDeleteTransaction = (indexToDelete) => {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
@@ -270,7 +278,6 @@ function App() {
 
     let updatedExpenses = [...(assets.monthlyExpenses || [])];
 
-    // 依據操作類型，完美復原資金 (包含台幣、美金、投資本金)
     switch (record.type) {
       case 'settle':
          if (record.settledUser) { 
@@ -407,8 +414,21 @@ function App() {
     <div style={{ paddingBottom: '110px' }}>
       <Topbar />
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+        
         {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
-        {currentPage === 'monthly' && <MonthlyView assets={assets} setAssets={handleAssetsUpdate} onDelete={handleDeleteTransaction} sendLineNotification={sendLineNotification} currentUser={operatorName} />}
+        
+        {/* 🌟 核心修復：這裡把 onEdit 正確傳遞給 MonthlyView 了！ */}
+        {currentPage === 'monthly' && (
+           <MonthlyView 
+             assets={assets} 
+             setAssets={handleAssetsUpdate} 
+             onDelete={handleDeleteTransaction}
+             onEdit={handleEditTransaction} 
+             sendLineNotification={sendLineNotification}
+             currentUser={operatorName}
+           />
+        )}
+        
         {currentPage === 'invest' && <InvestmentView assets={assets} />}
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
