@@ -7,7 +7,7 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
-const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, currentUser }) => {
+const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification, currentUser }) => {
   const history = assets.monthlyExpenses || [];
   
   const [viewMode, setViewMode] = useState('chart');
@@ -18,6 +18,9 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [settlementTarget, setSettlementTarget] = useState(null); 
+
+  // ★ 快速編輯狀態
+  const [editModalData, setEditModalData] = useState(null);
 
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [tempBudget, setTempBudget] = useState(assets.monthlyBudget || 40000);
@@ -312,10 +315,16 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
 
                   return (
                     <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
+                        
+                        {/* ★ 編輯與刪除按鈕區 */}
                         <div style={{ position: 'absolute', top: '15px', right: '15px', display:'flex', gap:'8px', alignItems:'center', zIndex: 10 }}>
                             {record.type === 'settle' && !isDeleted && ( <div style={{ background: '#e0f7fa', color: '#00b894', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>✅ 系統結算</div> )}
+                            
                             {!isDeleted ? (
-                                <button onClick={() => { if(window.confirm(`⚠️ 確認作廢此筆紀錄？`)) onDelete(record.originalIndex); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                                <>
+                                  <button onClick={() => setEditModalData({ index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(52, 152, 219, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: '#3498db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
+                                  <button onClick={() => { if(window.confirm(`⚠️ 確認作廢此筆紀錄？`)) onDelete(record.originalIndex); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                                </>
                             ) : (
                                 <div style={{ background: '#ffeaa7', color: '#d35400', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>🚫 已作廢</div>
                             )}
@@ -332,7 +341,7 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                                 )}
                             </div>
 
-                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '40px', marginBottom:'5px'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingRight: '70px', marginBottom:'5px'}}>
                                 <span style={{fontSize:'1.1rem', color:'#1d1d1f', fontWeight:'700', textDecoration: textDeco}}>{record.note === '月結記帳' ? '日記帳' : record.note}</span>
                                 <span style={{fontSize:'1.6rem', fontWeight:'800', color: amountColor, textDecoration: textDeco}}>{showSign}{formatMoney(record.total)}</span>
                             </div>
@@ -343,7 +352,6 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                             
                             {isDeleted && ( <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#e74c3c', background: 'rgba(231, 76, 60, 0.1)', padding: '8px', borderRadius: '8px', border: '1px dashed #e74c3c' }}><strong>作廢原因：</strong> {record.deleteReason}</div> )}
 
-                            {/* 💱 修復：完整支援美金欄位的紀錄顯示 */}
                             {record.auditTrail && !isDeleted && (
                                 <div style={{ marginTop: '10px', fontSize:'0.8rem', color:'#666', background:'rgba(0,0,0,0.03)', padding:'10px', borderRadius:'8px', borderTop:'1px dashed #ddd' }}>
                                     <div style={{marginBottom:'6px', fontWeight:'bold', color:'#555'}}>🔍 交易前後餘額對比：</div>
@@ -381,6 +389,36 @@ const MonthlyView = ({ assets, onDelete, setAssets, sendLineNotification, curren
                 })
             )}
          </>
+       )}
+
+       {/* ★ 快速編輯彈窗 */}
+       {editModalData && (
+         <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', justifyContent:'center', alignItems:'center', padding:'20px' }} onClick={() => setEditModalData(null)}>
+             <div className="glass-card" style={{width:'100%', maxWidth:'400px', background:'white'}} onClick={e => e.stopPropagation()}>
+                 <h3 style={{marginTop:0, color:'#3498db'}}>✏️ 快速修改紀錄</h3>
+                 <p style={{fontSize:'0.8rem', color:'#888', marginBottom:'15px'}}>為維護財務報表正確性，金額與帳戶不開放直接修改。如需修改金額，請作廢該筆紀錄後重新記帳。</p>
+                 
+                 <div style={{marginBottom:'10px'}}>
+                     <label style={{fontSize:'0.85rem', color:'#666'}}>日期</label>
+                     <input type="date" className="glass-input" value={editModalData.date} onChange={e => setEditModalData({...editModalData, date: e.target.value})} style={{width:'100%', boxSizing:'border-box'}} />
+                 </div>
+                 
+                 <div style={{marginBottom:'10px'}}>
+                     <label style={{fontSize:'0.85rem', color:'#666'}}>分類</label>
+                     <input type="text" className="glass-input" value={editModalData.category} onChange={e => setEditModalData({...editModalData, category: e.target.value})} style={{width:'100%', boxSizing:'border-box'}} />
+                 </div>
+                 
+                 <div style={{marginBottom:'20px'}}>
+                     <label style={{fontSize:'0.85rem', color:'#666'}}>備註</label>
+                     <input type="text" className="glass-input" value={editModalData.note} onChange={e => setEditModalData({...editModalData, note: e.target.value})} style={{width:'100%', boxSizing:'border-box'}} />
+                 </div>
+
+                 <div style={{display:'flex', gap:'10px'}}>
+                     <button className="glass-btn" style={{flex:1, background:'#eee', color:'#333'}} onClick={() => setEditModalData(null)}>取消</button>
+                     <button className="glass-btn" style={{flex:1, background:'#3498db', color:'white'}} onClick={() => { onEdit(editModalData.index, editModalData); setEditModalData(null); }}>儲存修改</button>
+                 </div>
+             </div>
+         </div>
        )}
 
        {showSettlementModal && settlementTarget && (
