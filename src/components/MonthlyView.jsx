@@ -303,7 +303,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
             {filteredHistory.length === 0 ? (
                 <div className="glass-card" style={{textAlign:'center', color: '#888'}}><p>📭 沒有符合篩選條件的紀錄</p></div>
             ) : (
-                [...filteredHistory].reverse().map((record) => {
+                [...filteredHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()).map((record) => {
                   let showSign = ''; let amountColor = '#1d1d1f';
                   if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) { showSign = '+'; amountColor = '#2ecc71'; } 
                   else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy', 'personal_invest_buy'].includes(record.type)) { showSign = '-'; amountColor = '#1d1d1f'; } 

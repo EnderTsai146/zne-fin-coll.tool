@@ -7,34 +7,35 @@ import AssetTransfer from './components/AssetTransfer';
 import InvestmentView from './components/InvestmentView';
 import ExpenseEntry from './components/ExpenseEntry';
 import './index.css';
-import { db, auth } from './firebase'; 
+import { db, auth } from './firebase';
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
-const USER_MAPPING = { 
-  "hzh940317@gmail.com": "恆恆🐶", 
-  "ender.tsai@gmail.com": "得得🐕" 
+const USER_MAPPING = {
+  "hzh940317@gmail.com": "恆恆🐶",
+  "ender.tsai@gmail.com": "得得🐕"
 };
 
-const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/bl76wl9v2v6hxd1k5xdm5n1yjt34hs7l"; 
+const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/bl76wl9v2v6hxd1k5xdm5n1yjt34hs7l";
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [operatorName, setOperatorName] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('overview');
+  const [currentFxRate, setCurrentFxRate] = useState(31.5);
 
   const [assets, setAssets] = useState({
-    userA: 0, 
-    userB: 0, 
-    userA_usd: 0, 
-    userB_usd: 0, 
-    jointCash: 0, 
+    userA: 0,
+    userB: 0,
+    userA_usd: 0,
+    userB_usd: 0,
+    jointCash: 0,
     jointCash_usd: 0,
     jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
-    userInvestments: { 
-      userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, 
-      userB: { stock: 0, fund: 0, deposit: 0, other: 0 } 
+    userInvestments: {
+      userA: { stock: 0, fund: 0, deposit: 0, other: 0 },
+      userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
     },
     roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
     monthlyExpenses: [],
@@ -43,12 +44,12 @@ function App() {
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (user) { 
-        setCurrentUser(user); 
-        setOperatorName(USER_MAPPING[user.email] || user.email.split('@')[0]); 
-      } else { 
-        setCurrentUser(null); 
-        setOperatorName(''); 
+      if (user) {
+        setCurrentUser(user);
+        setOperatorName(USER_MAPPING[user.email] || user.email.split('@')[0]);
+      } else {
+        setCurrentUser(null);
+        setOperatorName('');
       }
       setLoading(false);
     });
@@ -60,14 +61,14 @@ function App() {
     const docRef = doc(db, "finance", "data");
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (!data.userInvestments) {
-            data.userInvestments = { 
-              userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, 
-              userB: { stock: 0, fund: 0, deposit: 0, other: 0 } 
-            };
-          }
-          setAssets(data);
+        const data = docSnap.data();
+        if (!data.userInvestments) {
+          data.userInvestments = {
+            userA: { stock: 0, fund: 0, deposit: 0, other: 0 },
+            userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
+          };
+        }
+        setAssets(data);
       } else {
         setDoc(docRef, assets);
       }
@@ -88,162 +89,164 @@ function App() {
         title: String(data.title || "系統通知").replace(/"/g, '＂').replace(/\n/g, ' '),
         amount: String(data.amount || "$0").replace(/"/g, '＂'),
         category: String(data.category || "未分類").replace(/"/g, '＂').replace(/\n/g, ' '),
-        note: String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' '), 
+        note: String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' '),
         date: String(data.date || new Date().toISOString().split('T')[0]),
         color: String(data.color || "#666666"),
         operator: String(data.operator || operatorName || "系統").replace(/"/g, '＂')
       };
-      await fetch(MAKE_WEBHOOK_URL, { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify(safeData) 
+      await fetch(MAKE_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(safeData)
       });
-    } catch (error) { 
-      console.error("Line 通知發送失敗", error); 
+    } catch (error) {
+      console.error("Line 通知發送失敗", error);
     }
   };
 
-  const handleLogout = () => { 
-    if(window.confirm("確定要登出嗎？")) signOut(auth); 
+  const handleLogout = () => {
+    if (window.confirm("確定要登出嗎？")) signOut(auth);
   };
 
   const getSnapshot = (currentAssets) => ({
-    userA: currentAssets.userA, 
+    userA: currentAssets.userA,
     userB: currentAssets.userB,
-    userA_usd: currentAssets.userA_usd || 0, 
+    userA_usd: currentAssets.userA_usd || 0,
     userB_usd: currentAssets.userB_usd || 0,
-    jointCash: currentAssets.jointCash, 
+    jointCash: currentAssets.jointCash,
     jointCash_usd: currentAssets.jointCash_usd || 0,
     jointInvestments: { ...(currentAssets.jointInvestments || {}) },
-    userInvestments: currentAssets.userInvestments 
-      ? JSON.parse(JSON.stringify(currentAssets.userInvestments)) 
-      : { userA: { stock:0, fund:0, deposit:0, other:0 }, userB: { stock:0, fund:0, deposit:0, other:0 } }
+    userInvestments: currentAssets.userInvestments
+      ? JSON.parse(JSON.stringify(currentAssets.userInvestments))
+      : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } }
   });
 
-  const handleTransaction = (newAssets, historyRecord) => {
-    const timestamp = new Date().toISOString(); 
-    let color = "#17c9b2"; let title = "資產變動";
-    
-    if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
-    else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
-    else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
-    else if (historyRecord.type === 'exchange') { color = "#3498db"; title = "外幣換匯"; }
-    else if (historyRecord.type === 'calibrate') { color = "#95a5a6"; title = "餘額校正"; }
-    else if (historyRecord.type.includes('invest_sell')) { color = "#f1c40f"; title = "投資變現"; }
-    else if (historyRecord.type.includes('invest_buy')) { color = "#8e44ad"; title = "買入投資"; }
+  const handleTransaction = (newAssets, historyRecordsInput) => {
+    const timestamp = new Date().toISOString();
+    const records = Array.isArray(historyRecordsInput) ? historyRecordsInput : [historyRecordsInput];
 
-    const finalAssets = {
+    const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssets,
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
-        { 
-          ...historyRecord, 
-          operator: operatorName, 
-          timestamp: timestamp, 
-          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) } 
-        }
+        ...records.map(r => ({
+          ...r,
+          operator: operatorName,
+          timestamp: timestamp,
+          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
+        }))
       ]
-    };
+    });
     saveToCloud(finalAssets);
     setCurrentPage('overview');
 
-    let signPrefix = '';
-    if (['income', 'joint_invest_sell', 'personal_invest_sell', 'personal_invest_profit', 'liquidate'].includes(historyRecord.type)) { signPrefix = '+'; }
-    else if (['spend', 'expense', 'joint_invest_buy', 'personal_invest_buy', 'personal_invest_loss'].includes(historyRecord.type)) { signPrefix = '-'; }
-    else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
+    records.forEach(historyRecord => {
+      let color = "#17c9b2"; let title = "資產變動";
+      if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
+      else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
+      else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
+      else if (historyRecord.type === 'exchange') { color = "#3498db"; title = "外幣換匯"; }
+      else if (historyRecord.type === 'calibrate') { color = "#95a5a6"; title = "餘額校正"; }
+      else if (historyRecord.type.includes('invest_sell')) { color = "#f1c40f"; title = "投資變現"; }
+      else if (historyRecord.type.includes('invest_buy')) { color = "#8e44ad"; title = "買入投資"; }
 
-    // ★ 若有美金金額，Line 通知也一併備註
-    const usdNote = historyRecord.usdAmount ? ` (含 $${historyRecord.usdAmount} USD)` : '';
+      let signPrefix = '';
+      if (['income', 'joint_invest_sell', 'personal_invest_sell', 'personal_invest_profit', 'liquidate'].includes(historyRecord.type)) { signPrefix = '+'; }
+      else if (['spend', 'expense', 'joint_invest_buy', 'personal_invest_buy', 'personal_invest_loss'].includes(historyRecord.type)) { signPrefix = '-'; }
+      else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
 
-    sendLineNotification({ 
-      title: title, 
-      amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`, 
-      category: historyRecord.category, 
-      note: `${historyRecord.note || '無'}${usdNote}`, 
-      date: historyRecord.date, 
-      color: color, 
-      operator: operatorName 
+      const usdNote = historyRecord.usdAmount ? ` (含 $${historyRecord.usdAmount} USD)` : '';
+
+      sendLineNotification({
+        title: title,
+        amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`,
+        category: historyRecord.category,
+        note: `${historyRecord.note || '無'}${usdNote}`,
+        date: historyRecord.date,
+        color: color,
+        operator: operatorName
+      });
     });
   };
 
   const handleAddExpense = (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
     const payerKey = payer === 'heng' ? 'userA' : 'userB';
     const payerName = payer === 'heng' ? '恆恆🐶' : '得得🐕';
-    
+
     if (assets[payerKey] < totalAmount) alert(`⚠️ ${payerName} 的個人餘額不足！`);
 
     const finalNote = note || '日記帳';
     const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
-    
-    const finalAssets = {
+
+    const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssetsTemp,
-      ...(updatedBills ? { bills: updatedBills } : {}), 
+      ...(updatedBills ? { bills: updatedBills } : {}),
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
-        { 
-          date, 
-          month: date.slice(0, 7), 
-          type: 'expense', 
-          category: '個人支出', 
-          details: expenseData, 
-          total: totalAmount, 
-          payer: payerName, 
-          operator: operatorName, 
-          note: finalNote, 
-          timestamp: new Date().toISOString(), 
-          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) } 
+        {
+          date,
+          month: date.slice(0, 7),
+          type: 'expense',
+          category: '個人支出',
+          details: expenseData,
+          total: totalAmount,
+          payer: payerName,
+          operator: operatorName,
+          note: finalNote,
+          timestamp: new Date().toISOString(),
+          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) }
         }
       ]
-    };
+    });
     saveToCloud(finalAssets);
     alert("✅ 記帳完成！");
-    setCurrentPage('overview'); 
+    setCurrentPage('overview');
     sendLineNotification({ title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出", note: finalNote, date: date, color: "#ef454d", operator: operatorName });
   };
 
   const handleAddJointExpense = (date, category, amount, advancedBy, note, updatedBills = null) => {
     const val = Number(amount) || 0;
     const newAssets = { ...assets };
-    
+
     let paymentMethodName = "共同帳戶直接付";
     if (advancedBy === 'jointCash') {
       if (newAssets.jointCash < val) return alert("❌ 共同現金不足！");
       newAssets.jointCash -= val;
     } else if (advancedBy === 'userA') {
       if (newAssets.userA < val) return alert("❌ 恆恆的個人餘額不足以代墊！");
-      newAssets.userA -= val; 
+      newAssets.userA -= val;
       paymentMethodName = "恆恆先墊 (User A)";
     } else if (advancedBy === 'userB') {
       if (newAssets.userB < val) return alert("❌ 得得的個人餘額不足以代墊！");
-      newAssets.userB -= val; 
+      newAssets.userB -= val;
       paymentMethodName = "得得先墊 (User B)";
     }
 
     const safeNote = note ? String(note).trim() : '';
-    const finalAssets = {
+    const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssets,
-      ...(updatedBills ? { bills: updatedBills } : {}), 
+      ...(updatedBills ? { bills: updatedBills } : {}),
       monthlyExpenses: [
         ...(newAssets.monthlyExpenses || []),
-        { 
-          date, 
-          month: date.slice(0, 7), 
-          type: 'spend', 
-          category: '共同支出', 
-          payer: '共同帳戶', 
-          total: val, 
-          note: safeNote ? `${category} - ${safeNote}` : category, 
-          operator: operatorName, 
-          advancedBy: advancedBy === 'jointCash' ? null : advancedBy, 
-          isSettled: advancedBy === 'jointCash', 
-          timestamp: new Date().toISOString(), 
-          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) } 
+        {
+          date,
+          month: date.slice(0, 7),
+          type: 'spend',
+          category: '共同支出',
+          payer: '共同帳戶',
+          total: val,
+          note: safeNote ? `${category} - ${safeNote}` : category,
+          operator: operatorName,
+          advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
+          isSettled: false,
+          timestamp: new Date().toISOString(),
+          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
         }
       ]
-    };
+    });
     saveToCloud(finalAssets);
     alert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
-    setCurrentPage('overview'); 
+    setCurrentPage('overview');
     sendLineNotification({ title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName });
   };
 
@@ -251,17 +254,27 @@ function App() {
   const handleEditTransaction = (indexToEdit, newData) => {
     const newAssets = { ...assets };
     const updatedExpenses = [...newAssets.monthlyExpenses];
-    
+
+    const oldDate = updatedExpenses[indexToEdit].date;
+    const newDate = newData.date;
+
     updatedExpenses[indexToEdit] = {
       ...updatedExpenses[indexToEdit],
-      date: newData.date,
-      month: newData.date.slice(0, 7), 
+      date: newDate,
+      month: newDate.slice(0, 7),
       category: newData.category,
       note: newData.note,
-      operator: operatorName 
+      operator: operatorName
     };
 
     newAssets.monthlyExpenses = updatedExpenses;
+
+    // 清除舊日期與新日期的 dailyNetWorth 避免快照干擾重新計算的真實資產線
+    if (newAssets.dailyNetWorth) {
+      if (newAssets.dailyNetWorth[oldDate]) delete newAssets.dailyNetWorth[oldDate];
+      if (newAssets.dailyNetWorth[newDate]) delete newAssets.dailyNetWorth[newDate];
+    }
+
     saveToCloud(newAssets);
     alert("✅ 紀錄修改成功！(金額與帳戶已受保護不可修改)");
   };
@@ -286,138 +299,160 @@ function App() {
     // 依據交易類型，進行精準的反向加減 (包含美金與台幣)
     switch (record.type) {
       case 'settle':
-         if (record.settledUser) { 
-           newAssets.jointCash += record.total; 
-           newAssets[record.settledUser] -= record.total; 
-         }
-         if (record.settleId) { 
-           updatedExpenses = updatedExpenses.map(r => r.settleId === record.settleId ? { ...r, isSettled: false, settleId: null } : r); 
-         }
-         break;
+        if (record.settledUser) {
+          newAssets.jointCash += record.total;
+          newAssets[record.settledUser] -= record.total;
+        }
+        if (record.settleId) {
+          updatedExpenses = updatedExpenses.map(r => r.settleId === record.settleId ? { ...r, isSettled: false, settleId: null } : r);
+        }
+        break;
       case 'income':
       case 'personal_invest_profit':
-         if (payerKey) newAssets[payerKey] -= record.total; break;
+        if (payerKey) newAssets[payerKey] -= record.total; break;
       case 'expense':
       case 'personal_invest_loss':
-         if (payerKey) newAssets[payerKey] += record.total; break;
+        if (payerKey) newAssets[payerKey] += record.total; break;
       case 'spend':
-         if (record.advancedBy === 'jointCash' || !record.advancedBy) newAssets.jointCash += record.total;
-         else newAssets[record.advancedBy] += record.total;
-         break;
-      case 'transfer': 
-         if (payerKey) newAssets[payerKey] += record.total;
-         newAssets.jointCash -= record.total; 
-         break;
+        if (record.advancedBy === 'jointCash' || !record.advancedBy) newAssets.jointCash += record.total;
+        else newAssets[record.advancedBy] += record.total;
+        break;
+      case 'transfer':
+        if (payerKey) newAssets[payerKey] += record.total;
+        newAssets.jointCash -= record.total;
+        break;
       case 'exchange':
-         if (record.note && record.note.includes('台幣換美金')) {
-             newAssets[record.accountKey] += record.total; 
-             if(record.usdAmount) newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
-         } else {
-             newAssets[record.accountKey] -= record.total; 
-             if(record.usdAmount) newAssets[`${record.accountKey}_usd`] += record.usdAmount;
-         }
-         break;
-      case 'calibrate': 
-         if (record.accountKey) {
-             if (record.twdDiff !== undefined) newAssets[record.accountKey] -= record.twdDiff;
-             if (record.usdDiff !== undefined) newAssets[`${record.accountKey}_usd`] -= record.usdDiff;
-         }
-         break;
+        if (record.note && record.note.includes('台幣換美金')) {
+          newAssets[record.accountKey] += record.total;
+          if (record.usdAmount) newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
+        } else {
+          newAssets[record.accountKey] -= record.total;
+          if (record.usdAmount) newAssets[`${record.accountKey}_usd`] += record.usdAmount;
+        }
+        break;
+      case 'calibrate':
+        if (record.accountKey) {
+          if (record.twdDiff !== undefined) newAssets[record.accountKey] -= record.twdDiff;
+          if (record.usdDiff !== undefined) newAssets[`${record.accountKey}_usd`] -= record.usdDiff;
+        }
+        break;
       case 'joint_invest_buy':
-         if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) + record.usdAmount;
-         else newAssets.jointCash += record.total;
-         
-         if (record.investType && newAssets.jointInvestments[record.investType] !== undefined) {
-           newAssets.jointInvestments[record.investType] -= record.total;
-         }
-         break;
-      case 'personal_invest_buy':
-         if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
-             if (record.usdAmount) {
-                 newAssets[`${record.accountKey}_usd`] = (newAssets[`${record.accountKey}_usd`] || 0) + record.usdAmount;
-             } else {
-                 newAssets[record.accountKey] += record.total;
-             }
-             newAssets.userInvestments[record.accountKey][record.investType] -= record.total;
-         }
-         break;
-      case 'joint_invest_sell': 
-      case 'liquidate': 
-         if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
-         else newAssets.jointCash -= record.total;
+        if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) + record.usdAmount;
+        else newAssets.jointCash += record.total;
 
-         const sellType = record.investType || (record.note && record.note.split(' ')[1]); 
-         if (sellType && newAssets.jointInvestments[sellType] !== undefined) {
-           newAssets.jointInvestments[sellType] += (record.principal || record.total); 
-         }
-         break;
+        if (record.investType && newAssets.jointInvestments[record.investType] !== undefined) {
+          newAssets.jointInvestments[record.investType] -= record.total;
+        }
+        break;
+      case 'personal_invest_buy':
+        if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
+          if (record.usdAmount) {
+            newAssets[`${record.accountKey}_usd`] = (newAssets[`${record.accountKey}_usd`] || 0) + record.usdAmount;
+          } else {
+            newAssets[record.accountKey] += record.total;
+          }
+          newAssets.userInvestments[record.accountKey][record.investType] -= record.total;
+        }
+        break;
+      case 'joint_invest_sell':
+      case 'liquidate':
+        if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
+        else newAssets.jointCash -= record.total;
+
+        const sellType = record.investType || (record.note && record.note.split(' ')[1]);
+        if (sellType && newAssets.jointInvestments[sellType] !== undefined) {
+          newAssets.jointInvestments[sellType] += (record.principal || record.total);
+        }
+        break;
       case 'personal_invest_sell':
-         if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
-             if (record.usdAmount) {
-                 newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
-             } else {
-                 newAssets[record.accountKey] -= record.total;
-             }
-             newAssets.userInvestments[record.accountKey][record.investType] += (record.principal || record.total);
-         }
-         break;
+        if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
+          if (record.usdAmount) {
+            newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
+          } else {
+            newAssets[record.accountKey] -= record.total;
+          }
+          newAssets.userInvestments[record.accountKey][record.investType] += (record.principal || record.total);
+        }
+        break;
       default: break;
     }
 
-    newAssets.monthlyExpenses = updatedExpenses.map((r, i) => 
-        i === indexToDelete 
-        ? { 
-            ...r, 
-            isDeleted: true, 
-            deleteReason: reason.trim(), 
-            deleteTimestamp: new Date().toISOString(), 
-            deleteAuditTrail: { before: snapshotBefore, after: getSnapshot(newAssets) } 
-          } 
+    newAssets.monthlyExpenses = updatedExpenses.map((r, i) =>
+      i === indexToDelete
+        ? {
+          ...r,
+          isDeleted: true,
+          deleteReason: reason.trim(),
+          deleteTimestamp: new Date().toISOString(),
+          deleteAuditTrail: { before: snapshotBefore, after: getSnapshot(newAssets) }
+        }
         : r
     );
 
-    saveToCloud(newAssets);
+    const finalAssets = getUpdatedAssetsWithLineCount(newAssets);
+    saveToCloud(finalAssets);
     sendLineNotification({ title: "🗑️ 刪除/作廢紀錄", amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`, category: record.category, note: `已作廢: ${record.note} (原因: ${reason.trim()})`, date: new Date().toISOString().split('T')[0], color: "#666666", operator: operatorName });
     alert("🗑️ 紀錄已作廢，相關金額與投資本金已完全復原。");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
 
-  if (loading) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh'}}>馬鈴薯甦醒中...🥔</div>;
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>馬鈴薯甦醒中...🥔</div>;
   if (!currentUser) return <Login />;
 
-  const Topbar = () => (
-    <nav className="glass-nav" style={{ padding: '15px 25px', borderRadius: '0 0 20px 20px', marginBottom: '20px' }}>
-      <div style={{ fontSize: '1.2rem', lineHeight: '1.2', fontWeight: 'bold' }}>
-        🥔管家 <span style={{fontSize:'0.75rem', fontWeight: 'normal', opacity:0.7, display: 'inline-block', marginLeft: '5px'}}>({operatorName})</span>
-      </div>
-      <button className="glass-btn" style={{padding:'6px 12px', fontSize:'0.85rem', background:'rgba(255,0,0,0.1)', color:'red'}} onClick={handleLogout}>登出</button>
-    </nav>
-  );
+  const getUpdatedAssetsWithLineCount = (assetsCopy) => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    let newCountObj = { month: currentMonth, count: 1 };
+    if (assetsCopy.lineNotifCount && assetsCopy.lineNotifCount.month === currentMonth) {
+      newCountObj.count = assetsCopy.lineNotifCount.count + 1;
+    }
+    return { ...assetsCopy, lineNotifCount: newCountObj };
+  };
 
-  const navItems = [ 
-    { id: 'overview', icon: '🏠', label: '總覽' }, 
-    { id: 'monthly', icon: '📊', label: '紀錄' }, 
-    { id: 'invest', icon: '📈', label: '投資' }, 
-    { id: 'transfer', icon: '🛠️', label: '操作' }, 
-    { id: 'expense', icon: '✍️', label: '記帳' } 
+  const Topbar = () => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const lineCount = (assets.lineNotifCount && assets.lineNotifCount.month === currentMonth) ? assets.lineNotifCount.count : 0;
+    const isLineLimitWarning = lineCount >= 180;
+
+    return (
+      <nav className="glass-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 25px', borderRadius: '0 0 20px 20px', marginBottom: '20px' }}>
+        <div style={{ fontSize: '1.2rem', lineHeight: '1.2', fontWeight: 'bold' }}>
+          🥔管家 <span style={{ fontSize: '0.75rem', fontWeight: 'normal', opacity: 0.7, display: 'inline-block', marginLeft: '5px' }}>({operatorName})</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ fontSize: '0.75rem', background: isLineLimitWarning ? 'rgba(255,0,0,0.1)' : 'rgba(0,0,0,0.05)', color: isLineLimitWarning ? '#c0392b' : '#555', padding: '4px 10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: isLineLimitWarning ? 'bold' : 'normal' }}>
+            💬 Line: {lineCount} / 200
+            {isLineLimitWarning && <span>⚠️</span>}
+          </div>
+          <button className="glass-btn" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'rgba(255,0,0,0.1)', color: 'red' }} onClick={handleLogout}>登出</button>
+        </div>
+      </nav>
+    );
+  };
+
+  const navItems = [
+    { id: 'overview', icon: '🏠', label: '總覽' },
+    { id: 'monthly', icon: '📊', label: '紀錄' },
+    { id: 'invest', icon: '📈', label: '投資' },
+    { id: 'transfer', icon: '🛠️', label: '操作' },
+    { id: 'expense', icon: '✍️', label: '記帳' }
   ];
 
   const BottomNav = () => (
-    <div style={{ 
-      position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)', 
-      width: 'calc(100% - 40px)', maxWidth: '500px', zIndex: 1000, borderRadius: '30px', 
-      display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '12px 10px', 
-      background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(20px) saturate(180%)', 
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)', 
-      border: '1px solid rgba(255, 255, 255, 0.4)' 
+    <div style={{
+      position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)',
+      width: 'calc(100% - 40px)', maxWidth: '500px', zIndex: 1000, borderRadius: '30px',
+      display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '12px 10px',
+      background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+      border: '1px solid rgba(255, 255, 255, 0.4)'
     }}>
       {navItems.map(item => (
-        <div key={item.id} onClick={() => setCurrentPage(item.id)} style={{ 
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
-          width: '60px', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
-          opacity: currentPage === item.id ? 1 : 0.5, 
-          transform: currentPage === item.id ? 'scale(1.15) translateY(-2px)' : 'scale(1)' 
+        <div key={item.id} onClick={() => setCurrentPage(item.id)} style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          width: '60px', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          opacity: currentPage === item.id ? 1 : 0.5,
+          transform: currentPage === item.id ? 'scale(1.15) translateY(-2px)' : 'scale(1)'
         }}>
           <div style={{ fontSize: '1.5rem', marginBottom: '4px', filter: currentPage === item.id ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none' }}>{item.icon}</div>
           <div style={{ fontSize: '0.7rem', fontWeight: currentPage === item.id ? 'bold' : 'normal', color: currentPage === item.id ? '#1967d2' : '#666' }}>{item.label}</div>
@@ -430,22 +465,22 @@ function App() {
     <div style={{ paddingBottom: '110px' }}>
       <Topbar />
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
-        
-        {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} />}
-        
+
+        {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
+
         {currentPage === 'monthly' && (
-           <MonthlyView 
-             assets={assets} 
-             setAssets={handleAssetsUpdate} 
-             onDelete={handleDeleteTransaction}
-             onEdit={handleEditTransaction} 
-             sendLineNotification={sendLineNotification}
-             currentUser={operatorName}
-           />
+          <MonthlyView
+            assets={assets}
+            setAssets={handleAssetsUpdate}
+            onDelete={handleDeleteTransaction}
+            onEdit={handleEditTransaction}
+            sendLineNotification={sendLineNotification}
+            currentUser={operatorName}
+          />
         )}
-        
+
         {currentPage === 'invest' && <InvestmentView assets={assets} />}
-        {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} />}
+        {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
       </div>
       <BottomNav />

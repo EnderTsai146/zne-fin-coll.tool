@@ -36,21 +36,35 @@ const SegmentedControl = ({ options, value, onChange }) => (
     })}
   </div>
 );
+const addMonthsSafe = (dateStr, months) => {
+    let d = new Date(dateStr);
+    let targetMonth = d.getMonth() + months;
+    let targetYear = d.getFullYear();
+    let expectedMonth = targetMonth % 12;
+    if (expectedMonth < 0) expectedMonth += 12;
+    let newD = new Date(targetYear, targetMonth, d.getDate());
+    if (newD.getMonth() !== expectedMonth) {
+        newD = new Date(targetYear, targetMonth + 1, 0);
+    }
+    const offset = newD.getTimezoneOffset()
+    newD = new Date(newD.getTime() - (offset*60*1000))
+    return newD.toISOString().split('T')[0];
+};
 
 const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) => {
   const [activeTab, setActiveTab] = useState('joint'); 
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
 
   // 共同花費 State
-  const [jointAdvanced, setJointAdvanced] = useState('jointCash');
-  const [jointCat, setJointCat] = useState('餐費');
+  const [jointAdvanced, setJointAdvanced] = useState(null);
+  const [jointCat, setJointCat] = useState(null);
   const [jointAmount, setJointAmount] = useState('');
   const [jointNote, setJointNote] = useState('');
   const [jointCart, setJointCart] = useState([]); 
 
   // 個人花費 State
-  const [persUser, setPersUser] = useState('heng'); 
-  const [persCat, setPersCat] = useState('餐費');
+  const [persUser, setPersUser] = useState(null); 
+  const [persCat, setPersCat] = useState(null);
   const [persAmount, setPersAmount] = useState('');
   const [persNote, setPersNote] = useState('');
   const [persCart, setPersCart] = useState([]); 
@@ -64,6 +78,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   const [billAmount, setBillAmount] = useState('');
   const [billCycle, setBillCycle] = useState(1); 
   const [billNextDate, setBillNextDate] = useState(txDate);
+  const [editingBillId, setEditingBillId] = useState(null);
 
   const safeBills = assets?.bills || [];
   const todayStr = new Date().toISOString().split('T')[0];
@@ -75,11 +90,12 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
 
   // --- 共同記帳邏輯 ---
   const handleAddJointCart = () => {
-      if (!jointAmount || isNaN(jointAmount)) return;
+      if (!jointCat) return alert("請選擇分類！");
+      if (!jointAmount || isNaN(jointAmount) || Number(jointAmount) <= 0) return alert("請輸入有效金額！");
       setJointCart([...jointCart, { id: Date.now(), cat: jointCat, amount: Number(jointAmount), note: jointNote }]);
       setJointAmount(''); 
       setJointNote(''); 
-      setJointCat('餐費');
+      setJointCat(null);
   };
   
   const handleRemoveJointCart = (id) => {
@@ -87,11 +103,14 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   };
 
   const handleJointSubmit = () => {
+    if (!jointAdvanced) return alert("請選擇付款方式 (誰墊付/共同出)！");
     const finalItems = [...jointCart];
-    if (Number(jointAmount) > 0) {
+    if (jointAmount) {
+      if (isNaN(jointAmount) || Number(jointAmount) <= 0) return alert("請輸入有效金額！");
+      if (!jointCat) return alert("最後一筆輸入尚未選擇分類！");
       finalItems.push({ cat: jointCat, amount: Number(jointAmount), note: jointNote });
     }
-    if (finalItems.length === 0) return alert("請輸入花費金額！");
+    if (finalItems.length === 0) return alert("請輸入花費金額或加入暫存！");
 
     const total = finalItems.reduce((sum, item) => sum + item.amount, 0);
     const isMulti = finalItems.length > 1;
@@ -109,16 +128,18 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
     setJointCart([]); 
     setJointAmount(''); 
     setJointNote(''); 
-    setJointCat('餐費');
+    setJointCat(null);
+    setJointAdvanced(null);
   };
 
   // --- 個人記帳邏輯 ---
   const handleAddPersCart = () => {
-      if (!persAmount || isNaN(persAmount)) return;
+      if (!persCat) return alert("請選擇分類！");
+      if (!persAmount || isNaN(persAmount) || Number(persAmount) <= 0) return alert("請輸入有效金額！");
       setPersCart([...persCart, { id: Date.now(), cat: persCat, amount: Number(persAmount), note: persNote }]);
       setPersAmount(''); 
       setPersNote(''); 
-      setPersCat('餐費');
+      setPersCat(null);
   };
   
   const handleRemovePersCart = (id) => {
@@ -126,11 +147,14 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   };
 
   const handlePersonalSubmit = () => {
+    if (!persUser) return alert("請選擇記誰的帳！");
     const finalItems = [...persCart];
-    if (Number(persAmount) > 0) {
+    if (persAmount) {
+      if (isNaN(persAmount) || Number(persAmount) <= 0) return alert("請輸入有效金額！");
+      if (!persCat) return alert("最後一筆輸入尚未選擇分類！");
       finalItems.push({ cat: persCat, amount: Number(persAmount), note: persNote });
     }
-    if (finalItems.length === 0) return alert("請輸入花費金額！");
+    if (finalItems.length === 0) return alert("請輸入花費金額或加入暫存！");
 
     const total = finalItems.reduce((sum, item) => sum + item.amount, 0);
     const isMulti = finalItems.length > 1;
@@ -153,17 +177,16 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
     setPersCart([]); 
     setPersAmount(''); 
     setPersNote(''); 
-    setPersCat('餐費');
+    setPersCat(null);
+    setPersUser(null);
   };
 
-  // --- 定期帳單邏輯 ---
   const handleSaveNewBill = () => {
       if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限，請確認 App.jsx 是否已更新！");
       if (!billName) return alert("請填寫帳單名稱！");
       if (billType === 'fixed' && (!billAmount || isNaN(billAmount))) return alert("固定帳單請輸入金額！");
       
-      const newBill = { 
-        id: Date.now().toString(), 
+      const updatedBillData = { 
         name: billName, 
         scope: billScope, 
         payer: billPayer, 
@@ -173,11 +196,32 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
         nextDate: billNextDate 
       };
       
-      setAssets({ ...assets, bills: [...safeBills, newBill] });
+      if (editingBillId) {
+          const updatedBills = safeBills.map(b => b.id === editingBillId ? { ...b, ...updatedBillData } : b);
+          setAssets({ ...assets, bills: updatedBills });
+          alert("✅ 帳單修改成功！");
+      } else {
+          const newBill = { id: Date.now().toString(), ...updatedBillData };
+          setAssets({ ...assets, bills: [...safeBills, newBill] });
+          alert("✅ 帳單設定成功！");
+      }
+      
       setShowAddBill(false); 
+      setEditingBillId(null);
       setBillName(''); 
       setBillAmount('');
-      alert("✅ 帳單設定成功！");
+  };
+
+  const handleEditBill = (bill) => {
+      setBillName(bill.name);
+      setBillScope(bill.scope);
+      setBillPayer(bill.payer);
+      setBillType(bill.type);
+      setBillAmount(bill.amount > 0 ? bill.amount : '');
+      setBillCycle(bill.cycle);
+      setBillNextDate(bill.nextDate);
+      setEditingBillId(bill.id);
+      setShowAddBill(true);
   };
 
   const handlePayBill = (bill) => {
@@ -194,9 +238,8 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
       if (!window.confirm(`確定要認列【${bill.name}】扣款 ${formatMoney(finalAmount)} 嗎？`)) return;
 
       // 🛡️ 修復 Race Condition：把更新後的 bills 陣列當作參數一起丟給 App.jsx
-      let d = new Date(bill.nextDate); 
-      d.setMonth(d.getMonth() + bill.cycle);
-      const updatedBills = safeBills.map(b => b.id === bill.id ? { ...b, nextDate: d.toISOString().split('T')[0] } : b);
+      const nextDateStr = addMonthsSafe(bill.nextDate, bill.cycle);
+      const updatedBills = safeBills.map(b => b.id === bill.id ? { ...b, nextDate: nextDateStr } : b);
 
       if (bill.scope === 'joint') {
           onAddJointExpense(todayStr, '固定費用', finalAmount, bill.payer, `[定期帳單] ${bill.name}`, updatedBills);
@@ -257,9 +300,12 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
             </div>
           </div>
           
-          <button className="glass-btn" style={{width:'100%', marginBottom:'15px', background:'rgba(0,0,0,0.05)', color:'#555', border:'1px dashed #ccc', fontSize:'0.9rem'}} onClick={handleAddJointCart}>
-            ➕ 暫存此筆，繼續加入下一筆
-          </button>
+          <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}>
+            <button className="glass-btn" style={{flex:1, background:'rgba(0,0,0,0.05)', color:'#555', border:'1px dashed #ccc', fontSize:'0.9rem'}} onClick={handleAddJointCart}>
+              ➕ 暫存此筆，繼續加入下一筆
+            </button>
+            {jointCart.length > 0 && <button className="glass-btn" style={{padding:'8px 12px', background:'rgba(231, 76, 60, 0.1)', color:'#e74c3c', border:'1px dashed #e74c3c', fontSize:'0.9rem'}} onClick={()=>setJointCart([])}>🗑️ 清空全部暫存</button>}
+          </div>
           
           {jointCart.length > 0 && (
              <div style={{background:'rgba(168, 230, 207, 0.15)', padding:'10px', borderRadius:'8px', marginBottom:'15px', border:'1px solid rgba(168, 230, 207, 0.5)'}}>
@@ -311,9 +357,12 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
             </div>
           </div>
           
-          <button className="glass-btn" style={{width:'100%', marginBottom:'15px', background:'rgba(0,0,0,0.05)', color:'#555', border:'1px dashed #ccc', fontSize:'0.9rem'}} onClick={handleAddPersCart}>
-            ➕ 暫存此筆，繼續加入下一筆
-          </button>
+          <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}>
+            <button className="glass-btn" style={{flex:1, background:'rgba(0,0,0,0.05)', color:'#555', border:'1px dashed #ccc', fontSize:'0.9rem'}} onClick={handleAddPersCart}>
+              ➕ 暫存此筆，繼續加入下一筆
+            </button>
+            {persCart.length > 0 && <button className="glass-btn" style={{padding:'8px 12px', background:'rgba(231, 76, 60, 0.1)', color:'#e74c3c', border:'1px dashed #e74c3c', fontSize:'0.9rem'}} onClick={()=>setPersCart([])}>🗑️ 清空全部暫存</button>}
+          </div>
           
           {persCart.length > 0 && (
              <div style={{background:'rgba(255, 154, 158, 0.15)', padding:'10px', borderRadius:'8px', marginBottom:'15px', border:'1px solid rgba(255, 154, 158, 0.5)'}}>
@@ -350,7 +399,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
            
            {showAddBill && (
               <div className="glass-card" style={{marginBottom:'20px', border:'1px solid #3498db'}}>
-                  <h4 style={{marginTop:0, color:'#3498db'}}>新增帳單設定</h4>
+                  <h4 style={{marginTop:0, color:'#3498db'}}>{editingBillId ? '✏️ 編輯帳單設定' : '➕ 新增帳單設定'}</h4>
                   <input type="text" className="glass-input" placeholder="帳單名稱 (例: Netflix, 水費)" value={billName} onChange={e=>setBillName(e.target.value)} />
                   
                   <div style={{ marginBottom: '10px' }}>
@@ -378,7 +427,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
                   </div>
                   
                   <div style={{display:'flex', gap:'10px'}}>
-                      <button className="glass-btn" style={{flex:1, background:'#eee', color:'#333'}} onClick={() => setShowAddBill(false)}>取消</button>
+                      <button className="glass-btn" style={{flex:1, background:'#eee', color:'#333'}} onClick={() => { setShowAddBill(false); setEditingBillId(null); setBillName(''); setBillAmount(''); }}>取消</button>
                       <button className="glass-btn" style={{flex:1, background:'#3498db', color:'#fff'}} onClick={handleSaveNewBill}>儲存設定</button>
                   </div>
               </div>
@@ -392,8 +441,11 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
                    const alert = isApproaching(bill.nextDate);
                    return (
                        <div key={bill.id} className="glass-card" style={{marginBottom:'15px', borderLeft: alert ? '5px solid #e67e22' : '5px solid #2ecc71', position:'relative'}}>
-                           <button onClick={() => handleDeleteBill(bill.id)} style={{position:'absolute', top:'10px', right:'10px', background:'transparent', border:'none', color:'#ccc', cursor:'pointer'}}>✖</button>
-                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px'}}>
+                           <div style={{position:'absolute', top:'10px', right:'10px', display:'flex', gap:'5px'}}>
+                               <button onClick={() => handleEditBill(bill)} style={{background:'transparent', border:'none', color:'#3498db', cursor:'pointer', fontSize:'1rem'}}>✏️</button>
+                               <button onClick={() => handleDeleteBill(bill.id)} style={{background:'transparent', border:'none', color:'#ccc', cursor:'pointer', fontSize:'1rem'}}>✖</button>
+                           </div>
+                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px', paddingRight:'50px'}}>
                                <div>
                                    <div style={{fontWeight:'bold', fontSize:'1.1rem', color:'#333'}}>{bill.name}</div>
                                    <div style={{fontSize:'0.8rem', color:'#666', marginTop:'4px'}}>

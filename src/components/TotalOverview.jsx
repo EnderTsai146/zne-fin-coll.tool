@@ -17,15 +17,13 @@ const lastYear = new Date(); lastYear.setFullYear(today.getFullYear() - 1);
 // 🚀 你的專屬 Google API
 const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
-const TotalOverview = ({ assets, setAssets }) => {
+const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) => {
   const [chartDateRange, setChartDateRange] = useState({ start: formatDate(lastYear), end: formatDate(today) });
   const [activeHistory, setActiveHistory] = useState(null); 
   const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
   const [backupWarning, setBackupWarning] = useState(false);
   const [selectedChartDate, setSelectedChartDate] = useState(null);
 
-  // 💱 即時美金匯率狀態
-  const [currentFxRate, setCurrentFxRate] = useState(31.5);
   // ★ 儲存包含股票漲跌的「真實總市值」
   const [liveMarketNetWorth, setLiveMarketNetWorth] = useState(0);
   // ★ 新增：背景抓取即時報價的 UI 狀態
@@ -45,7 +43,7 @@ const TotalOverview = ({ assets, setAssets }) => {
           if (isBackingUpRef.current) return;
           isBackingUpRef.current = true;
           try {
-              await fetch(MY_GOOGLE_API_URL, {
+              fetch(MY_GOOGLE_API_URL, {
                   method: 'POST', 
                   mode: 'no-cors', 
                   headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -55,11 +53,10 @@ const TotalOverview = ({ assets, setAssets }) => {
                     fileName: `自動備份_${todayStr}.json`, 
                     assets: assets 
                   })
-              });
+              }).catch(e => console.log('Background backup error (usually cors/redirect thrown by browser):', e));
+              
               setBackupWarning(false);
               setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
-          } catch (e) {
-              setBackupWarning(true); 
           } finally {
               isBackingUpRef.current = false;
           }
@@ -195,39 +192,47 @@ const TotalOverview = ({ assets, setAssets }) => {
       runDailySnapshot();
   }, [hasSnapshot, stockHoldings, totalTwdCash, totalInvest, assets, setAssets, recordDate]);
 
-  const handleRecalculate = () => {
-    if (window.confirm("⚠️ 確定要「清除並重置」所有的歷史快照嗎？\n\n這會消除過去記帳錯誤產生的幽靈金額(如52萬)，讓折線圖恢復平順，並以今天的正確餘額重新開始記錄！")) {
-        const newAssets = { ...assets };
-        newAssets.dailyNetWorth = {}; 
-        setAssets(newAssets);
-    }
-  };
-
-  // ----------------------------------------------------
-  // 3. 繪製折線圖資料
-  // ----------------------------------------------------
+    // ----------------------------------------------------
+    // 3. 繪製折線圖資料
+    // ----------------------------------------------------
   const historyData = useMemo(() => {
+      const getAssetsTotal = (state) => {
+          if (!state) return 0;
+          const twd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
+          const usd = (state.userA_usd || 0) + (state.userB_usd || 0) + (state.jointCash_usd || 0);
+          const invest = sumInvestments(state.jointInvestments) + sumInvestments(state.userInvestments?.userA) + sumInvestments(state.userInvestments?.userB);
+          return twd + Math.round(usd * currentFxRate) + invest;
+      };
+
       const chartDataPoints = {};
       const sortedRecords = [...(assets.monthlyExpenses || [])]
-          .filter(r => !r.isDeleted && r.auditTrail?.after)
-          .sort((a, b) => new Date(a.timestamp || a.date) - new Date(b.timestamp || b.date));
+          .filter(r => !r.isDeleted && r.auditTrail?.after && r.auditTrail?.before)
+          // 嚴格依照日期與時間排序
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
 
-      sortedRecords.forEach(record => {
-          const state = record.auditTrail.after;
-          const pastTwd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
-          const pastUsd = (state.userA_usd || 0) + (state.userB_usd || 0) + (state.jointCash_usd || 0);
-          const pastInvest = sumInvestments(state.jointInvestments) + sumInvestments(state.userInvestments?.userA) + sumInvestments(state.userInvestments?.userB);
+      // 取得所有需要繪製的日期
+      let allDates = [...new Set([formatDate(today), ...sortedRecords.map(r => r.date), ...Object.keys(assets.dailyNetWorth || {})])].sort();
+
+      // 以現在的實際總資產作為絕對起點，開始往前回推歷史資產線。完美避開修改日期造成的幽靈狀態錯置。
+      let currentBal = liveMarketNetWorth > 0 ? liveMarketNetWorth : totalAssets;
+
+      for (let i = allDates.length - 1; i >= 0; i--) {
+          const d = allDates[i];
           
-          chartDataPoints[record.date] = pastTwd + Math.round(pastUsd * currentFxRate) + pastInvest;
-      });
+          if (assets.dailyNetWorth && assets.dailyNetWorth[d]) {
+              currentBal = assets.dailyNetWorth[d];
+          }
+          
+          chartDataPoints[d] = currentBal;
 
-      if (assets.dailyNetWorth) {
-        Object.keys(assets.dailyNetWorth).forEach(date => { 
-          chartDataPoints[date] = assets.dailyNetWorth[date]; 
-        });
+          const dayRecords = sortedRecords.filter(r => r.date === d);
+          let dayNetChange = 0;
+          dayRecords.forEach(r => {
+              dayNetChange += (getAssetsTotal(r.auditTrail.after) - getAssetsTotal(r.auditTrail.before));
+          });
+          
+          currentBal -= dayNetChange;
       }
-      
-      if (Object.keys(chartDataPoints).length === 0) chartDataPoints[formatDate(today)] = totalAssets;
 
       let labels = Object.keys(chartDataPoints).sort();
       
@@ -255,7 +260,7 @@ const TotalOverview = ({ assets, setAssets }) => {
       
       const data = labels.map(d => chartDataPoints[d]);
       return { labels, data };
-  }, [assets.monthlyExpenses, assets.dailyNetWorth, totalAssets, chartDateRange, currentFxRate]);
+  }, [assets.monthlyExpenses, assets.dailyNetWorth, totalAssets, chartDateRange, currentFxRate, liveMarketNetWorth]);
 
   const lineChartData = {
       labels: historyData.labels,
@@ -433,7 +438,6 @@ const TotalOverview = ({ assets, setAssets }) => {
 
       <h1 className="page-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
         總資產概況
-        <button onClick={handleRecalculate} style={{background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'}}><span>🔄</span>重新結算</button>
       </h1>
 
       {/* 【第一層】雙人總資產大看板 */}
