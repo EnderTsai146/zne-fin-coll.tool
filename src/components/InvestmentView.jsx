@@ -1,10 +1,8 @@
 // src/components/InvestmentView.jsx
 import React, { useState, useMemo, useEffect } from 'react';
+import { MY_GOOGLE_API_URL } from '../config';
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
-
-// 🚀 你的專屬 Google API
-const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const InvestmentView = ({ assets }) => {
   const [activeTab, setActiveTab] = useState('jointCash'); 
@@ -14,6 +12,7 @@ const InvestmentView = ({ assets }) => {
   const [liveFx, setLiveFx] = useState(31.5); 
   const [isFetching, setIsFetching] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const history = assets.monthlyExpenses || [];
   const safeJoint = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
@@ -95,7 +94,7 @@ const InvestmentView = ({ assets }) => {
 
       fetchPrices();
       return () => { isMounted = false; };
-  }, [activeTab, stockHoldings]);
+  }, [activeTab, stockHoldings, refreshKey]);
 
   // 計算現值與損益
   let stockMarketValue = 0;
@@ -152,94 +151,90 @@ const InvestmentView = ({ assets }) => {
   }).reverse();
 
   return (
-    <div style={{animation: 'fadeIn 0.5s'}}>
+    <div className="page-transition-enter">
       <h1 className="page-title">投資部位</h1>
       
-      <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
-        <button className={`glass-btn ${activeTab==='jointCash'?'':'inactive'}`} onClick={()=>setActiveTab('jointCash')} style={{flex:1, padding:'8px 0'}}>🏫 共同</button>
-        <button className={`glass-btn ${activeTab==='userA'?'':'inactive'}`} onClick={()=>setActiveTab('userA')} style={{flex:1, padding:'8px 0'}}>🐶 恆恆</button>
-        <button className={`glass-btn ${activeTab==='userB'?'':'inactive'}`} onClick={()=>setActiveTab('userB')} style={{flex:1, padding:'8px 0'}}>🐕 得得</button>
+      <div style={{display:'flex', gap:'8px', marginBottom:'18px'}}>
+        <button className={`glass-btn ${activeTab==='jointCash'?'':'inactive'}`} onClick={()=>setActiveTab('jointCash')} style={{flex:1, padding:'10px 0', fontSize:'0.88rem'}}>🏫 共同</button>
+        <button className={`glass-btn ${activeTab==='userA'?'':'inactive'}`} onClick={()=>setActiveTab('userA')} style={{flex:1, padding:'10px 0', fontSize:'0.88rem'}}>🐶 恆恆</button>
+        <button className={`glass-btn ${activeTab==='userB'?'':'inactive'}`} onClick={()=>setActiveTab('userB')} style={{flex:1, padding:'10px 0', fontSize:'0.88rem'}}>🐕 得得</button>
       </div>
 
-      <div className="glass-card" style={{ marginBottom: '20px', textAlign: 'center', background: 'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)', padding: '20px 15px' }}>
-        <div style={{ fontSize: '0.9rem', color: '#555', marginBottom: '5px' }}>{currentHistoryFilter} - 投資總市值估算 <span style={{fontSize:'0.7rem'}}>(已統一換算台幣)</span></div>
-        <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#2c3e50' }}>{formatMoney(totalMarketValue)}</div>
-        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '15px', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '10px' }}>
-            <div><div style={{fontSize:'0.75rem', color:'#666'}}>投入本金(台幣)</div><div style={{fontWeight:'bold', color:'#333'}}>{formatMoney(totalPrincipal)}</div></div>
-            <div><div style={{fontSize:'0.75rem', color:'#666'}}>未實現損益(台幣)</div><div style={{fontWeight:'bold', color: totalUnrealizedProfit >= 0 ? '#27ae60' : '#e74c3c'}}>{totalUnrealizedProfit >= 0 ? '+' : ''}{formatMoney(totalUnrealizedProfit)}</div></div>
+      <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(88,86,214,0.85), rgba(94,158,247,0.8))', color: 'white', padding: '24px 16px', border:'none', boxShadow:'0 10px 36px rgba(88,86,214,0.2)' }}>
+        <div style={{ fontSize: '0.88rem', opacity: 0.9, marginBottom: '5px' }}>{currentHistoryFilter} - 投資總市值估算 <span style={{fontSize:'0.7rem'}}>(已統一換算台幣)</span></div>
+        <div style={{ fontSize: '2.2rem', fontWeight: '800', letterSpacing:'-0.02em', textShadow:'0 2px 10px rgba(0,0,0,0.15)' }}>{formatMoney(totalMarketValue)}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '12px' }}>
+            <div><div style={{fontSize:'0.73rem', opacity:0.8}}>投入本金(台幣)</div><div style={{fontWeight:'700', fontSize:'1rem'}}>{formatMoney(totalPrincipal)}</div></div>
+            <div><div style={{fontSize:'0.73rem', opacity:0.8}}>未實現損益(台幣)</div><div style={{fontWeight:'700', fontSize:'1rem', color: totalUnrealizedProfit >= 0 ? '#ffd60a' : '#ff9a9e'}}>{totalUnrealizedProfit >= 0 ? '+' : ''}{formatMoney(totalUnrealizedProfit)}</div></div>
         </div>
       </div>
 
-      <div className="glass-card" style={{marginBottom:'20px'}}>
+      <div className="glass-card card-animate" style={{marginBottom:'18px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-              <h3 style={{margin:0, color:'#555'}}>📊 目前持股庫存</h3>
+              <h3 style={{margin:0, fontWeight:'700'}}>📊 目前持股庫存</h3>
               <button 
                 className="glass-btn" 
-                onClick={() => {
-                   setIsFetching(true);
-                   setTimeout(() => setActiveTab(prev => prev), 100); 
-                }} 
+                onClick={() => { setRefreshKey(k => k + 1); }} 
                 disabled={isFetching} 
-                style={{padding:'4px 8px', fontSize:'0.8rem', background:'#f0f0f0', color:'#333', border:'none'}}
+                style={{padding:'5px 10px', fontSize:'0.78rem'}}
               >
                   {isFetching ? '🔄 載入中...' : '🔄 更新報價'}
               </button>
           </div>
-          {lastUpdated && <div style={{fontSize:'0.75rem', color:'#888', textAlign:'right', marginBottom:'10px'}}>最後更新: {lastUpdated} (USD/TWD: {liveFx.toFixed(2)})</div>}
+          {lastUpdated && <div style={{fontSize:'0.73rem', color:'var(--text-tertiary)', textAlign:'right', marginBottom:'10px'}}>最後更新: {lastUpdated} (USD/TWD: {liveFx.toFixed(2)})</div>}
 
           {holdingList.length === 0 ? (
-              <div style={{textAlign:'center', color:'#888', padding:'10px'}}>目前沒有持股</div>
+              <div style={{textAlign:'center', color:'var(--text-tertiary)', padding:'12px', fontSize:'0.9rem'}}>目前沒有持股</div>
           ) : (
               holdingList.map((h, idx) => (
-                  <div key={idx} style={{display:'flex', justifyContent:'space-between', padding:'12px 0', borderBottom:'1px solid #eee'}}>
+                  <div key={idx} style={{display:'flex', justifyContent:'space-between', padding:'12px 0', borderBottom:'0.5px solid rgba(0,0,0,0.04)'}}>
                       <div>
-                          <div style={{fontWeight:'bold', color:'#333', fontSize:'1.1rem'}}>{h.sym}</div>
-                          <div style={{fontSize:'0.8rem', color:'#666'}}>庫存: <span style={{fontWeight:'bold'}}>{h.shares}</span> 股</div>
-                          {/* ★ 雙幣標示防呆 */}
-                          <div style={{fontSize:'0.75rem', color:'#888'}}>
+                          <div style={{fontWeight:'700', color:'var(--text-primary)', fontSize:'1.05rem'}}>{h.sym}</div>
+                          <div style={{fontSize:'0.78rem', color:'var(--text-secondary)'}}>庫存: <span style={{fontWeight:'600'}}>{h.shares}</span> 股</div>
+                          <div style={{fontSize:'0.73rem', color:'var(--text-tertiary)'}}>
                               台幣均價: {formatMoney(h.avgCost)} <br/>
-                              現價: <span style={{color: h.market==='US'?'#e67e22':'#333', fontWeight: h.market==='US'?'bold':'normal'}}>{h.market==='US'?'USD $':''}{h.currentPrice.toFixed(2)}</span>
+                              現價: <span style={{color: h.market==='US'?'var(--accent-orange)':'var(--text-primary)', fontWeight: h.market==='US'?'600':'400'}}>{h.market==='US'?'USD $':''}{h.currentPrice.toFixed(2)}</span>
                           </div>
                       </div>
                       <div style={{textAlign:'right'}}>
-                          <div style={{fontWeight:'bold', fontSize:'1.1rem', color:'#2c3e50'}}>{formatMoney(h.marketValue)}</div>
-                          <div style={{fontSize:'0.85rem', fontWeight:'bold', color: h.profit >= 0 ? '#27ae60' : '#e74c3c'}}>
+                          <div style={{fontWeight:'700', fontSize:'1.05rem', color:'var(--text-primary)'}}>{formatMoney(h.marketValue)}</div>
+                          <div style={{fontSize:'0.82rem', fontWeight:'700', color: h.profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}}>
                               {h.profit >= 0 ? '▲' : '▼'} {formatMoney(Math.abs(h.profit))} ({h.profitPercent.toFixed(1)}%)
                           </div>
-                          {h.market === 'US' && <div style={{fontSize:'0.7rem', color:'#aaa'}}>*已依匯率 {liveFx.toFixed(2)} 換算</div>}
+                          {h.market === 'US' && <div style={{fontSize:'0.68rem', color:'var(--text-tertiary)'}}>*已依匯率 {liveFx.toFixed(2)} 換算</div>}
                       </div>
                   </div>
               ))
           )}
 
-          <div style={{marginTop:'15px', paddingTop:'15px', borderTop:'2px dashed #ddd'}}>
-              <h4 style={{margin:'0 0 10px 0', color:'#666', fontSize:'0.9rem'}}>非股票資產 (依系統登錄台幣本金)</h4>
-              <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', color:'#555', marginBottom:'5px'}}><span>基金</span><span>{formatMoney(currentData.fund || 0)}</span></div>
-              <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', color:'#555', marginBottom:'5px'}}><span>定存</span><span>{formatMoney(currentData.deposit || 0)}</span></div>
-              <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', color:'#555'}}><span>其他</span><span>{formatMoney(currentData.other || 0)}</span></div>
+          <div style={{marginTop:'15px', paddingTop:'15px', borderTop:'0.5px solid rgba(0,0,0,0.06)'}}>
+              <h4 style={{margin:'0 0 10px 0', color:'var(--text-secondary)', fontSize:'0.88rem', fontWeight:'600'}}>非股票資產 (依系統登錄台幣本金)</h4>
+              <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.84rem', color:'var(--text-secondary)', marginBottom:'5px'}}><span>基金</span><span style={{fontWeight:'600'}}>{formatMoney(currentData.fund || 0)}</span></div>
+              <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.84rem', color:'var(--text-secondary)', marginBottom:'5px'}}><span>定存</span><span style={{fontWeight:'600'}}>{formatMoney(currentData.deposit || 0)}</span></div>
+              <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.84rem', color:'var(--text-secondary)'}}><span>其他</span><span style={{fontWeight:'600'}}>{formatMoney(currentData.other || 0)}</span></div>
           </div>
       </div>
 
-      <div className="glass-card" style={{ marginBottom: '20px' }}>
-          <h3 style={{marginTop:0, marginBottom:'15px', color:'#555'}}>📜 歷史交易紀錄</h3>
+      <div className="glass-card card-animate" style={{ marginBottom: '18px' }}>
+          <h3 style={{marginTop:0, marginBottom:'15px', fontWeight:'700'}}>📜 歷史交易紀錄</h3>
           
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
-              <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'4px 8px', flex:1, minWidth:'110px', fontSize:'0.8rem'}} />
-              <span style={{color:'#888', fontSize:'0.8rem'}}>至</span>
-              <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'4px 8px', flex:1, minWidth:'110px', fontSize:'0.8rem'}} />
-              <button onClick={() => setDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'4px 10px', fontSize:'0.8rem', background: '#fff', color:'#333', border:'1px solid #ccc'}}>清除</button>
+              <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'5px 8px', flex:1, minWidth:'110px', fontSize:'0.82rem'}} />
+              <span style={{color:'var(--text-tertiary)', fontSize:'0.82rem'}}>至</span>
+              <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'5px 8px', flex:1, minWidth:'110px', fontSize:'0.82rem'}} />
+              <button onClick={() => setDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'5px 10px', fontSize:'0.78rem'}}>清除</button>
           </div>
 
           {filteredHistory.length === 0 ? (
-              <div style={{textAlign:'center', color:'#888', padding:'20px'}}>此區間尚無投資紀錄</div>
+              <div style={{textAlign:'center', color:'var(--text-tertiary)', padding:'20px', fontSize:'0.9rem'}}>此區間尚無投資紀錄</div>
           ) : (
               filteredHistory.map((r, idx) => {
-                  let actionSign = ''; let amountColor = '#333'; let amountStr = formatMoney(r.total);
+                  let actionSign = ''; let amountColor = 'var(--text-primary)'; let amountStr = formatMoney(r.total);
                   
-                  if (r.type.includes('buy')) { actionSign = '買入'; amountColor = '#8e44ad'; amountStr = '-' + amountStr; } 
-                  else if (r.type.includes('sell')) { actionSign = '賣出'; amountColor = '#f1c40f'; amountStr = '+' + amountStr; } 
-                  else if (r.type.includes('profit')) { actionSign = '當沖賺'; amountColor = '#e67e22'; amountStr = '+' + amountStr; } 
-                  else if (r.type.includes('loss')) { actionSign = '當沖賠'; amountColor = '#7f8c8d'; amountStr = '-' + amountStr; }
+                  if (r.type.includes('buy')) { actionSign = '買入'; amountColor = 'var(--accent-purple)'; amountStr = '-' + amountStr; } 
+                  else if (r.type.includes('sell')) { actionSign = '賣出'; amountColor = 'var(--accent-yellow)'; amountStr = '+' + amountStr; } 
+                  else if (r.type.includes('profit')) { actionSign = '當沖賺'; amountColor = 'var(--accent-orange)'; amountStr = '+' + amountStr; } 
+                  else if (r.type.includes('loss')) { actionSign = '當沖賠'; amountColor = 'var(--text-tertiary)'; amountStr = '-' + amountStr; }
 
                   let profitStr = '';
                   if (r.type.includes('sell')) {
@@ -248,17 +243,16 @@ const InvestmentView = ({ assets }) => {
                   }
 
                   return (
-                      <div key={idx} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 0', borderBottom:'1px dashed #eee'}}>
+                      <div key={idx} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 0', borderBottom:'0.5px solid rgba(0,0,0,0.04)'}}>
                           <div>
-                              <div style={{fontSize:'0.8rem', color:'#888'}}>{r.date || r.month}</div>
-                              <div style={{fontWeight:'bold', color:'#444'}}>{r.note} <span style={{fontSize:'0.75rem', color:'#888', fontWeight:'normal'}}>({actionSign})</span></div>
-                              {r.symbol && <div style={{fontSize:'0.75rem', color:'#3498db', marginTop:'2px'}}>{r.symbol} | {r.shares}股</div>}
+                              <div style={{fontSize:'0.78rem', color:'var(--text-tertiary)'}}>{r.date || r.month}</div>
+                              <div style={{fontWeight:'600', color:'var(--text-primary)'}}>{r.note} <span style={{fontSize:'0.73rem', color:'var(--text-tertiary)', fontWeight:'400'}}>({actionSign})</span></div>
+                              {r.symbol && <div style={{fontSize:'0.73rem', color:'var(--accent-blue)', marginTop:'2px'}}>{r.symbol} | {r.shares}股</div>}
                           </div>
                           <div style={{textAlign:'right'}}>
-                              <div style={{fontWeight:'bold', fontSize:'1.1rem', color: amountColor}}>{amountStr}</div>
-                              {/* ★ 歷史紀錄同步防呆：明確標示美金 */}
-                              {r.usdAmount && <div style={{fontSize:'0.75rem', color:'#e67e22', fontWeight:'bold'}}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
-                              {profitStr && <div style={{fontSize:'0.75rem', color: profitStr.includes('賺') ? '#2ecc71' : '#e74c3c'}}>{profitStr}</div>}
+                              <div style={{fontWeight:'700', fontSize:'1.05rem', color: amountColor}}>{amountStr}</div>
+                              {r.usdAmount && <div style={{fontSize:'0.73rem', color:'var(--accent-orange)', fontWeight:'600'}}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
+                              {profitStr && <div style={{fontSize:'0.73rem', color: profitStr.includes('賺') ? 'var(--accent-green)' : 'var(--accent-red)'}}>{profitStr}</div>}
                           </div>
                       </div>
                   );

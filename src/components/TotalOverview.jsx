@@ -5,6 +5,7 @@ import {
   CategoryScale, LinearScale, PointElement, LineElement, Title, Filler 
 } from 'chart.js';
 import { Doughnut, Line } from 'react-chartjs-2';
+import { MY_GOOGLE_API_URL } from '../config';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, Title, Filler);
 
@@ -13,9 +14,6 @@ const formatDate = (date) => date.toISOString().split('T')[0];
 
 const today = new Date();
 const lastYear = new Date(); lastYear.setFullYear(today.getFullYear() - 1);
-
-// 🚀 你的專屬 Google API
-const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
 const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) => {
   const [chartDateRange, setChartDateRange] = useState({ start: formatDate(lastYear), end: formatDate(today) });
@@ -375,23 +373,23 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
       const marketFluctuation = diff - netTransactions;
 
       return (
-          <div style={{ marginTop: '15px', padding: '15px', borderRadius: '12px', borderLeft: '5px solid #9b59b6', background: 'linear-gradient(to right, rgba(155, 89, 182, 0.1), rgba(255,255,255,0.5))', animation: 'fadeIn 0.3s' }}>
+          <div style={{ marginTop: '15px', padding: '16px', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--accent-purple)', background: 'rgba(88,86,214,0.04)', animation: 'slideDown 0.3s ease-out' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h4 style={{ margin: 0, color: '#555', fontSize: '1.05rem' }}>📅 {selectedChartDate} 資產變動分析</h4>
+                  <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight:'700' }}>📅 {selectedChartDate} 資產變動分析</h4>
                   <button onClick={() => setSelectedChartDate(null)} style={{ background:'transparent', border:'none', cursor:'pointer', fontSize:'1.2rem' }}>✖</button>
               </div>
               
               <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: '15px' }}>
-                 <div style={{ fontSize: '0.9rem', color: '#666' }}>總資產變動: </div>
-                 <div style={{ padding:'2px 8px', borderRadius:'10px', fontSize: '0.85rem', fontWeight: 'bold', background: diff >= 0 ? 'rgba(46, 204, 113, 0.2)' : 'rgba(231, 76, 60, 0.2)', color: diff >= 0 ? '#27ae60' : '#c0392b' }}>
+                 <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>總資產變動: </div>
+                 <div style={{ padding:'3px 10px', borderRadius:'var(--radius-pill)', fontSize: '0.84rem', fontWeight: '700', background: diff >= 0 ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.08)', color: diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
                      較昨日 {diff >= 0 ? '+' : ''}{formatMoney(diff)}
                  </div>
               </div>
 
               {dayRecords.length > 0 && (
-                  <div style={{ marginBottom: '12px', background:'rgba(255,255,255,0.7)', padding:'10px', borderRadius:'8px' }}>
-                      <div style={{ fontSize: '0.8rem', color: '#888', borderBottom: '1px solid #ddd', paddingBottom: '4px', marginBottom: '6px' }}>
-                          📝 當日人為操作 (實質淨額影響: <span style={{color: netTransactions>=0?'#27ae60':'#c0392b', fontWeight:'bold'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
+                  <div style={{ marginBottom: '12px', background:'rgba(120,120,128,0.04)', padding:'12px', borderRadius:'var(--radius-sm)' }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', marginBottom: '6px' }}>
+                          📝 當日人為操作 (實質淨額影響: <span style={{color: netTransactions>=0?'var(--accent-green)':'var(--accent-red)', fontWeight:'700'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
                       </div>
                       {dayRecords.map((r, i) => {
                           const isExternalOut = ['spend', 'expense', 'fixed', 'personal_invest_loss'].includes(r.type);
@@ -408,7 +406,7 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                           return (
                               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px', alignItems: 'center' }}>
                                   <span style={{color: isNeutral ? '#888' : '#444', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%'}}>
-                                      {r.note || r.category} {isNeutral && <span style={{fontSize:'0.7rem', color:'#aaa', marginLeft:'5px'}}>(轉換/校正)</span>}
+                                      {r.note || r.category} {isNeutral && <span style={{fontSize:'0.68rem', color:'var(--text-tertiary)', marginLeft:'5px'}}>(轉換/校正)</span>}
                                   </span>
                                   <span style={{ color: color, fontWeight: isNeutral ? 'normal' : 'bold' }}>{sign}{formatMoney(r.total)}</span>
                               </div>
@@ -417,9 +415,9 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                   </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', fontSize: '0.9rem', color: '#555', borderTop: '1px dashed #ccc', paddingTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', fontSize: '0.88rem', color: 'var(--text-secondary)', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '10px' }}>
                   <span>📈 市場與匯率波動估算</span>
-                  <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: marketFluctuation >= 0 ? '#2ecc71' : '#e74c3c' }}>
+                  <span style={{ fontWeight: '700', fontSize: '1.05rem', color: marketFluctuation >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
                       {marketFluctuation >= 0 ? '+' : ''}{formatMoney(marketFluctuation)}
                   </span>
               </div>
@@ -428,9 +426,9 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
   };
 
   return (
-    <div style={{animation: 'fadeIn 0.5s'}}>
+    <div className="page-transition-enter">
       {backupWarning && (
-          <div style={{ background: '#e74c3c', color: 'white', padding: '10px 15px', borderRadius: '8px', marginBottom: '15px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--accent-red)', color: 'white', padding: '10px 15px', borderRadius: 'var(--radius-sm)', marginBottom: '15px', fontSize: '0.88rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>⚠️ 警告：無法連線至 Google 雲端備份伺服器。請手動備份。</span>
               <button onClick={() => setBackupWarning(false)} style={{ background:'transparent', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer' }}>×</button>
           </div>
@@ -441,63 +439,60 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
       </h1>
 
       {/* 【第一層】雙人總資產大看板 */}
-      <div className="glass-card" style={{ marginBottom: '20px', textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '25px 15px' }}>
-        <div style={{ fontSize: '0.9rem', opacity: 0.9, marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}>
+      <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(88,86,214,0.9), rgba(94,158,247,0.85))', color: 'white', padding: '28px 18px', border:'none', boxShadow:'0 12px 40px rgba(88,86,214,0.25)' }}>
+        <div style={{ fontSize: '0.88rem', opacity: 0.9, marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}>
           雙人總資產 (即時市值估算)
-          {/* ★ 新增：明確的報價更新提示 */}
-          {isFetchingLive && <span style={{fontSize:'0.75rem', background: 'rgba(255,255,255,0.2)', padding:'2px 6px', borderRadius:'10px'}}>🔄 更新報價中...</span>}
+          {isFetchingLive && <span style={{fontSize:'0.73rem', background: 'rgba(255,255,255,0.2)', padding:'2px 8px', borderRadius:'var(--radius-pill)'}}>🔄 更新報價中...</span>}
         </div>
-        {/* ★ 更新：直接把最大的數字設定為包含漲跌的即時市值 */}
-        <div style={{ fontSize: '2.5rem', fontWeight: 'bold', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing:'-0.02em', textShadow: '0 2px 12px rgba(0,0,0,0.15)' }}>
           {formatMoney(liveMarketNetWorth > 0 ? liveMarketNetWorth : totalAssets)}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '15px', fontSize: '0.85rem' }}>
-           <div style={{background:'rgba(255,255,255,0.2)', padding:'4px 12px', borderRadius:'15px'}}>💰 總現金 {formatMoney(totalCashConverted)}</div>
-           <div style={{background:'rgba(255,255,255,0.2)', padding:'4px 12px', borderRadius:'15px'}}>📥 總投入本金 {formatMoney(totalInvest)}</div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '15px', fontSize: '0.82rem' }}>
+           <div style={{background:'rgba(255,255,255,0.18)', padding:'5px 14px', borderRadius:'var(--radius-pill)', backdropFilter:'blur(4px)'}}>💰 總現金 {formatMoney(totalCashConverted)}</div>
+           <div style={{background:'rgba(255,255,255,0.18)', padding:'5px 14px', borderRadius:'var(--radius-pill)', backdropFilter:'blur(4px)'}}>📥 總投入 {formatMoney(totalInvest)}</div>
         </div>
         
-        {/* ★ 清楚標示未實現損益的金額 */}
         {liveMarketNetWorth > 0 && liveMarketNetWorth !== totalAssets && (
-            <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px dashed rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>
-                📊 包含股票未實現損益：<span style={{fontWeight: 'bold', color: liveMarketNetWorth >= totalAssets ? '#f1c40f' : '#ff9a9e', fontSize: '1rem'}}>{liveMarketNetWorth >= totalAssets ? '+' : ''}{formatMoney(liveMarketNetWorth - totalAssets)}</span>
+            <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '0.84rem' }}>
+                📊 包含股票未實現損益：<span style={{fontWeight: '800', color: liveMarketNetWorth >= totalAssets ? '#ffd60a' : '#ff9a9e', fontSize: '1rem'}}>{liveMarketNetWorth >= totalAssets ? '+' : ''}{formatMoney(liveMarketNetWorth - totalAssets)}</span>
             </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: activeHistory ? '10px' : '20px', flexWrap: 'wrap' }}>
-        <div className="glass-card" style={{ flex: 1, minWidth: '110px', padding: '12px', borderTop: '4px solid #ff9a9e', background: activeHistory === 'userA' ? 'rgba(255,154,158,0.1)' : '#fff' }}>
-          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🐶 恆恆 <span style={{fontSize:'0.65rem', fontWeight:'normal'}}>(依投入本金)</span></div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(twdHeng + Math.round(usdHeng * currentFxRate) + investHeng)}</div>
-          <div style={{ fontSize: '0.75rem', color: '#888', marginBottom:'10px' }}>現 {formatMoney(twdHeng)}<br/>美 ${usdHeng.toFixed(2)}<br/>投 {formatMoney(investHeng)}</div>
-          <button onClick={() => setActiveHistory(activeHistory === 'userA' ? null : 'userA')} style={{ width:'100%', padding:'6px', background: activeHistory === 'userA' ? '#ff9a9e' : '#f0f0f0', color: activeHistory === 'userA' ? '#fff' : '#555', border:'none', borderRadius:'8px', fontSize:'0.8rem', cursor:'pointer' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: activeHistory ? '10px' : '18px', flexWrap: 'wrap' }}>
+        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-pink)', background: activeHistory === 'userA' ? 'rgba(255,59,48,0.04)' : undefined }}>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight:'600' }}>🐶 恆恆 <span style={{fontSize:'0.63rem', fontWeight:'400'}}>(依投入本金)</span></div>
+          <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdHeng + Math.round(usdHeng * currentFxRate) + investHeng)}</div>
+          <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom:'10px', lineHeight:'1.4' }}>現 {formatMoney(twdHeng)}<br/>美 ${usdHeng.toFixed(2)}<br/>投 {formatMoney(investHeng)}</div>
+          <button onClick={() => setActiveHistory(activeHistory === 'userA' ? null : 'userA')} className={activeHistory === 'userA' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width:'100%', padding:'6px', fontSize:'0.78rem' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
         </div>
         
-        <div className="glass-card" style={{ flex: 1, minWidth: '110px', padding: '12px', borderTop: '4px solid #a8e6cf', background: activeHistory === 'userB' ? 'rgba(168,230,207,0.1)' : '#fff' }}>
-          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🐕 得得 <span style={{fontSize:'0.65rem', fontWeight:'normal'}}>(依投入本金)</span></div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(twdDe + Math.round(usdDe * currentFxRate) + investDe)}</div>
-          <div style={{ fontSize: '0.75rem', color: '#888', marginBottom:'10px' }}>現 {formatMoney(twdDe)}<br/>美 ${usdDe.toFixed(2)}<br/>投 {formatMoney(investDe)}</div>
-          <button onClick={() => setActiveHistory(activeHistory === 'userB' ? null : 'userB')} style={{ width:'100%', padding:'6px', background: activeHistory === 'userB' ? '#a8e6cf' : '#f0f0f0', color: activeHistory === 'userB' ? '#333' : '#555', border:'none', borderRadius:'8px', fontSize:'0.8rem', cursor:'pointer' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
+        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-green)', background: activeHistory === 'userB' ? 'rgba(52,199,89,0.04)' : undefined }}>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight:'600' }}>🐕 得得 <span style={{fontSize:'0.63rem', fontWeight:'400'}}>(依投入本金)</span></div>
+          <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdDe + Math.round(usdDe * currentFxRate) + investDe)}</div>
+          <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom:'10px', lineHeight:'1.4' }}>現 {formatMoney(twdDe)}<br/>美 ${usdDe.toFixed(2)}<br/>投 {formatMoney(investDe)}</div>
+          <button onClick={() => setActiveHistory(activeHistory === 'userB' ? null : 'userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width:'100%', padding:'6px', fontSize:'0.78rem' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
         </div>
         
-        <div className="glass-card" style={{ flex: 1, minWidth: '110px', padding: '12px', borderTop: '4px solid #f6d365', background: activeHistory === 'jointCash' ? 'rgba(246,211,101,0.1)' : '#fff' }}>
-          <div style={{ fontSize: '0.85rem', color: '#666', fontWeight:'bold' }}>🏫 共同 <span style={{fontSize:'0.65rem', fontWeight:'normal'}}>(依投入本金)</span></div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#333', margin: '5px 0' }}>{formatMoney(twdJoint + Math.round(usdJoint * currentFxRate) + investJoint)}</div>
-          <div style={{ fontSize: '0.75rem', color: '#888', marginBottom:'10px' }}>現 {formatMoney(twdJoint)}<br/>美 ${usdJoint.toFixed(2)}<br/>投 {formatMoney(investJoint)}</div>
-          <button onClick={() => setActiveHistory(activeHistory === 'jointCash' ? null : 'jointCash')} style={{ width:'100%', padding:'6px', background: activeHistory === 'jointCash' ? '#f6d365' : '#f0f0f0', color: activeHistory === 'jointCash' ? '#333' : '#555', border:'none', borderRadius:'8px', fontSize:'0.8rem', cursor:'pointer' }}>{activeHistory === 'jointCash' ? '收起' : '🔍 紀錄'}</button>
+        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-orange)', background: activeHistory === 'jointCash' ? 'rgba(255,149,0,0.04)' : undefined }}>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight:'600' }}>🏫 共同 <span style={{fontSize:'0.63rem', fontWeight:'400'}}>(依投入本金)</span></div>
+          <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdJoint + Math.round(usdJoint * currentFxRate) + investJoint)}</div>
+          <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom:'10px', lineHeight:'1.4' }}>現 {formatMoney(twdJoint)}<br/>美 ${usdJoint.toFixed(2)}<br/>投 {formatMoney(investJoint)}</div>
+          <button onClick={() => setActiveHistory(activeHistory === 'jointCash' ? null : 'jointCash')} className={activeHistory === 'jointCash' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width:'100%', padding:'6px', fontSize:'0.78rem' }}>{activeHistory === 'jointCash' ? '收起' : '🔍 紀錄'}</button>
         </div>
       </div>
 
       {activeHistory && (
-        <div className="glass-card" style={{ marginBottom: '20px', borderLeft: `5px solid ${activeHistory === 'userA' ? '#ff9a9e' : activeHistory === 'userB' ? '#a8e6cf' : '#f6d365'}` }}>
-          <div style={{ fontWeight: 'bold', color: '#555', marginBottom: '10px', fontSize: '1rem' }}>
+        <div className="glass-card card-animate" style={{ marginBottom: '18px', borderLeft: `4px solid ${activeHistory === 'userA' ? 'var(--accent-pink)' : activeHistory === 'userB' ? 'var(--accent-green)' : 'var(--accent-orange)'}` }}>
+          <div style={{ fontWeight: '700', color: 'var(--text-primary)', marginBottom: '10px', fontSize: '1rem' }}>
               📝 {activeHistory === 'userA' ? '恆恆' : activeHistory === 'userB' ? '得得' : '共同'} 變動明細
           </div>
           
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
-              <input type="date" value={historyDateRange.start} onChange={(e) => setHistoryDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
-              <span style={{color:'#888', fontSize:'0.85rem'}}>至</span>
-              <input type="date" value={historyDateRange.end} onChange={(e) => setHistoryDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
-              <button onClick={() => setHistoryDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'6px 12px', fontSize:'0.85rem', background: '#fff', color:'#333', border:'1px solid #ccc'}}>清除</button>
+              <input type="date" value={historyDateRange.start} onChange={(e) => setHistoryDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.84rem'}} />
+              <span style={{color:'var(--text-tertiary)', fontSize:'0.84rem'}}>至</span>
+              <input type="date" value={historyDateRange.end} onChange={(e) => setHistoryDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.84rem'}} />
+              <button onClick={() => setHistoryDateRange({ start: '', end: '' })} className="glass-btn" style={{padding:'6px 12px', fontSize:'0.82rem'}}>清除</button>
           </div>
 
           <div style={{ maxHeight: '450px', overflowY: 'auto', paddingRight: '5px' }}>
@@ -528,8 +523,8 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
 
                     return (
                         <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#64748b', display:'flex', justifyContent:'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.4)', padding: '4px 8px', borderRadius: '6px' }}>
-                                <span style={{fontWeight: 'bold', color: '#475569'}}>📅 帳單日: {record.date}</span>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display:'flex', justifyContent:'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.4)', padding: '4px 8px', borderRadius: 'var(--radius-xs)' }}>
+                                <span style={{fontWeight: '600', color: 'var(--text-primary)'}}>📅 帳單日: {record.date}</span>
                                 <span>⏱ 登錄: {formatDateTime(record.timestamp)} | 👤 {record.operator || '系統'}</span>
                             </div>
                             
@@ -540,16 +535,16 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ color: '#334155', fontSize: '0.95rem', wordBreak: 'break-word', paddingRight: '10px', fontWeight: 'bold' }}>📝 {record.note}</div>
-                                <div style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap' }}>總額: {formatMoney(record.total)}</div>
+                                <div style={{ color: 'var(--text-primary)', fontSize: '0.92rem', wordBreak: 'break-word', paddingRight: '10px', fontWeight: '700' }}>📝 {record.note}</div>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>總額: {formatMoney(record.total)}</div>
                             </div>
                             
                             {b && a && (
                                 <div style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.6)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.05)', marginTop: '4px' }}>
                                     <div style={{ marginBottom: '4px', display:'flex', justifyContent:'space-between' }}>
-                                        <span style={{color:'#94a3b8'}}>變動前：</span><span style={{color:'#94a3b8'}}>現 {formatMoney(bCash)} | 美 ${bUsd.toFixed(2)} ｜ 投 {formatMoney(bInv)}</span>
+                                        <span style={{color:'var(--text-tertiary)'}}>變動前：</span><span style={{color:'var(--text-tertiary)'}}>現 {formatMoney(bCash)} | 美 ${bUsd.toFixed(2)} ｜ 投 {formatMoney(bInv)}</span>
                                     </div>
-                                    <div style={{ display:'flex', justifyContent:'space-between', fontWeight:'bold', color:'#475569' }}>
+                                    <div style={{ display:'flex', justifyContent:'space-between', fontWeight:'600', color:'var(--text-primary)' }}>
                                         <span>變動後：</span><span>現 {formatMoney(aCash)} | 美 ${aUsd.toFixed(2)} ｜ 投 {formatMoney(aInv)}</span>
                                     </div>
                                 </div>
@@ -557,43 +552,43 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                         </div>
                     );
                 })
-            ) : ( <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>此區間尚無變動紀錄</div> )}
+            ) : ( <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '20px' }}>此區間尚無變動紀錄</div> )}
           </div>
         </div>
       )}
 
       {/* 【第三層】資產分佈圓餅圖 */}
-      <div className="glass-card" style={{ marginBottom: '20px', display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: '15px' }}>
+      <div className="glass-card card-animate" style={{ marginBottom: '18px', display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: '15px' }}>
         <div style={{ flexShrink: 0, width: '120px', height: '120px', display: 'flex', justifyContent: 'center' }}>
-          {activeAssets.length > 0 ? ( <Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }} /> ) : ( <div style={{display:'flex', alignItems:'center', color:'#ccc'}}>尚無資產</div> )}
+          {activeAssets.length > 0 ? ( <Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }} /> ) : ( <div style={{display:'flex', alignItems:'center', color:'var(--text-tertiary)'}}>尚無資產</div> )}
         </div>
         <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {activeAssets.map((asset) => (
             <div key={asset.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: asset.color, flexShrink: 0 }}></div>
-                <span style={{ fontWeight: 'bold', color: '#555', fontSize: '0.9rem' }}>{asset.label}</span>
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: asset.color, flexShrink: 0 }}></div>
+                <span style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{asset.label}</span>
               </div>
-              <div style={{ fontWeight: 'bold', color: '#333', fontSize: '0.95rem' }}>{formatMoney(asset.val)}</div>
+              <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.92rem' }}>{formatMoney(asset.val)}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* 【第四層】互動式資產成長趨勢折線圖 */}
-      <div className="glass-card" style={{ marginBottom: '20px', padding: '15px' }}>
+      <div className="glass-card card-animate" style={{ marginBottom: '18px', padding: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <div style={{ fontWeight: 'bold', color: '#555', fontSize: '1rem' }}>📈 資產成長趨勢 (點擊圖表節點查看明細)</div>
+            <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.95rem' }}>📈 資產成長趨勢</div>
         </div>
         
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
-            <input type="date" value={chartDateRange.start} onChange={(e) => setChartDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
-            <span style={{color:'#888', fontSize:'0.85rem'}}>至</span>
-            <input type="date" value={chartDateRange.end} onChange={(e) => setChartDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.85rem'}} />
+            <input type="date" value={chartDateRange.start} onChange={(e) => setChartDateRange(prev => ({...prev, start: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.84rem'}} />
+            <span style={{color:'var(--text-tertiary)', fontSize:'0.84rem'}}>至</span>
+            <input type="date" value={chartDateRange.end} onChange={(e) => setChartDateRange(prev => ({...prev, end: e.target.value}))} className="glass-input" style={{margin:0, padding:'6px 10px', flex:1, minWidth:'110px', fontSize:'0.84rem'}} />
         </div>
         <div style={{display:'flex', gap:'8px', marginBottom:'15px'}}>
-            <button onClick={() => setChartDateRange({ start: formatDate(lastYear), end: formatDate(today) })} className="glass-btn" style={{flex:1, padding:'6px', fontSize:'0.85rem', background: '#e2e8f0', color:'#333', border:'none'}}>近一年</button>
-            <button onClick={() => setChartDateRange({ start: '', end: '' })} className="glass-btn" style={{flex:1, padding:'6px', fontSize:'0.85rem', background: '#fff', color:'#333', border:'1px solid #ccc'}}>全部時間</button>
+            <button onClick={() => setChartDateRange({ start: formatDate(lastYear), end: formatDate(today) })} className="glass-btn" style={{flex:1, padding:'6px', fontSize:'0.82rem'}}>近一年</button>
+            <button onClick={() => setChartDateRange({ start: '', end: '' })} className="glass-btn" style={{flex:1, padding:'6px', fontSize:'0.82rem'}}>全部時間</button>
         </div>
 
         <div style={{ height: '220px', width: '100%', cursor: 'pointer' }}>

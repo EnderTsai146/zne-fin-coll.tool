@@ -1,175 +1,583 @@
-/* src/index.css */
+/* ==============================================
+   🥔 馬鈴薯管家 — Apple Liquid Glass Design System
+   ============================================== */
 
+/* === 1. Font === */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+/* === 2. Design Tokens === */
 :root {
-  /* 定義 WWDC25 加強版色票 - 飽和度稍微調高，讓漸層更明顯 */
-  --apple-strong-purple: #d8b4fe; /* 更明顯的紫 */
-  --apple-strong-blue: #7fbafd;   /* 更明顯的藍 */
-  --apple-strong-pink: #ffb3b3;   /* 更明顯的粉 */
-  --apple-strong-cyan: #a0e1fa;   /* 更明顯的青 */
-  --apple-strong-yellow: #fdfd96; /* 亮黃 */
-  
-  --apple-text-main: #1d1d1f;     /* 深灰字體 */
+  /* Glass Materials */
+  --glass-bg: rgba(255, 255, 255, 0.12);
+  --glass-bg-elevated: rgba(255, 255, 255, 0.18);
+  --glass-bg-solid: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.22);
+  --glass-border-strong: rgba(255, 255, 255, 0.4);
+  --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.35), inset 0 -1px 0 0 rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --glass-shadow-elevated: 0 16px 48px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
+  --glass-blur: 24px;
+  --glass-saturate: 200%;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+  --text-primary: #1d1d1f;
+  --text-secondary: rgba(60, 60, 67, 0.6);
+  --text-tertiary: rgba(60, 60, 67, 0.33);
+
+  /* Apple System Colors */
+  --accent-blue: #007AFF;
+  --accent-indigo: #5856D6;
+  --accent-purple: #AF52DE;
+  --accent-teal: #5AC8FA;
+  --accent-cyan: #32ADE6;
+  --accent-green: #34C759;
+  --accent-yellow: #FFCC00;
+  --accent-orange: #FF9500;
+  --accent-red: #FF3B30;
+  --accent-pink: #FF2D55;
+
+  /* Border Radius */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* Timing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --duration-fast: 0.15s;
+  --duration-normal: 0.3s;
+  --duration-slow: 0.5s;
 }
 
-/* 1. 整體背景：強化流動色彩 */
+/* === 3. Base Reset === */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    min-height: 100vh;
-    color: var(--apple-text-main);
-    padding-bottom: 80px;
+  margin: 0;
+  font-family: var(--font-family);
+  min-height: 100vh;
+  color: var(--text-primary);
+  padding-bottom: 80px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 
-    /* 背景底色：純白 */
-    background-color: #ffffff;
-    
-    /* 關鍵修正：色塊加大、透明度提高 (0.4 -> 0.7)，位置更靠近中間 */
-    background-image: 
-        radial-gradient(circle at 15% 20%, rgba(216, 180, 254, 0.7) 0%, transparent 45%), /* 紫色光暈 */
-        radial-gradient(circle at 85% 25%, rgba(127, 186, 253, 0.7) 0%, transparent 45%), /* 藍色光暈 */
-        radial-gradient(circle at 50% 80%, rgba(255, 179, 179, 0.6) 0%, transparent 45%), /* 粉紅光暈 */
-        radial-gradient(circle at 80% 90%, rgba(253, 253, 150, 0.6) 0%, transparent 40%); /* 黃色光暈 */
-        
-    background-attachment: fixed; /* 讓背景固定，卡片滑動時會有透視感 */
-    background-size: 120% 120%;   /* 稍微放大背景，讓漸層過渡更平滑 */
+  /* Liquid Glass Background — Cool Blue-Gray */
+  background-color: #eef0f5;
+  background-image:
+    radial-gradient(ellipse at 12% 20%, rgba(90, 200, 250, 0.40) 0%, transparent 55%),
+    radial-gradient(ellipse at 88% 15%, rgba(88, 86, 214, 0.32) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 85%, rgba(0, 122, 255, 0.22) 0%, transparent 50%),
+    radial-gradient(ellipse at 78% 92%, rgba(175, 82, 222, 0.18) 0%, transparent 45%),
+    radial-gradient(ellipse at 30% 60%, rgba(50, 173, 230, 0.12) 0%, transparent 40%);
+  background-attachment: fixed;
+  background-size: 160% 160%;
+  animation: liquidShift 30s ease-in-out infinite alternate;
 }
-  
-/* 2. 核心：玻璃卡片 (更透亮，讓背景色透出來) */
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* === 4. Glass Materials === */
+
+/* --- Glass Card --- */
 .glass-card {
-    /* 背景改為「半透明白」，透明度調低一點 (0.65 -> 0.55) 讓背後鮮豔的色彩透出來 */
-    background: rgba(255, 255, 255, 0.55);
-    
-    /* 模糊度稍微降低，增加透視感 */
-    backdrop-filter: blur(25px) saturate(200%); 
-    -webkit-backdrop-filter: blur(25px) saturate(200%);
-    
-    border-radius: 24px;
-    /* 邊框改為白色半透明，像玻璃切面 */
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    
-    /* 陰影變得非常淡，只保留立體感 */
-    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05);
-    
-    padding: 30px;
-    margin-bottom: 25px;
-    color: var(--apple-text-main);
+  background: var(--glass-bg-elevated);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+  padding: 24px;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+  transition: transform var(--duration-normal) var(--ease-out-expo),
+              box-shadow var(--duration-normal) var(--ease-out-expo),
+              background var(--duration-normal) var(--ease-out-expo);
 }
 
+/* --- Glass Navigation --- */
 .glass-nav {
-    position: sticky;
-    top: 0;
-    z-index: 1000; /* 確保浮在所有內容上面 */
-    
-    background: rgba(255, 255, 255, 0.65) !important; /* 透光白 */
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    
-    border-bottom: 1px solid rgba(255, 255, 255, 0.5);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 25px;
-    font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(238, 240, 245, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  font-weight: 600;
+  /* Subtle rainbow refraction line */
+  background-image: linear-gradient(
+    to right,
+    rgba(90,200,250,0.3), rgba(88,86,214,0.3), rgba(175,82,222,0.3), rgba(255,45,85,0.2), rgba(255,149,0,0.2), rgba(90,200,250,0.3)
+  );
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+  background-position: bottom;
 }
 
-/* 4. 玻璃輸入框 */
+/* --- Glass Input --- */
 .glass-input {
-    width: 100%;
-    padding: 14px 18px;
-    margin-bottom: 15px;
-    
-    /* 幾乎全透明，只留一點點白 */
-    background: rgba(255, 255, 255, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-radius: 14px;
-    
-    box-sizing: border-box;
-    font-size: 1rem;
-    color: var(--apple-text-main);
-    outline: none;
-    transition: all 0.3s ease;
+  width: 100%;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: rgba(120, 120, 128, 0.08);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+  font-size: 1rem;
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  outline: none;
+  transition: all var(--duration-normal) var(--ease-out-expo);
 }
 
 .glass-input:focus {
-    background: rgba(255, 255, 255, 0.85);
-    border-color: var(--apple-strong-blue);
-    box-shadow: 0 0 0 4px rgba(127, 186, 253, 0.25); /* 藍色光暈 */
+  background: rgba(255, 255, 255, 0.55);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
 }
 
-/* 5. 漸層按鈕 (對比度加強) */
+.glass-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* --- Glass Button --- */
 .glass-btn {
-    padding: 14px 24px;
-    border: none;
-    border-radius: 99px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    
-    /* 使用更鮮豔的 WWDC 漸層色 */
-    background: linear-gradient(
-        135deg, 
-        #8ec5fc 0%, 
-        #e0c3fc 50%, 
-        #ffc2c2 100%
-    );
-    background-size: 200% auto;
-    
-    color: #fff;
-    /* 按鈕陰影帶顏色 */
-    box-shadow: 0 6px 20px rgba(142, 197, 252, 0.3);
+  padding: 13px 22px;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: var(--font-family);
+  cursor: pointer;
+
+  background: rgba(255, 255, 255, 0.20);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06),
+              inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: all var(--duration-fast) var(--ease-out-expo);
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .glass-btn:hover {
-    background-position: right center;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(224, 195, 252, 0.45);
+  background: rgba(255, 255, 255, 0.32);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1),
+              inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
-/* 6. (新增) 漸層文字特效 - 讓主要標題也有 WWDC 風格 */
+.glass-btn:active {
+  transform: scale(0.96) translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition-duration: 0.06s;
+}
+
+.glass-btn.inactive {
+  opacity: 0.4;
+  filter: saturate(0.4);
+  pointer-events: auto;
+}
+
+/* === 5. Typography === */
+h1, h2, h3, h4 {
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  margin-top: 0;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
 h1 {
-    /* 字體本身套用漸層 */
-    background: linear-gradient(
-        90deg, 
-        #7FBAFD 0%, 
-        #D8B4FE 50%, 
-        #FFB3B3 100%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent; /* 文字透明，透出背景漸層 */
-    
-    /* 備用顏色 (如果瀏覽器不支援) */
-    text-fill-color: transparent;
-    display: inline-block; /* 確保漸層不會跑版 */
+  background: linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-blue) 45%, var(--accent-purple) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
 }
 
-/* 其餘標題維持深灰 */
+h1.page-title {
+  background: linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-blue) 40%, var(--accent-indigo) 70%, var(--accent-purple) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 6px rgba(0, 122, 255, 0.15));
+  text-align: center;
+  margin-bottom: 24px;
+  font-weight: 800;
+  font-size: 1.75rem;
+  letter-spacing: -0.03em;
+}
+
 h2, h3, h4 {
-    color: var(--apple-text-main) !important;
-    margin-top: 0;
-    font-weight: 600;
+  color: var(--text-primary);
 }
 
-/* 修正：確保圖表標題也是深色 */
 .chart-container h2 {
-    color: var(--apple-text-main) !important;
-    text-fill-color: initial; /* 避免繼承到 h1 的漸層設定 */
-    background: none;
+  color: var(--text-primary) !important;
+  -webkit-text-fill-color: initial;
+  background: none;
 }
 
-/* src/index.css (請加在最下方) */
+/* === 6. Animations === */
 
-/* === 新增：總覽頁面的響應式網格 === */
-/* 預設 (電腦版)：左右兩欄並排 */
+@keyframes liquidShift {
+  0%   { background-position: 0% 0%;   background-size: 160% 160%; }
+  33%  { background-position: 40% 80%; background-size: 180% 180%; }
+  66%  { background-position: 80% 30%; background-size: 170% 170%; }
+  100% { background-position: 20% 60%; background-size: 160% 160%; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes modalEnter {
+  from { opacity: 0; transform: scale(0.90) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes glassReveal {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.3); }
+  50%      { box-shadow: 0 0 0 10px rgba(0, 122, 255, 0); }
+}
+
+@keyframes pulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
+  70%      { box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); }
+}
+
+@keyframes pulseOrange {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 149, 0, 0.4); }
+  70%      { box-shadow: 0 0 0 8px rgba(255, 149, 0, 0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.03); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); max-height: 0; }
+  to   { opacity: 1; transform: translateY(0); max-height: 200px; }
+}
+
+/* === 7. Component Classes === */
+
+.page-transition-enter {
+  animation: slideUpFade 0.5s var(--ease-out-expo) both;
+}
+
+.card-animate {
+  animation: glassReveal 0.4s var(--ease-out-expo) both;
+}
+
+/* Staggered children */
+.card-animate:nth-child(1) { animation-delay: 0s; }
+.card-animate:nth-child(2) { animation-delay: 0.06s; }
+.card-animate:nth-child(3) { animation-delay: 0.12s; }
+.card-animate:nth-child(4) { animation-delay: 0.18s; }
+.card-animate:nth-child(5) { animation-delay: 0.24s; }
+.card-animate:nth-child(6) { animation-delay: 0.30s; }
+
+/* Modal Layers */
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: backdropFadeIn 0.25s var(--ease-out-expo) both;
+}
+
+.modal-content {
+  width: 88%;
+  max-width: 380px;
+  animation: modalEnter 0.4s var(--ease-out-spring) both;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  gap: 16px;
+}
+
+.loading-emoji {
+  font-size: 3.5rem;
+  animation: float 2.5s ease-in-out infinite;
+}
+
+.loading-text {
+  font-family: var(--font-family);
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Bottom Navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 420px;
+  z-index: 1000;
+  border-radius: 26px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 10px 6px;
+  background: rgba(30, 30, 30, 0.45);
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12),
+              inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: all 0.35s var(--ease-out-expo);
+  border-radius: 16px;
+  position: relative;
+}
+
+.nav-item .nav-icon {
+  font-size: 1.35rem;
+  margin-bottom: 3px;
+  transition: all 0.35s var(--ease-out-spring);
+  filter: grayscale(0.8);
+}
+
+.nav-item .nav-label {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+  transition: all 0.3s var(--ease-out-expo);
+}
+
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.nav-item.active .nav-icon {
+  transform: scale(1.18) translateY(-1px);
+  filter: grayscale(0) drop-shadow(0 2px 8px rgba(0, 122, 255, 0.3));
+}
+
+.nav-item.active .nav-label {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+/* Active indicator dot */
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-teal);
+  box-shadow: 0 0 8px rgba(90, 200, 250, 0.6);
+  animation: pulseGlow 2s infinite;
+}
+
+/* Login Page */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 48px 32px;
+  text-align: center;
+  animation: modalEnter 0.6s var(--ease-out-spring) both;
+  background: var(--glass-bg-elevated);
+  backdrop-filter: blur(30px) saturate(220%);
+  -webkit-backdrop-filter: blur(30px) saturate(220%);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-elevated), var(--glass-highlight);
+}
+
+.login-logo {
+  font-size: 4rem;
+  margin-bottom: 8px;
+  animation: float 3s ease-in-out infinite;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.12));
+}
+
+.login-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 32px;
+  background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue), var(--accent-purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 15px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-family: var(--font-family);
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-indigo));
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3);
+  transition: all var(--duration-normal) var(--ease-out-expo);
+}
+
+.login-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(0, 122, 255, 0.4);
+}
+
+.login-btn:active {
+  transform: scale(0.97);
+  transition-duration: 0.06s;
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* CTA Buttons (Confirm / Submit) */
+.glass-btn-cta {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-indigo)) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.25) !important;
+}
+
+.glass-btn-cta:hover {
+  box-shadow: 0 6px 24px rgba(0, 122, 255, 0.35) !important;
+}
+
+.glass-btn-cta:active {
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2) !important;
+}
+
+/* Danger variant */
+.glass-btn-danger {
+  background: rgba(255, 59, 48, 0.1) !important;
+  color: var(--accent-red) !important;
+  border: 1px solid rgba(255, 59, 48, 0.2) !important;
+}
+
+/* === 8. Layout === */
 .overview-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 16px;
 }
 
-/* 當螢幕寬度小於 768px (手機/平板直向) 時：強制變為單欄上下排列 */
 @media (max-width: 768px) {
   .overview-grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* === 9. Scrollbar === */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+}
+
+/* === 10. Selection === */
+::selection {
+  background: rgba(0, 122, 255, 0.2);
+  color: var(--text-primary);
 }

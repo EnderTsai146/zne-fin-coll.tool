@@ -1,71 +1,45 @@
 // src/components/AssetTransfer.jsx
 import React, { useState, useRef, useEffect } from 'react';
+import SegmentedControl from './SegmentedControl';
+import { MY_GOOGLE_API_URL } from '../config';
 
-const formatMoney = (num) => "$" + Number(num).toLocaleString();
+const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 
-// 🚀 你的專屬 Google API
-const MY_GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbwK8pr2bfUqC6GnLYwYerjiS_wtt5sk_ZJD4A-xKR2ACA2v64aYXNeRyu1qp1uVRWTdzg/exec";
 
-const SegmentedControl = ({ options, value, onChange, disabledValue }) => (
-  <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: '12px', padding: '4px', gap: '4px', flexWrap: 'wrap' }}>
-    {options.map(opt => {
-      const isSelected = value === opt.value;
-      const isDisabled = disabledValue && disabledValue === opt.value;
-      return (
-        <div
-          key={opt.value}
-          onClick={() => !isDisabled && onChange(opt.value)}
-          style={{
-            flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: '8px',
-            fontSize: '0.85rem', fontWeight: isSelected ? 'bold' : 'normal',
-            cursor: isDisabled ? 'not-allowed' : 'pointer', minWidth: '60px',
-            background: isSelected ? '#fff' : 'transparent',
-            color: isSelected ? '#333' : isDisabled ? '#ccc' : '#666',
-            boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
-            transition: 'all 0.2s ease',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}
-        >
-          {opt.label}
-        </div>
-      );
-    })}
-  </div>
-);
 
 const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
   const [activeTab, setActiveTab] = useState('invest');
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
   const fileInputRef = useRef(null);
 
-  const [incomeUser, setIncomeUser] = useState('userA');
+  const [incomeUser, setIncomeUser] = useState(null);
   const [incomeAmount, setIncomeAmount] = useState('');
   const [incomeNote, setIncomeNote] = useState('');
 
-  const [transSource, setTransSource] = useState('userA');
+  const [transSource, setTransSource] = useState(null);
   const [transAmount, setTransAmount] = useState('');
 
   // 💱 換匯專屬 State
-  const [exchangeSource, setExchangeSource] = useState('userA');
-  const [exchangeDir, setExchangeDir] = useState('TWD_TO_USD');
+  const [exchangeSource, setExchangeSource] = useState(null);
+  const [exchangeDir, setExchangeDir] = useState(null);
   const [exchangeTwd, setExchangeTwd] = useState('');
   const [exchangeUsd, setExchangeUsd] = useState('');
 
   // ⚖️ 餘額校正專屬 State
-  const [calibAccount, setCalibAccount] = useState('userA');
+  const [calibAccount, setCalibAccount] = useState(null);
   const [calibTwd, setCalibTwd] = useState('');
   const [calibUsd, setCalibUsd] = useState('');
 
-  const [investAccount, setInvestAccount] = useState('jointCash');
-  const [investAction, setInvestAction] = useState('buy');
-  const [investType, setInvestType] = useState('stock');
+  const [investAccount, setInvestAccount] = useState(null);
+  const [investAction, setInvestAction] = useState(null);
+  const [investType, setInvestType] = useState(null);
   const [investAmount, setInvestAmount] = useState('');
   const [investPrincipal, setInvestPrincipal] = useState('');
-  const [dayTradeResult, setDayTradeResult] = useState('profit');
+  const [dayTradeResult, setDayTradeResult] = useState(null);
   const [investCart, setInvestCart] = useState([]);
 
-  const [stockMarket, setStockMarket] = useState('TW');
-  const [settleCurrency, setSettleCurrency] = useState('TWD');
+  const [stockMarket, setStockMarket] = useState(null);
+  const [settleCurrency, setSettleCurrency] = useState(null);
   const [usInvestPrincipalUsd, setUsInvestPrincipalUsd] = useState('');
 
   const [stockSymbol, setStockSymbol] = useState('');
@@ -118,6 +92,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
   const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
 
   const handleIncomeSubmit = () => {
+    if (!incomeUser) return alert("請選擇戶頭！");
     const val = parseInt(incomeAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
     const userName = incomeUser === 'userA' ? '恆恆🐶' : '得得🐕';
@@ -126,10 +101,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     newAssets[incomeUser] += val;
     onTransaction(newAssets, { type: 'income', category: '個人收入', payer: userName, total: val, note: incomeNote.trim() || '一般收入', month: txDate.slice(0, 7), date: txDate });
     alert(`✅ 已記錄收入：${formatMoney(val)}`);
-    setIncomeAmount(''); setIncomeNote('');
+    setIncomeAmount(''); setIncomeNote(''); setIncomeUser(null);
   };
 
   const handleTransfer = () => {
+    if (!transSource) return alert("請選擇來源！");
     const val = parseInt(transAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
     if (assets[transSource] < val) return alert("❌ 個人餘額不足！");
@@ -140,10 +116,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     newAssets.jointCash += val;
     onTransaction(newAssets, { type: 'transfer', category: '資產劃撥', payer: userName, total: val, note: `轉移至 共同現金`, month: txDate.slice(0, 7), date: txDate });
     alert("✅ 劃撥成功！");
-    setTransAmount('');
+    setTransAmount(''); setTransSource(null);
   };
 
   const handleExchange = () => {
+    if (!exchangeSource) return alert("請選擇操作帳戶！");
+    if (!exchangeDir) return alert("請選擇換匯方向！");
     if (!exchangeTwd || !exchangeUsd) return alert("請輸入台幣與美金金額");
     const twd = parseInt(exchangeTwd);
     const usd = parseFloat(exchangeUsd);
@@ -163,9 +141,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     }
     alert("✅ 換匯成功！");
     setExchangeTwd(''); setExchangeUsd('');
+    setExchangeSource(null); setExchangeDir(null);
   };
 
   const handleCalibrate = () => {
+    if (!calibAccount) return alert("請選擇校正帳戶！");
     if (calibTwd === '' && calibUsd === '') return alert("請至少輸入一項實際餘額");
 
     const currentTwd = assets[calibAccount] || 0;
@@ -206,9 +186,17 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     alert("✅ 餘額校正完成！");
     setCalibTwd('');
     setCalibUsd('');
+    setCalibAccount(null);
   };
 
   const handleAddInvestCart = () => {
+    if (!investAccount) return alert("請選擇操作帳戶！");
+    if (!investAction) return alert("請選擇動作！");
+    if (!investType) return alert("請選擇標的類型！");
+    if (investType === 'stock' && !stockMarket) return alert("請選擇股票市場！");
+    if (investType === 'stock' && stockMarket === 'US' && !settleCurrency) return alert("請選擇交割帳戶！");
+    if (investAction === 'day_trade' && !dayTradeResult) return alert("請選擇當沖結果！");
+
     const val = parseInt(investAmount);
     if (investAction !== 'day_trade' && (!val || val <= 0)) return alert("請確認收支總額！");
     if (investAction === 'day_trade' && (!val || val <= 0)) return alert("請輸入當沖淨差額！");
@@ -245,6 +233,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     }]);
 
     setInvestAmount(''); setInvestPrincipal(''); setStockPrice(''); setStockShares(''); setStockSymbol(''); setUsTotalUsd(''); setUsInvestPrincipalUsd('');
+    setInvestType(null); setStockMarket(null); setSettleCurrency(null); setInvestAction(null); setInvestAccount(null); setDayTradeResult(null);
   };
 
   const handleInvestSubmit = () => {
@@ -393,86 +382,76 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
   };
 
   return (
-    <div>
+    <div className="page-transition-enter">
       <h1 className="page-title">資產操作</h1>
 
-      {/* 🌟 手機版優化：水平單行滑動導覽列，隱藏醜陋捲軸 */}
-      <style>
-        {`
-          .scroll-tabs::-webkit-scrollbar {
-            display: none;
-          }
-        `}
-      </style>
       <div
-        className="scroll-tabs"
         style={{
           display: 'flex',
-          gap: '10px',
-          marginBottom: '20px',
+          gap: '8px',
+          marginBottom: '18px',
           overflowX: 'auto',
-          paddingBottom: '5px',
-          msOverflowStyle: 'none',
+          paddingBottom: '4px',
           scrollbarWidth: 'none',
           WebkitOverflowScrolling: 'touch'
         }}
       >
-        <button className={`glass-btn ${activeTab === 'invest' ? '' : 'inactive'}`} onClick={() => setActiveTab('invest')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px' }}>📈 投資</button>
-        <button className={`glass-btn ${activeTab === 'exchange' ? '' : 'inactive'}`} onClick={() => setActiveTab('exchange')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px', background: activeTab === 'exchange' ? '#a0d2eb' : '' }}>💱 換匯</button>
-        <button className={`glass-btn ${activeTab === 'transfer' ? '' : 'inactive'}`} onClick={() => setActiveTab('transfer')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px' }}>💸 上繳</button>
-        <button className={`glass-btn ${activeTab === 'income' ? '' : 'inactive'}`} onClick={() => setActiveTab('income')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px' }}>💰 收入</button>
-        <button className={`glass-btn ${activeTab === 'calibrate' ? '' : 'inactive'}`} onClick={() => setActiveTab('calibrate')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '8px 16px' }}>⚖️ 校正</button>
+        <button className={`glass-btn ${activeTab === 'invest' ? '' : 'inactive'}`} onClick={() => setActiveTab('invest')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize:'0.88rem' }}>📈 投資</button>
+        <button className={`glass-btn ${activeTab === 'exchange' ? '' : 'inactive'}`} onClick={() => setActiveTab('exchange')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize:'0.88rem' }}>💱 換匯</button>
+        <button className={`glass-btn ${activeTab === 'transfer' ? '' : 'inactive'}`} onClick={() => setActiveTab('transfer')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize:'0.88rem' }}>💸 上繳</button>
+        <button className={`glass-btn ${activeTab === 'income' ? '' : 'inactive'}`} onClick={() => setActiveTab('income')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize:'0.88rem' }}>💰 收入</button>
+        <button className={`glass-btn ${activeTab === 'calibrate' ? '' : 'inactive'}`} onClick={() => setActiveTab('calibrate')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize:'0.88rem' }}>⚖️ 校正</button>
       </div>
 
-      <div className="glass-card" style={{ padding: '15px 20px', marginBottom: '20px', borderLeft: '5px solid #667eea', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <label style={{ fontWeight: 'bold', fontSize: '1.1rem', margin: 0 }}>📅 交易日期</label>
+      <div className="glass-card card-animate" style={{ padding: '12px 16px', marginBottom: '18px', borderLeft: '4px solid var(--accent-indigo)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <label style={{ fontWeight: '600', fontSize: '1rem', margin: 0, color:'var(--text-primary)' }}>📅 交易日期</label>
         <input type="date" className="glass-input" style={{ width: 'auto', marginBottom: 0, padding: '8px 12px' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
       </div>
 
       {activeTab === 'invest' && (
-        <div className="glass-card" style={{ border: '1px solid #b78af7' }}>
-          <h3 style={{ marginBottom: '15px', marginTop: 0 }}>📈 投資操作中心</h3>
+        <div className="glass-card card-animate">
+          <h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight:'700' }}>📈 投資操作中心</h3>
 
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#555', fontSize: '0.9rem' }}>操作帳戶</label>
+            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight:'600' }}>操作帳戶</label>
             <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '🐶 恆恆', value: 'userA' }, { label: '🐕 得得', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
           </div>
 
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#555', fontSize: '0.9rem' }}>動作</label>
+            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight:'600' }}>動作</label>
             <SegmentedControl options={[{ label: '📥 買入', value: 'buy' }, { label: '📤 賣出', value: 'sell' }, { label: '⚡ 當沖', value: 'day_trade' }]} value={investAction} onChange={setInvestAction} disabledValue={investAccount === 'jointCash' ? 'day_trade' : null} />
           </div>
 
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#555', fontSize: '0.9rem' }}>標的類型</label>
-            <SegmentedControl options={[{ label: '股票', value: 'stock' }, { label: '基金', value: 'fund' }, { label: '定存', value: '其他', value: 'other' }]} value={investType} onChange={setInvestType} />
+            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight:'600' }}>標的類型</label>
+            <SegmentedControl options={[{ label: '股票', value: 'stock' }, { label: '基金', value: 'fund' }, { label: '定存', value: 'deposit' }, { label: '其他', value: 'other' }]} value={investType} onChange={setInvestType} />
           </div>
 
           {investType === 'stock' && (
-            <div style={{ background: 'rgba(183, 138, 247, 0.1)', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
+            <div style={{ background: 'rgba(88,86,214,0.06)', padding: '15px', borderRadius: 'var(--radius-sm)', marginBottom: '15px' }}>
               <div style={{ marginBottom: '10px' }}>
                 <SegmentedControl options={[{ label: '🇹🇼 台股', value: 'TW' }, { label: '🇺🇸 美股複委託', value: 'US' }]} value={stockMarket} onChange={setStockMarket} />
               </div>
 
               {stockMarket === 'US' && (
                 <div style={{ marginBottom: '10px' }}>
-                  <label style={{ fontSize: '0.8rem', color: '#666', display: 'block', marginBottom: '4px' }}>交割帳戶 (扣除/拿回的錢包)</label>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>交割帳戶 (扣除/拿回的錢包)</label>
                   <SegmentedControl options={[{ label: '🇹🇼 台幣帳戶', value: 'TWD' }, { label: '🇺🇸 美金帳戶', value: 'USD' }]} value={settleCurrency} onChange={setSettleCurrency} />
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <div style={{ flex: 1, position: 'relative' }}>
-                  <label style={{ fontSize: '0.8rem', color: '#666' }}>股票代號/名稱</label>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>股票代號/名稱</label>
                   <input type="text" className="glass-input" value={stockSymbol} onChange={e => { setStockSymbol(e.target.value.toUpperCase()); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onBlur={() => setTimeout(() => setShowDropdown(false), 200)} placeholder="例: NVDA" />
                   {showDropdown && (searchResults.length > 0 || isSearching) && (
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', zIndex: 50, borderRadius: '8px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', overflow: 'hidden', marginTop: '4px', border: '1px solid #ddd' }}>
-                      {isSearching ? <div style={{ padding: '10px', fontSize: '0.85rem', color: '#888', textAlign: 'center' }}>📡 尋找股號中...</div> : searchResults.map((item, idx) => (<div key={idx} onClick={() => { setStockSymbol(item.symbol); setShowDropdown(false); }} style={{ padding: '10px 12px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}> <strong style={{ color: '#8e44ad', fontSize: '0.9rem' }}>{item.symbol}</strong> <span style={{ color: '#666', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginLeft: '10px' }}> {item.shortname || item.longname} </span> </div>))}
+                      {isSearching ? <div style={{ padding: '10px', fontSize: '0.84rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>📡 尋找股號中...</div> : searchResults.map((item, idx) => (<div key={idx} onClick={() => { setStockSymbol(item.symbol); setShowDropdown(false); }} style={{ padding: '10px 12px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}> <strong style={{ color: 'var(--accent-purple)', fontSize: '0.88rem' }}>{item.symbol}</strong> <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginLeft: '10px' }}> {item.shortname || item.longname} </span> </div>))}
                     </div>
                   )}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '0.8rem', color: '#666' }}>交易股數</label>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>交易股數</label>
                   <input type="number" className="glass-input" value={stockShares} onChange={e => setStockShares(e.target.value)} placeholder="例: 10" />
                 </div>
               </div>
@@ -480,19 +459,19 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
               {stockMarket === 'US' ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                   <div style={{ flex: 1, minWidth: '100px' }}>
-                    <label style={{ fontSize: '0.8rem', color: '#666' }}>單價 (USD)</label>
+                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>單價 (USD)</label>
                     <input type="number" className="glass-input" value={stockPrice} onChange={e => setStockPrice(e.target.value)} placeholder="170" />
                   </div>
                   <div style={{ flex: 1, minWidth: '120px' }}>
-                    <label style={{ fontSize: '0.8rem', color: '#e67e22', fontWeight: 'bold' }}>{investAction === 'buy' ? '總額含息費(USD)' : '賣出總得(USD)'}</label>
-                    <input type="number" className="glass-input" style={{ borderColor: '#e67e22' }} value={usTotalUsd} onChange={e => {
+                    <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>{investAction === 'buy' ? '總額含息費(USD)' : '賣出總得(USD)'}</label>
+                    <input type="number" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usTotalUsd} onChange={e => {
                       setUsTotalUsd(e.target.value);
                       if (settleCurrency === 'TWD') setInvestAmount(Math.round(Number(e.target.value) * Number(usFxRate)).toString());
                     }} placeholder="依元大輸入" />
                   </div>
                   <div style={{ flex: 1, minWidth: '80px' }}>
-                    <label style={{ fontSize: '0.8rem', color: '#e67e22', fontWeight: 'bold' }}>成交匯率</label>
-                    <input type="number" className="glass-input" style={{ borderColor: '#e67e22' }} value={usFxRate} onChange={e => {
+                    <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>成交匯率</label>
+                    <input type="number" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usFxRate} onChange={e => {
                       setUsFxRate(e.target.value);
                       if (settleCurrency === 'TWD') setInvestAmount(Math.round(Number(usTotalUsd) * Number(e.target.value)).toString());
                     }} placeholder="31.5" />
@@ -501,7 +480,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
               ) : (
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#666' }}>成交單價 (TWD)</label>
+                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>成交單價 (TWD)</label>
                     <input type="number" className="glass-input" value={stockPrice} onChange={e => setStockPrice(e.target.value)} placeholder="輸入單價" />
                   </div>
                 </div>
@@ -511,7 +490,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
           {investAction === 'day_trade' && (
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#555', fontSize: '0.9rem' }}>當沖結果</label>
+              <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight:'600' }}>當沖結果</label>
               <SegmentedControl options={[{ label: '📈 賺錢', value: 'profit' }, { label: '📉 賠錢', value: 'loss' }]} value={dayTradeResult} onChange={setDayTradeResult} />
             </div>
           )}
@@ -521,154 +500,158 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <span>{investAction === 'buy' ? '最終交割總額 (台幣)' : investAction === 'sell' ? '最終拿回現金 (台幣)' : '結算淨差額 (台幣)'}</span>
               </label>
-              <input type="number" inputMode="numeric" className="glass-input" style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2c3e50' }} value={investAmount} onChange={(e) => setInvestAmount(e.target.value)} placeholder="0" />
+              <input type="number" inputMode="numeric" className="glass-input" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)' }} value={investAmount} onChange={(e) => setInvestAmount(e.target.value)} placeholder="0" />
             </div>
           )}
 
           {investAction === 'sell' && stockMarket === 'TW' && (
-            <div style={{ marginBottom: '15px', padding: '10px', background: 'rgba(241, 196, 15, 0.1)', borderRadius: '8px', border: '1px dashed #f1c40f' }}>
-              <label style={{ color: '#b7791f', fontWeight: 'bold' }}>⚠️ 這批賣掉的資產，當初買入的「本金(台幣)」是多少？</label>
-              <input type="number" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', border: '1px solid #f1c40f' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="請輸入扣除本金" />
+            <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(255,204,0,0.06)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--accent-yellow)' }}>
+              <label style={{ color: 'var(--accent-orange)', fontWeight: '700' }}>⚠️ 這批賣掉的資產，當初買入的「本金(台幣)」是多少？</label>
+              <input type="number" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', border: '1px solid var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="請輸入扣除本金" />
             </div>
           )}
 
           {investAction === 'sell' && stockMarket === 'US' && (
-            <div style={{ marginBottom: '15px', padding: '10px', background: 'rgba(241, 196, 15, 0.1)', borderRadius: '8px', border: '1px dashed #f1c40f' }}>
-              <label style={{ color: '#b7791f', fontWeight: 'bold', fontSize: '0.95rem' }}>⚠️ 賣出美股成本計算</label>
+            <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(255,204,0,0.06)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--accent-yellow)' }}>
+              <label style={{ color: 'var(--accent-orange)', fontWeight: '700', fontSize: '0.92rem' }}>⚠️ 賣出美股成本計算</label>
               <div style={{ marginTop: '8px' }}>
-                <label style={{ fontSize: '0.8rem', color: '#666' }}>元大顯示的「美金持有成本」<span style={{ color: '#e74c3c' }}>(必填計算獲利)</span></label>
-                <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: '#f1c40f' }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(e.target.value)} placeholder="例: 800" />
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>元大顯示的「美金持有成本」<span style={{ color: 'var(--accent-red)' }}>(必填計算獲利)</span></label>
+                <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(e.target.value)} placeholder="例: 800" />
               </div>
               <div style={{ marginTop: '8px' }}>
-                <label style={{ fontSize: '0.8rem', color: '#666' }}>這批股票當初投入的「大約台幣本金」<br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
-                <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: '#f1c40f' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="例: 25200" />
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>這批股票當初投入的「大約台幣本金」<br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
+                <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="例: 25200" />
               </div>
             </div>
           )}
 
-          <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}>
-            <button className="glass-btn" style={{flex:1, background:'rgba(0,0,0,0.05)', color:'#555', border:'1px dashed #ccc', fontSize:'0.9rem'}} onClick={handleAddInvestCart}>
+          <div style={{display:'flex', gap:'6px', marginBottom:'15px'}}>
+            <button className="glass-btn" style={{flex:1, fontSize:'0.88rem'}} onClick={handleAddInvestCart}>
               ➕ 暫存此筆
             </button>
-            {investCart.length > 0 && <button className="glass-btn" style={{padding:'8px 12px', background:'rgba(231, 76, 60, 0.1)', color:'#e74c3c', border:'1px dashed #e74c3c', fontSize:'0.9rem'}} onClick={()=>setInvestCart([])}>🗑️ 清空清單</button>}
+            {investCart.length > 0 && <button className="glass-btn glass-btn-danger" style={{padding:'8px 12px', fontSize:'0.88rem'}} onClick={()=>setInvestCart([])}>🗑️ 清空</button>}
           </div>
 
           {investCart.length > 0 && (
-             <div style={{background:'rgba(183, 138, 247, 0.15)', padding:'10px', borderRadius:'8px', marginBottom:'15px', border:'1px solid rgba(183, 138, 247, 0.5)'}}>
-                 <div style={{fontSize:'0.85rem', color:'#666', marginBottom:'8px'}}>🛒 本次批次明細 ({investCart.length}筆)：</div>
+             <div style={{background:'rgba(88,86,214,0.05)', padding:'12px', borderRadius:'var(--radius-sm)', marginBottom:'15px', border:'1px solid rgba(88,86,214,0.12)', animation:'slideDown 0.3s ease-out'}}>
+                 <div style={{fontSize:'0.84rem', color:'var(--text-secondary)', marginBottom:'8px', fontWeight:'600'}}>🛒 本次批次明細 ({investCart.length}筆)：</div>
                  {investCart.map(item => (
-                     <div key={item.id} style={{display:'flex', justifyContent:'space-between', fontSize:'0.9rem', marginBottom:'6px', borderBottom:'1px dashed #eee', paddingBottom:'4px'}}>
-                         <span style={{color:'#444'}}>
-                           <span style={{background:'#fff', padding:'2px 6px', borderRadius:'4px', fontSize:'0.75rem', marginRight:'5px'}}>
+                     <div key={item.id} style={{display:'flex', justifyContent:'space-between', fontSize:'0.9rem', marginBottom:'6px', borderBottom:'0.5px solid rgba(0,0,0,0.04)', paddingBottom:'4px'}}>
+                         <span style={{color:'var(--text-primary)'}}>
+                           <span style={{background:'rgba(120,120,128,0.08)', padding:'2px 6px', borderRadius:'6px', fontSize:'0.73rem', marginRight:'5px', fontWeight:'500'}}>
                              {item.investAction === 'buy' ? '買入' : item.investAction === 'sell' ? '賣出' : '當沖'}
                            </span>
                            {item.stockSymbol || { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[item.investType]}
                          </span>
-                         <span>
+                         <span style={{fontWeight:'500'}}>
                            {formatMoney(item.investAmount)} {item.investAction === 'sell' ? '(收回)' : '(支出)'}
-                           <button onClick={()=>setInvestCart(investCart.filter(i => i.id !== item.id))} style={{border:'none', background:'none', color:'#e74c3c', marginLeft:'5px', cursor:'pointer'}}>✖</button>
+                           <button onClick={()=>setInvestCart(investCart.filter(i => i.id !== item.id))} style={{border:'none', background:'none', color:'var(--accent-red)', marginLeft:'5px', cursor:'pointer', fontSize:'0.85rem'}}>✖</button>
                          </span>
                      </div>
                  ))}
              </div>
           )}
 
-          <button className="glass-btn" style={{ width: '100%', background: 'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)', color: '#333', fontWeight: 'bold' }} onClick={handleInvestSubmit}>
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleInvestSubmit}>
             ✅ 確認批次送出 ({investCart.length} 筆)
           </button>
         </div>
       )}
 
       {activeTab === 'exchange' && (
-        <div className="glass-card" style={{ border: '1px solid #3498db' }}>
-          <h3 style={{ marginBottom: '15px', marginTop: 0 }}>💱 外幣換匯中心</h3>
+        <div className="glass-card card-animate">
+          <h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight:'700' }}>💱 外幣換匯中心</h3>
 
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#555', fontSize: '0.9rem' }}>操作帳戶</label>
+            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight:'600' }}>操作帳戶</label>
             <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '🐶 恆恆', value: 'userA' }, { label: '🐕 得得', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
           </div>
 
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#555', fontSize: '0.9rem' }}>換匯方向</label>
+            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight:'600' }}>換匯方向</label>
             <SegmentedControl options={[{ label: '🇹🇼 台幣 ➔ 🇺🇸 美金', value: 'TWD_TO_USD' }, { label: '🇺🇸 美金 ➔ 🇹🇼 台幣', value: 'USD_TO_TWD' }]} value={exchangeDir} onChange={setExchangeDir} />
           </div>
 
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.8rem', color: '#666' }}>台幣總額</label>
+              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight:'600' }}>台幣總額</label>
               <input type="number" className="glass-input" value={exchangeTwd} onChange={e => setExchangeTwd(e.target.value)} placeholder="例: 31500" />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.8rem', color: '#666' }}>美金總額 (USD)</label>
+              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight:'600' }}>美金總額 (USD)</label>
               <input type="number" className="glass-input" value={exchangeUsd} onChange={e => setExchangeUsd(e.target.value)} placeholder="例: 1000" />
             </div>
           </div>
 
-          <button className="glass-btn" style={{ width: '100%', background: '#3498db', color: '#fff', fontWeight: 'bold' }} onClick={handleExchange}>確認換匯</button>
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleExchange}>確認換匯</button>
         </div>
       )}
 
       {activeTab === 'calibrate' && (
-        <div className="glass-card" style={{ border: '1px solid #95a5a6' }}>
-          <h3 style={{ marginBottom: '15px', marginTop: 0 }}>⚖️ 餘額校正回歸</h3>
-          <p style={{ fontSize: '0.8rem', color: '#888', marginBottom: '15px' }}>用於修正手續費、匯差等造成的帳面微小落差，此操作<strong style={{ color: '#e74c3c' }}>不會</strong>計入當月收支與預算。</p>
+        <div className="glass-card card-animate">
+          <h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight:'700' }}>⚖️ 餘額校正回歸</h3>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '15px', lineHeight:'1.5' }}>用於修正手續費、匯差等造成的帳面微小落差，此操作<strong style={{ color: 'var(--accent-red)' }}>不會</strong>計入當月收支與預算。</p>
 
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#555', fontSize: '0.9rem' }}>校正帳戶</label>
+            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight:'600' }}>校正帳戶</label>
             <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '🐶 恆恆', value: 'userA' }, { label: '🐕 得得', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-            <div style={{ flex: 1, padding: '10px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.8rem', color: '#666' }}>目前台幣帳面</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2c3e50' }}>{formatMoney(assets[calibAccount] || 0)}</div>
+          {calibAccount ? (
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+              <div style={{ flex: 1, padding: '12px', background: 'rgba(120,120,128,0.04)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight:'500' }}>目前台幣帳面</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', marginTop:'4px' }}>{formatMoney(assets[calibAccount] || 0)}</div>
+              </div>
+              <div style={{ flex: 1, padding: '12px', background: 'rgba(120,120,128,0.04)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight:'500' }}>目前美金帳面</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', marginTop:'4px' }}>${(assets[`${calibAccount}_usd`] || 0).toFixed(2)}</div>
+              </div>
             </div>
-            <div style={{ flex: 1, padding: '10px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.8rem', color: '#666' }}>目前美金帳面</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2c3e50' }}>${(assets[`${calibAccount}_usd`] || 0).toFixed(2)}</div>
-            </div>
-          </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '18px', color: 'var(--text-tertiary)', fontSize: '0.88rem', marginBottom: '15px' }}>↑ 請先選擇要校正的帳戶</div>
+          )}
 
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.8rem', color: '#666' }}>輸入實際台幣餘額<br /><span style={{ fontSize: '0.7rem' }}>(留空代表不修改)</span></label>
+              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight:'600' }}>輸入實際台幣餘額<br /><span style={{ fontSize: '0.7rem', fontWeight:'400' }}>(留空代表不修改)</span></label>
               <input type="number" className="glass-input" style={{ marginTop: '4px' }} value={calibTwd} onChange={e => setCalibTwd(e.target.value)} placeholder={`例: ${assets[calibAccount] || 0}`} />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.8rem', color: '#666' }}>輸入實際美金餘額<br /><span style={{ fontSize: '0.7rem' }}>(留空代表不修改)</span></label>
+              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight:'600' }}>輸入實際美金餘額<br /><span style={{ fontSize: '0.7rem', fontWeight:'400' }}>(留空代表不修改)</span></label>
               <input type="number" className="glass-input" style={{ marginTop: '4px' }} value={calibUsd} onChange={e => setCalibUsd(e.target.value)} placeholder={`例: ${(assets[`${calibAccount}_usd`] || 0).toFixed(2)}`} />
             </div>
           </div>
 
-          <button className="glass-btn" style={{ width: '100%', background: '#95a5a6', color: '#fff', fontWeight: 'bold' }} onClick={handleCalibrate}>確認校正</button>
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleCalibrate}>確認校正</button>
         </div>
       )}
 
       {activeTab === 'transfer' && (
-        <div className="glass-card"><h3 style={{ marginBottom: '15px', marginTop: 0 }}>💸 上繳公庫</h3>
-          <div style={{ marginBottom: '15px' }}><label>來源</label><SegmentedControl options={[{ label: `恆恆🐶`, value: 'userA' }, { label: `得得🐕`, value: 'userB' }]} value={transSource} onChange={setTransSource} /></div>
-          <div style={{ marginBottom: '15px' }}><label>金額</label><input type="number" className="glass-input" value={transAmount} onChange={(e) => setTransAmount(e.target.value)} placeholder="0" /></div>
-          <button className="glass-btn" style={{ width: '100%' }} onClick={handleTransfer}>確認上繳</button>
+        <div className="glass-card card-animate"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight:'700' }}>💸 上繳公庫</h3>
+          <div style={{ marginBottom: '15px' }}><label style={{fontSize:'0.84rem', color:'var(--text-secondary)', fontWeight:'600'}}>來源</label><SegmentedControl options={[{ label: `恆恆🐶`, value: 'userA' }, { label: `得得🐕`, value: 'userB' }]} value={transSource} onChange={setTransSource} /></div>
+          <div style={{ marginBottom: '15px' }}><label style={{fontSize:'0.84rem', color:'var(--text-secondary)', fontWeight:'600'}}>金額</label><input type="number" className="glass-input" value={transAmount} onChange={(e) => setTransAmount(e.target.value)} placeholder="0" /></div>
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight:'700' }} onClick={handleTransfer}>確認上繳</button>
         </div>
       )}
 
       {activeTab === 'income' && (
-        <div className="glass-card"><h3 style={{ marginBottom: '15px', marginTop: 0 }}>💰 一般收入</h3>
-          <div style={{ marginBottom: '15px' }}><label>戶頭</label><SegmentedControl options={[{ label: `恆恆🐶`, value: 'userA' }, { label: `得得🐕`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} /></div>
-          <div style={{ marginBottom: '15px' }}><label>金額</label><input type="number" className="glass-input" value={incomeAmount} onChange={(e) => setIncomeAmount(e.target.value)} placeholder="輸入金額" /></div>
-          <div style={{ marginBottom: '15px' }}><label>備註</label><input type="text" className="glass-input" value={incomeNote} onChange={(e) => setIncomeNote(e.target.value)} placeholder="例如：3月薪水" /></div>
-          <button className="glass-btn" style={{ width: '100%' }} onClick={handleIncomeSubmit}>確認收入入帳</button>
+        <div className="glass-card card-animate"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight:'700' }}>💰 一般收入</h3>
+          <div style={{ marginBottom: '15px' }}><label style={{fontSize:'0.84rem', color:'var(--text-secondary)', fontWeight:'600'}}>戶頭</label><SegmentedControl options={[{ label: `恆恆🐶`, value: 'userA' }, { label: `得得🐕`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} /></div>
+          <div style={{ marginBottom: '15px' }}><label style={{fontSize:'0.84rem', color:'var(--text-secondary)', fontWeight:'600'}}>金額</label><input type="number" className="glass-input" value={incomeAmount} onChange={(e) => setIncomeAmount(e.target.value)} placeholder="輸入金額" /></div>
+          <div style={{ marginBottom: '15px' }}><label style={{fontSize:'0.84rem', color:'var(--text-secondary)', fontWeight:'600'}}>備註</label><input type="text" className="glass-input" value={incomeNote} onChange={(e) => setIncomeNote(e.target.value)} placeholder="例如：3月薪水" /></div>
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight:'700' }} onClick={handleIncomeSubmit}>確認收入入帳</button>
         </div>
       )}
 
-      <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-        <h3 style={{ color: '#666', marginBottom: '15px' }}>💾 資料管理</h3>
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
-          <button className="glass-btn" style={{ flex: 1, background: '#1d1d1f', color: 'white', fontSize: '0.9rem' }} onClick={handleExport}>📥 匯出</button>
-          <button className="glass-btn" style={{ flex: 1, background: 'rgba(255,255,255,0.8)', color: '#1d1d1f', border: '1px solid #ccc', fontSize: '0.9rem' }} onClick={handleImportClick}>📤 匯入</button>
+      <div style={{ marginTop: '36px', paddingTop: '20px', borderTop: '0.5px solid rgba(0,0,0,0.06)' }}>
+        <h3 style={{ color: 'var(--text-secondary)', marginBottom: '15px', fontWeight:'700' }}>💾 資料管理</h3>
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '10px' }}>
+          <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem' }} onClick={handleExport}>📥 匯出</button>
+          <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem' }} onClick={handleImportClick}>📤 匯入</button>
           <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json" onChange={handleFileChange} />
         </div>
-        <button onClick={handleManualBackup} disabled={isManualBackingUp} className="glass-btn" style={{ width: '100%', background: '#3498db', color: 'white', fontWeight: 'bold', border: 'none' }}>
+        <button onClick={handleManualBackup} disabled={isManualBackingUp} className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }}>
           {isManualBackingUp ? '備份中...' : '☁️ 手動備份至雲端'}
         </button>
       </div>

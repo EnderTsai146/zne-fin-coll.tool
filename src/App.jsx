@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Login from './components/Login';
 import TotalOverview from './components/TotalOverview';
 import MonthlyView from './components/MonthlyView';
@@ -10,13 +10,14 @@ import './index.css';
 import { db, auth } from './firebase';
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { MAKE_WEBHOOK_URL } from './config';
 
 const USER_MAPPING = {
   "hzh940317@gmail.com": "恆恆🐶",
   "ender.tsai@gmail.com": "得得🐕"
 };
 
-const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/bl76wl9v2v6hxd1k5xdm5n1yjt34hs7l";
+// MAKE_WEBHOOK_URL moved to config.js
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -24,6 +25,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('overview');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
+  
+  const [showLineSettings, setShowLineSettings] = useState(false);
+  const [tempLineCount, setTempLineCount] = useState('');
+  const batchSendingRef = useRef(false);
 
   const [assets, setAssets] = useState({
     userA: 0,
@@ -68,6 +73,44 @@ function App() {
             userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
           };
         }
+        const currentMonthStr = new Date().toISOString().slice(0, 7);
+        let needsUpdate = false;
+        if (!data.lineConfig || data.lineConfig.month !== currentMonthStr) {
+           data.lineConfig = { batchMode: false, month: currentMonthStr };
+           data.lineNotifCount = { month: currentMonthStr, count: 0 };
+           needsUpdate = true;
+        }
+        if (!data.pendingLineNotifications) {
+           data.pendingLineNotifications = [];
+           needsUpdate = true;
+        }
+
+        // Fix #3: 自動歸檔 — 移除 3 個月前的 auditTrail 以控制文件大小
+        const pruneDate = new Date();
+        pruneDate.setMonth(pruneDate.getMonth() - 3);
+        const pruneCutoff = pruneDate.toISOString().slice(0, 10);
+        if (data.monthlyExpenses) {
+          data.monthlyExpenses = data.monthlyExpenses.map(r => {
+            if (r.date && r.date < pruneCutoff && (r.auditTrail || r.deleteAuditTrail)) {
+              needsUpdate = true;
+              const { auditTrail, deleteAuditTrail, ...rest } = r;
+              return rest;
+            }
+            return r;
+          });
+        }
+        // 清理 2 年以前的 dailyNetWorth 快照
+        if (data.dailyNetWorth) {
+          const nwCutoff = new Date();
+          nwCutoff.setFullYear(nwCutoff.getFullYear() - 2);
+          const nwCutoffStr = nwCutoff.toISOString().slice(0, 10);
+          Object.keys(data.dailyNetWorth).forEach(d => {
+            if (d < nwCutoffStr) { delete data.dailyNetWorth[d]; needsUpdate = true; }
+          });
+        }
+
+        if (needsUpdate) setDoc(docRef, data);
+
         setAssets(data);
       } else {
         setDoc(docRef, assets);
@@ -83,13 +126,49 @@ function App() {
     setDoc(docRef, newAssets).catch((err) => alert("連線錯誤：" + err.message));
   };
 
+  // Fix #1: 批次通知 — 用 useRef 鎖 + batchSentDate 防止無限迴圈與雙人重複觸發
+  useEffect(() => {
+    if (!assets || !assets.lineConfig || !assets.lineConfig.batchMode) return;
+    if (batchSendingRef.current) return; // 正在發送中，跳過
+    const now = new Date();
+    const hr = now.getHours();
+    const todayStr = now.toISOString().split('T')[0];
+    // 只在 22:00 之後觸發，且今日尚未發送過
+    if (hr >= 22 && assets.pendingLineNotifications && assets.pendingLineNotifications.length > 0 && assets.lineConfig.batchSentDate !== todayStr) {
+       batchSendingRef.current = true;
+       const summaryList = assets.pendingLineNotifications.map((n, i) => `${i+1}. ${n.title}: ${n.note} (${n.amount})`).join('\n').slice(0, 800);
+       const batchPayload = {
+          title: "晚間批次變動彙整",
+          amount: `共 ${assets.pendingLineNotifications.length} 筆`,
+          category: "系統彙整",
+          note: summaryList,
+          date: todayStr,
+          color: "#9b59b6",
+          operator: "管家自動推播",
+          isSummary: true
+       };
+       sendLineNotification(batchPayload);
+       const finalAssets = getUpdatedAssetsWithLineCount({
+         ...assets,
+         pendingLineNotifications: [],
+         lineConfig: { ...assets.lineConfig, batchSentDate: todayStr }
+       }, 1);
+       saveToCloud(finalAssets);
+       // 延遲解鎖，避免 onSnapshot 的回寫觸發第二輪
+       setTimeout(() => { batchSendingRef.current = false; }, 3000);
+    }
+  }, [assets]);
+
   const sendLineNotification = async (data) => {
     try {
       const safeData = {
         title: String(data.title || "系統通知").replace(/"/g, '＂').replace(/\n/g, ' '),
         amount: String(data.amount || "$0").replace(/"/g, '＂'),
         category: String(data.category || "未分類").replace(/"/g, '＂').replace(/\n/g, ' '),
-        note: String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' '),
+        // Fix #4: 彙整通知保留換行，一般通知清除換行
+        note: data.isSummary
+          ? String(data.note || "無備註").replace(/"/g, '＂')
+          : String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' '),
         date: String(data.date || new Date().toISOString().split('T')[0]),
         color: String(data.color || "#666666"),
         operator: String(data.operator || operatorName || "系統").replace(/"/g, '＂')
@@ -125,6 +204,9 @@ function App() {
     const timestamp = new Date().toISOString();
     const records = Array.isArray(historyRecordsInput) ? historyRecordsInput : [historyRecordsInput];
 
+    const isBatch = assets.lineConfig?.batchMode;
+    const increment = isBatch ? 0 : 1;
+
     const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssets,
       monthlyExpenses: [
@@ -136,9 +218,9 @@ function App() {
           auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
         }))
       ]
-    });
-    saveToCloud(finalAssets);
-    setCurrentPage('overview');
+    }, increment);
+
+    const appended = [];
 
     records.forEach(historyRecord => {
       let color = "#17c9b2"; let title = "資產變動";
@@ -156,52 +238,49 @@ function App() {
       else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
 
       const usdNote = historyRecord.usdAmount ? ` (含 $${historyRecord.usdAmount} USD)` : '';
-
-      sendLineNotification({
-        title: title,
-        amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`,
-        category: historyRecord.category,
-        note: `${historyRecord.note || '無'}${usdNote}`,
-        date: historyRecord.date,
-        color: color,
-        operator: operatorName
-      });
+      const payload = { title: title, amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`, category: historyRecord.category, note: `${historyRecord.note || '無'}${usdNote}`, date: historyRecord.date, color: color, operator: operatorName };
+      
+      if (isBatch) appended.push(payload);
+      else sendLineNotification(payload);
     });
+
+    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), ...appended];
+    
+    saveToCloud(finalAssets);
+    setCurrentPage('overview');
   };
 
   const handleAddExpense = (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
     const payerKey = payer === 'heng' ? 'userA' : 'userB';
     const payerName = payer === 'heng' ? '恆恆🐶' : '得得🐕';
 
-    if (assets[payerKey] < totalAmount) alert(`⚠️ ${payerName} 的個人餘額不足！`);
+    // Fix #2: 加入 return 攔截餘額不足的操作
+    if (assets[payerKey] < totalAmount) return alert(`⚠️ ${payerName} 的個人餘額不足！`);
 
     const finalNote = note || '日記帳';
     const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
 
+    const isBatch = assets.lineConfig?.batchMode;
     const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssetsTemp,
       ...(updatedBills ? { bills: updatedBills } : {}),
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
         {
-          date,
-          month: date.slice(0, 7),
-          type: 'expense',
-          category: '個人支出',
-          details: expenseData,
-          total: totalAmount,
-          payer: payerName,
-          operator: operatorName,
-          note: finalNote,
-          timestamp: new Date().toISOString(),
-          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) }
+          date, month: date.slice(0, 7), type: 'expense', category: '個人支出', details: expenseData,
+          total: totalAmount, payer: payerName, operator: operatorName, note: finalNote,
+          timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) }
         }
       ]
-    });
+    }, isBatch ? 0 : 1);
+
+    const payload = { title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出", note: finalNote, date: date, color: "#ef454d", operator: operatorName };
+    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
+
     saveToCloud(finalAssets);
     alert("✅ 記帳完成！");
     setCurrentPage('overview');
-    sendLineNotification({ title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出", note: finalNote, date: date, color: "#ef454d", operator: operatorName });
+    if (!isBatch) sendLineNotification(payload);
   };
 
   const handleAddJointExpense = (date, category, amount, advancedBy, note, updatedBills = null) => {
@@ -223,31 +302,29 @@ function App() {
     }
 
     const safeNote = note ? String(note).trim() : '';
+    const isBatch = assets.lineConfig?.batchMode;
+    
     const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssets,
       ...(updatedBills ? { bills: updatedBills } : {}),
       monthlyExpenses: [
         ...(newAssets.monthlyExpenses || []),
         {
-          date,
-          month: date.slice(0, 7),
-          type: 'spend',
-          category: '共同支出',
-          payer: '共同帳戶',
-          total: val,
-          note: safeNote ? `${category} - ${safeNote}` : category,
-          operator: operatorName,
-          advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
-          isSettled: false,
-          timestamp: new Date().toISOString(),
-          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
+          date, month: date.slice(0, 7), type: 'spend', category: '共同支出', payer: '共同帳戶',
+          total: val, note: safeNote ? `${category} - ${safeNote}` : category,
+          operator: operatorName, advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
+          isSettled: false, timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
         }
       ]
-    });
+    }, isBatch ? 0 : 1);
+
+    const payload = { title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName };
+    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
+
     saveToCloud(finalAssets);
     alert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
     setCurrentPage('overview');
-    sendLineNotification({ title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName });
+    if (!isBatch) sendLineNotification(payload);
   };
 
   // ★ 嚴格防護的修改功能：只准改文字與日期，金額絕不可動
@@ -290,7 +367,14 @@ function App() {
     if (!reason || !reason.trim()) return alert("❌ 必須輸入作廢原因才能繼續。");
 
     const snapshotBefore = getSnapshot(assets);
-    const newAssets = { ...assets };
+    // Fix #7: 深拷貝巢狀物件，避免 state 汙染
+    const newAssets = {
+      ...assets,
+      jointInvestments: { ...(assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 }) },
+      userInvestments: assets.userInvestments
+        ? { userA: { ...assets.userInvestments.userA }, userB: { ...assets.userInvestments.userB } }
+        : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } }
+    };
     const safePayer = record.payer || '';
     const payerKey = safePayer.includes('恆恆') ? 'userA' : (safePayer.includes('得得') ? 'userB' : null);
 
@@ -389,44 +473,113 @@ function App() {
         : r
     );
 
-    const finalAssets = getUpdatedAssetsWithLineCount(newAssets);
+    const isBatch = assets.lineConfig?.batchMode;
+    const finalAssets = getUpdatedAssetsWithLineCount(newAssets, isBatch ? 0 : 1);
+    
+    const payload = { title: "🗑️ 刪除/作廢紀錄", amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`, category: record.category, note: `已作廢: ${record.note} (原因: ${reason.trim()})`, date: new Date().toISOString().split('T')[0], color: "#666666", operator: operatorName };
+    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
+
     saveToCloud(finalAssets);
-    sendLineNotification({ title: "🗑️ 刪除/作廢紀錄", amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`, category: record.category, note: `已作廢: ${record.note} (原因: ${reason.trim()})`, date: new Date().toISOString().split('T')[0], color: "#666666", operator: operatorName });
+    if (!isBatch) sendLineNotification(payload);
     alert("🗑️ 紀錄已作廢，相關金額與投資本金已完全復原。");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>馬鈴薯甦醒中...🥔</div>;
-  if (!currentUser) return <Login />;
-
-  const getUpdatedAssetsWithLineCount = (assetsCopy) => {
+  // Fix #9: 將 getUpdatedAssetsWithLineCount 移到 early return 之前，避免 hoisting 問題
+  const getUpdatedAssetsWithLineCount = (assetsCopy, increment = 1) => {
     const currentMonth = new Date().toISOString().slice(0, 7);
-    let newCountObj = { month: currentMonth, count: 1 };
+    let newCountObj = { month: currentMonth, count: increment };
     if (assetsCopy.lineNotifCount && assetsCopy.lineNotifCount.month === currentMonth) {
-      newCountObj.count = assetsCopy.lineNotifCount.count + 1;
+      newCountObj.count = assetsCopy.lineNotifCount.count + increment;
     }
     return { ...assetsCopy, lineNotifCount: newCountObj };
   };
 
+  if (loading) return (
+    <div className="loading-container">
+      <div className="loading-emoji">🥔</div>
+      <div className="loading-text">馬鈴薯甦醒中...</div>
+    </div>
+  );
+  if (!currentUser) return <Login />;
+
   const Topbar = () => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     const lineCount = (assets.lineNotifCount && assets.lineNotifCount.month === currentMonth) ? assets.lineNotifCount.count : 0;
-    const isLineLimitWarning = lineCount >= 180;
+    const limitWarning = lineCount >= 185;
 
     return (
-      <nav className="glass-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 25px', borderRadius: '0 0 20px 20px', marginBottom: '20px' }}>
-        <div style={{ fontSize: '1.2rem', lineHeight: '1.2', fontWeight: 'bold' }}>
-          🥔管家 <span style={{ fontSize: '0.75rem', fontWeight: 'normal', opacity: 0.7, display: 'inline-block', marginLeft: '5px' }}>({operatorName})</span>
+      <nav className="glass-nav" style={{ borderRadius: '0 0 20px 20px', marginBottom: '16px' }}>
+        <div style={{ fontSize: '1.15rem', lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '1.3rem' }}>🥔</span>
+          <span>管家</span>
+          <span style={{ fontSize: '0.7rem', fontWeight: '500', color: 'var(--text-secondary)', marginLeft: '2px' }}>({operatorName})</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ fontSize: '0.75rem', background: isLineLimitWarning ? 'rgba(255,0,0,0.1)' : 'rgba(0,0,0,0.05)', color: isLineLimitWarning ? '#c0392b' : '#555', padding: '4px 10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: isLineLimitWarning ? 'bold' : 'normal' }}>
-            💬 Line: {lineCount} / 200
-            {isLineLimitWarning && <span>⚠️</span>}
-          </div>
-          <button className="glass-btn" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'rgba(255,0,0,0.1)', color: 'red' }} onClick={handleLogout}>登出</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => { setTempLineCount(lineCount); setShowLineSettings(true); }}
+            style={{
+              fontSize: '0.72rem', fontFamily: 'var(--font-family)',
+              background: limitWarning ? 'rgba(255,59,48,0.08)' : 'rgba(120,120,128,0.08)',
+              color: limitWarning ? 'var(--accent-red)' : 'var(--text-secondary)',
+              padding: '6px 12px', borderRadius: 'var(--radius-pill)',
+              display: 'flex', alignItems: 'center', gap: '4px',
+              fontWeight: limitWarning ? '700' : '500',
+              border: limitWarning ? '1px solid rgba(255,59,48,0.25)' : '1px solid transparent',
+              animation: limitWarning ? 'pulseRed 1.5s infinite' : 'none',
+              cursor: 'pointer', transition: 'all 0.2s ease'
+            }}
+          >
+            💬 {lineCount}/200
+            {limitWarning && <span>⚠️</span>}
+          </button>
+          <button
+            className="glass-btn glass-btn-danger"
+            style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+            onClick={handleLogout}
+          >登出</button>
         </div>
       </nav>
+    );
+  };
+
+  const LineSettingsModal = () => {
+    if (!showLineSettings) return null;
+    const isBatch = assets.lineConfig?.batchMode || false;
+    
+    return (
+      <div className="modal-backdrop" onClick={() => setShowLineSettings(false)}>
+         <div className="modal-content glass-card" style={{ padding:'28px', position:'relative' }} onClick={e => e.stopPropagation()}>
+            <button onClick={()=>setShowLineSettings(false)} style={{position:'absolute', right:'16px', top:'12px', background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'var(--text-tertiary)', fontWeight:'300'}}>&times;</button>
+            <h3 style={{marginTop:0, marginBottom:'20px', fontWeight:'700', letterSpacing:'-0.01em'}}>💬 系統通知管理</h3>
+            
+            <div style={{marginBottom:'18px'}}>
+              <label style={{display:'block', fontSize:'0.85rem', color:'var(--text-secondary)', marginBottom:'6px', fontWeight:'600'}}>手動校正當月計數</label>
+              <input type="number" className="glass-input" value={tempLineCount} onChange={e=>setTempLineCount(e.target.value)} placeholder="強制覆寫系統已發送數量" style={{marginBottom:0}} />
+            </div>
+
+            <div style={{marginBottom:'22px', padding:'16px', background:'rgba(120,120,128,0.06)', borderRadius:'var(--radius-md)', border: isBatch ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition:'all 0.3s ease'}}>
+              <label style={{display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer'}}>
+                <span style={{fontWeight:'600', fontSize:'0.92rem', color: isBatch ? 'var(--accent-blue)' : 'var(--text-primary)'}}>🌙 晚間10點批次發送</span>
+                <input type="checkbox" checked={isBatch} onChange={() => saveToCloud({ ...assets, lineConfig: { ...assets.lineConfig, batchMode: !isBatch } })} style={{transform:'scale(1.3)', accentColor:'var(--accent-blue)'}} />
+              </label>
+              <p style={{fontSize:'0.73rem', color:'var(--text-tertiary)', marginTop:'10px', lineHeight:'1.6'}}>
+                開啟此模式後，每日之所有操作將不會立刻推播，而是暫存在雲端。待晚上 10 點過後系統會將累積的變動合併為單一提要發送。
+              </p>
+              {isBatch && (
+                <div style={{fontSize:'0.82rem', color:'var(--accent-orange)', marginTop:'10px', fontWeight:'600', animation:'slideUpFade 0.3s ease-out'}}>
+                   🛒 雲端目前累積未發：{assets.pendingLineNotifications?.length || 0} 筆
+                </div>
+              )}
+            </div>
+
+            <button className="glass-btn glass-btn-cta" style={{width:'100%', fontWeight:'700'}} onClick={() => {
+               saveToCloud({ ...assets, lineNotifCount: { month: new Date().toISOString().slice(0, 7), count: Number(tempLineCount) || 0 } });
+               setShowLineSettings(false);
+            }}>確認儲存</button>
+         </div>
+      </div>
     );
   };
 
@@ -439,23 +592,15 @@ function App() {
   ];
 
   const BottomNav = () => (
-    <div style={{
-      position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)',
-      width: 'calc(100% - 40px)', maxWidth: '500px', zIndex: 1000, borderRadius: '30px',
-      display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '12px 10px',
-      background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
-      border: '1px solid rgba(255, 255, 255, 0.4)'
-    }}>
+    <div className="bottom-nav">
       {navItems.map(item => (
-        <div key={item.id} onClick={() => setCurrentPage(item.id)} style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          width: '60px', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          opacity: currentPage === item.id ? 1 : 0.5,
-          transform: currentPage === item.id ? 'scale(1.15) translateY(-2px)' : 'scale(1)'
-        }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: '4px', filter: currentPage === item.id ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none' }}>{item.icon}</div>
-          <div style={{ fontSize: '0.7rem', fontWeight: currentPage === item.id ? 'bold' : 'normal', color: currentPage === item.id ? '#1967d2' : '#666' }}>{item.label}</div>
+        <div
+          key={item.id}
+          className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+          onClick={() => setCurrentPage(item.id)}
+        >
+          <div className="nav-icon">{item.icon}</div>
+          <div className="nav-label">{item.label}</div>
         </div>
       ))}
     </div>
@@ -476,6 +621,7 @@ function App() {
             onEdit={handleEditTransaction}
             sendLineNotification={sendLineNotification}
             currentUser={operatorName}
+            getUpdatedAssetsWithLineCount={getUpdatedAssetsWithLineCount}
           />
         )}
 
@@ -483,6 +629,7 @@ function App() {
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
       </div>
+      <LineSettingsModal />
       <BottomNav />
     </div>
   );

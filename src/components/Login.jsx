@@ -24,27 +24,21 @@ const Login = () => {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      padding: '20px', // 關鍵：增加內距，防止手機版貼邊
-      boxSizing: 'border-box'
-    }}>
-      <div className="glass-card" style={{
-        width: '100%',
-        maxWidth: '400px', // 限制最大寬度，電腦版不會太寬
-        padding: '40px 30px',
-        textAlign: 'center',
-        margin: '0 auto' // 確保水平置中
-      }}>
-        <div style={{ fontSize: '3.5rem', marginBottom: '10px' }}>🥔</div>
-        <h2 style={{ marginBottom: '30px', color: '#444', letterSpacing: '2px' }}>馬鈴薯管家</h2>
-        
+    <div className="login-container">
+      <div className="login-card">
+        <div className="login-logo">🥔</div>
+        <div className="login-title">馬鈴薯管家</div>
+
         <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold', fontSize: '0.9rem' }}>Email</label>
+          <div style={{ marginBottom: '16px', textAlign: 'left' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '6px',
+              color: 'var(--text-secondary)',
+              fontWeight: '600',
+              fontSize: '0.85rem',
+              letterSpacing: '0.01em'
+            }}>Email</label>
             <input
               type="email"
               className="glass-input"
@@ -53,12 +47,19 @@ const Login = () => {
               placeholder="請輸入 Email"
               required
               autoComplete="username"
-              style={{ width: '100%' }} // 確保填滿
+              style={{ marginBottom: 0 }}
             />
           </div>
 
-          <div style={{ marginBottom: '30px', textAlign: 'left' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold', fontSize: '0.9rem' }}>密碼</label>
+          <div style={{ marginBottom: '24px', textAlign: 'left' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '6px',
+              color: 'var(--text-secondary)',
+              fontWeight: '600',
+              fontSize: '0.85rem',
+              letterSpacing: '0.01em'
+            }}>密碼</label>
             <input
               type="password"
               className="glass-input"
@@ -67,19 +68,38 @@ const Login = () => {
               placeholder="請輸入密碼"
               required
               autoComplete="current-password"
-              style={{ width: '100%' }} // 確保填滿
+              style={{ marginBottom: 0 }}
             />
           </div>
 
-          {error && <div style={{ color: '#ff6b6b', marginBottom: '20px', background: 'rgba(255,0,0,0.1)', padding: '10px', borderRadius: '8px', fontSize: '0.9rem' }}>{error}</div>}
+          {error && (
+            <div style={{
+              color: 'var(--accent-red)',
+              marginBottom: '16px',
+              background: 'rgba(255, 59, 48, 0.08)',
+              padding: '12px 14px',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              border: '1px solid rgba(255, 59, 48, 0.15)',
+              animation: 'slideUpFade 0.3s ease-out'
+            }}>
+              {error}
+            </div>
+          )}
 
-          <button 
-            type="submit" 
-            className="glass-btn" 
-            style={{ width: '100%', padding: '14px', fontSize: '1.1rem', fontWeight: 'bold', marginTop: '10px' }}
+          <button
+            type="submit"
+            className="login-btn"
             disabled={loading}
+            style={{ marginTop: '8px' }}
           >
-            {loading ? '登入中...' : '登入系統'}
+            {loading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span>
+                登入中
+              </span>
+            ) : '登入系統'}
           </button>
         </form>
       </div>
