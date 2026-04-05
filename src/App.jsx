@@ -461,17 +461,34 @@ function App() {
       default: break;
     }
 
-    newAssets.monthlyExpenses = updatedExpenses.map((r, i) =>
+    const snapshotAfter = getSnapshot(newAssets);
+    const markedExpenses = updatedExpenses.map((r, i) =>
       i === indexToDelete
         ? {
           ...r,
           isDeleted: true,
           deleteReason: reason.trim(),
           deleteTimestamp: new Date().toISOString(),
-          deleteAuditTrail: { before: snapshotBefore, after: getSnapshot(newAssets) }
+          deleteAuditTrail: { before: snapshotBefore, after: snapshotAfter }
         }
         : r
     );
+
+    // ★ 新增一筆「作廢退款」可見紀錄，讓 TotalOverview 的變動軌跡能追蹤到這個操作
+    markedExpenses.push({
+      date: new Date().toISOString().split('T')[0],
+      month: new Date().toISOString().slice(0, 7),
+      type: 'calibrate',
+      category: '作廢退款',
+      total: record.total,
+      note: `🗑️ 作廢退款: ${record.note} (原因: ${reason.trim()})`,
+      payer: record.payer || '系統',
+      operator: operatorName,
+      timestamp: new Date().toISOString(),
+      auditTrail: { before: snapshotBefore, after: snapshotAfter }
+    });
+
+    newAssets.monthlyExpenses = markedExpenses;
 
     const isBatch = assets.lineConfig?.batchMode;
     const finalAssets = getUpdatedAssetsWithLineCount(newAssets, isBatch ? 0 : 1);
