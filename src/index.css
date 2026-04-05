@@ -353,6 +353,11 @@ h2, h3, h4 {
   animation: modalEnter 0.4s var(--ease-out-spring) both;
 }
 
+.modal-content.glass-card {
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--glass-shadow-elevated), var(--glass-highlight);
+}
+
 /* Loading */
 .loading-container {
   display: flex;

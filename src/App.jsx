@@ -361,7 +361,7 @@ function App() {
     const record = assets.monthlyExpenses[indexToDelete];
     if (!record) return;
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
-    if (record.isSettled) return alert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
+    if (record.isSettled && record.advancedBy) return alert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
 
     const reason = window.prompt("⚠️ 即將作廢此紀錄，系統將自動還原對應的金額。\n請輸入作廢原因（必填）：");
     if (!reason || !reason.trim()) return alert("❌ 必須輸入作廢原因才能繼續。");
