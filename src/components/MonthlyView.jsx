@@ -1,6 +1,5 @@
 // src/components/MonthlyView.jsx
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom'; // 🌟 關鍵修復 1：引入時空傳送門，解決定位跑掉的問題
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
 
@@ -28,12 +27,13 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
 
     const handleSaveBudget = () => { setAssets({ ...assets, monthlyBudget: Number(tempBudget) }); setIsEditingBudget(false); };
 
+    // ★ 增加校正專屬顏色標籤
     const getTypeColor = (type) => {
         if (type === 'income') return '#2ecc71';
         if (type === 'expense') return '#ff6b6b';
         if (type === 'spend') return '#ff9f43';
         if (type === 'transfer' || type === 'exchange') return '#3498db';
-        if (type === 'calibrate') return '#95a5a6';
+        if (type === 'calibrate') return '#95a5a6'; // 校正為低調的灰色
         if (type === 'settle') return '#00b894';
         if (type === 'liquidate' || type === 'joint_invest_sell' || type === 'personal_invest_sell') return '#f1c40f';
         if (type === 'joint_invest_buy' || type === 'personal_invest_buy') return '#8e44ad';
@@ -68,8 +68,20 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
         newHistory.push({ date: timestamp.split('T')[0], month: timestamp.slice(0, 7), type: 'settle', category: '帳務結算', payer: '共同帳戶', total: debtAmount, note: `撥款結清 ${targetName} 的代墊`, operator: currentUser || "系統", timestamp: timestamp, settledUser: targetUser, settleId: currentSettleId, auditTrail: { before: snapshotBefore, after: snapshotAfter } });
 
         newAssets.monthlyExpenses = newHistory;
+
+        // Fix #8: 結清功能尊重批次模式
+        const settlePayload = { title: "✅ 代墊款結清", amount: `$${debtAmount.toLocaleString()}`, category: "帳務結算", note: `共同帳戶已實際撥款給 ${targetName}。`, date: timestamp.split('T')[0], color: "#2ecc71", operator: currentUser || "系統" };
+
+        if (assets.lineConfig?.batchMode) {
+            newAssets.pendingLineNotifications = [...(newAssets.pendingLineNotifications || []), settlePayload];
+        } else {
+            const currentMonth = new Date().toISOString().slice(0, 7);
+            const curCount = (newAssets.lineNotifCount?.month === currentMonth) ? (newAssets.lineNotifCount.count || 0) : 0;
+            newAssets.lineNotifCount = { month: currentMonth, count: curCount + 1 };
+            if (sendLineNotification) sendLineNotification(settlePayload);
+        }
+
         setAssets(newAssets);
-        if (sendLineNotification) sendLineNotification({ title: "✅ 代墊款結清", amount: `$${debtAmount.toLocaleString()}`, category: "帳務結算", note: `共同帳戶已實際撥款給 ${targetName}。`, date: timestamp.split('T')[0], color: "#2ecc71", operator: currentUser || "系統" });
         alert("✅ 結清完成！資金已轉移，並已產生結清軌跡。"); setShowSettlementModal(false);
     };
 
@@ -89,6 +101,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
 
         monthRecords.forEach(r => {
             const day = parseInt(r.date.split('-')[2]);
+            // ★ 校正並不會被算入任何 income 或 expense
             if (r.type === 'income') {
                 stats.income.total += r.total;
                 if (r.payer.includes('恆恆')) stats.income.userA += r.total; else if (r.payer.includes('得得')) stats.income.userB += r.total;
@@ -155,13 +168,37 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
         return true;
     });
 
+    // Fix #16: 虛擬捲動 — 漸進式載入
+    const [renderCount, setRenderCount] = useState(15);
+    const loadMoreRef = useRef(null);
+
+    // 當篩選條件變更時重置顯示數量
+    useEffect(() => { setRenderCount(15); }, [filterDate, filterType, filterUser]);
+
+    useEffect(() => {
+        const sentinel = loadMoreRef.current;
+        if (!sentinel) return;
+        const observer = new IntersectionObserver(
+            (entries) => { if (entries[0].isIntersecting) setRenderCount(prev => prev + 15); },
+            { threshold: 0.1 }
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    });
+
+    const sortedHistory = useMemo(() =>
+        [...filteredHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
+        [filteredHistory]
+    );
+    const visibleHistory = sortedHistory.slice(0, renderCount);
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h1 className="page-title" style={{ margin: 0 }}>財務資料庫</h1>
                 <div style={{ background: 'rgba(255,255,255,0.3)', borderRadius: '20px', padding: '4px', display: 'flex' }}>
                     {['chart', 'list'].map(mode => (
-                        <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#fff' : 'transparent', border: 'none', borderRadius: '16px', padding: '6px 12px', cursor: 'pointer', fontWeight: 'bold', color: viewMode === mode ? '#333' : '#666', boxShadow: viewMode === mode ? '0 2px 5px rgba(0,0,0,0.1)' : 'none' }}>
+                        <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? 'rgba(255,255,255,0.6)' : 'transparent', border: 'none', borderRadius: 'var(--radius-pill)', padding: '6px 14px', cursor: 'pointer', fontWeight: '600', color: viewMode === mode ? 'var(--text-primary)' : 'var(--text-tertiary)', boxShadow: viewMode === mode ? '0 2px 8px rgba(0,0,0,0.06)' : 'none', backdropFilter: viewMode === mode ? 'blur(8px)' : 'none' }}>
                             {mode === 'chart' ? '儀表板' : '流水帳'}
                         </button>
                     ))}
@@ -169,21 +206,21 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
             </div>
 
             {viewMode === 'chart' && (
-                <div style={{ animation: 'fadeIn 0.5s' }}>
+                <div className="page-transition-enter">
                     <div className="glass-card" style={{ padding: '10px', textAlign: 'center', marginBottom: '15px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
-                        <label style={{ fontWeight: 'bold', color: '#555' }}>分析月份：</label><input type="month" className="glass-input" style={{ width: 'auto', margin: 0, padding: '5px 10px' }} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
+                        <label style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>分析月份：</label><input type="month" className="glass-input" style={{ width: 'auto', margin: 0, padding: '5px 10px' }} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
                     </div>
 
                     <div className="glass-card" style={{ padding: '15px', marginBottom: '15px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#555' }}>🎯 本月預算進度</h3>
+                            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '700' }}>🎯 本月預算進度</h3>
                             {isEditingBudget ? (
                                 <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                     <input type="number" className="glass-input" style={{ margin: 0, padding: '4px 8px', width: '100px' }} value={tempBudget} onChange={e => setTempBudget(e.target.value)} />
                                     <button className="glass-btn" style={{ padding: '4px 10px', fontSize: '0.8rem' }} onClick={handleSaveBudget}>儲存</button>
                                 </div>
                             ) : (
-                                <div style={{ fontSize: '0.9rem', color: '#888', cursor: 'pointer', background: 'rgba(0,0,0,0.05)', padding: '4px 8px', borderRadius: '8px' }} onClick={() => setIsEditingBudget(true)}>
+                                <div style={{ fontSize: '0.88rem', color: 'var(--text-tertiary)', cursor: 'pointer', background: 'rgba(120,120,128,0.06)', padding: '4px 10px', borderRadius: 'var(--radius-xs)' }} onClick={() => setIsEditingBudget(true)}>
                                     設定預算: {formatMoney(currentBudget)} ✏️
                                 </div>
                             )}
@@ -191,57 +228,57 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                         <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '10px', height: '14px', width: '100%', overflow: 'hidden' }}>
                             <div style={{ background: progressColor, width: `${budgetPercent}%`, height: '100%', transition: 'width 0.5s ease' }}></div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.85rem', color: '#666', fontWeight: '500' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '500' }}>
                             <span>已花 {formatMoney(dashboardData.stats.expense.total)}</span><span>剩餘 {formatMoney(Math.max(currentBudget - dashboardData.stats.expense.total, 0))} ({budgetPercent}%)</span>
                         </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
-                        <div className="glass-card" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%)' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#1d1d1f', opacity: 0.7 }}>總收入</div>
-                            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#06c755', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.income.total)}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#444', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '5px' }}>恆: {formatMoney(dashboardData.stats.income.userA)} | 得: {formatMoney(dashboardData.stats.income.userB)}</div>
+                        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(52,199,89,0.12), rgba(52,199,89,0.04))' }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總收入</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-green)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.income.total)}</div>
+                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '5px' }}>恆: {formatMoney(dashboardData.stats.income.userA)} | 得: {formatMoney(dashboardData.stats.income.userB)}</div>
                         </div>
-                        <div className="glass-card" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#1d1d1f', opacity: 0.7 }}>總支出</div>
-                            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#ef454d', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.expense.total)}</div>
-                            <div style={{ fontSize: '0.75rem', color: dashboardData.momColor, fontWeight: 'bold', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '5px' }}>
+                        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(255,59,48,0.1), rgba(255,59,48,0.03))' }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總支出</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-red)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.expense.total)}</div>
+                            <div style={{ fontSize: '0.73rem', color: dashboardData.momColor, fontWeight: '600', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '5px' }}>
                                 {dashboardData.momText}
                             </div>
                         </div>
-                        <div className="glass-card" style={{ flex: 1, minWidth: '140px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#1d1d1f', opacity: 0.7 }}>淨現金流 (本月存下)</div>
-                            <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: dashboardData.netCashFlow >= 0 ? '#1967d2' : '#e74c3c', marginBottom: '5px' }}>
+                        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '140px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(88,86,214,0.1), rgba(0,122,255,0.06))' }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>淨現金流 (本月存下)</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: dashboardData.netCashFlow >= 0 ? 'var(--accent-blue)' : 'var(--accent-red)', marginBottom: '5px' }}>
                                 {dashboardData.netCashFlow > 0 ? '+' : ''}{formatMoney(dashboardData.netCashFlow)}
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: '#444', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '5px' }}>儲蓄率: <span style={{ fontWeight: 'bold', color: '#1967d2' }}>{dashboardData.savingsRate}%</span></div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '5px' }}>儲蓄率: <span style={{ fontWeight: '700', color: 'var(--accent-blue)' }}>{dashboardData.savingsRate}%</span></div>
                         </div>
                     </div>
 
                     {dashboardData.stats.expense.total === 0 ? (
-                        <div className="glass-card" style={{ textAlign: 'center', padding: '30px', color: '#888' }}>🦕 這個月還沒有有效的支出紀錄喔！</div>
+                        <div className="glass-card" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)' }}>🦕 這個月還沒有有效的支出紀錄喔！</div>
                     ) : (
                         <>
                             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
                                 <div className="glass-card" style={{ flex: 1, minWidth: '250px' }}>
-                                    <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: '#666' }}>支出結構</h4>
+                                    <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>支出結構</h4>
                                     <div style={{ height: '200px', display: 'flex', justifyContent: 'center' }}><Pie data={dashboardData.pieData} options={{ maintainAspectRatio: false }} /></div>
                                 </div>
                                 <div className="glass-card" style={{ flex: 1.5, minWidth: '250px' }}>
-                                    <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: '#666' }}>💸 花費排行榜 & 抓漏</h4>
+                                    <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>💸 花費排行榜 & 抓漏</h4>
                                     <div>
                                         {dashboardData.leaderboard.map((item, idx) => (
-                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px dashed #eee' }}>
+                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '0.5px solid rgba(0,0,0,0.04)' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                     <span style={{ fontSize: '1.2rem' }}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹'}</span>
                                                     <div>
-                                                        <div style={{ fontWeight: 'bold', color: '#444' }}>{item.name}</div>
-                                                        <div style={{ fontSize: '0.7rem', color: '#888' }}>佔總額 {item.percentage}%</div>
+                                                        <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{item.name}</div>
+                                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>佔總額 {item.percentage}%</div>
                                                     </div>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <div style={{ fontWeight: 'bold', color: '#e74c3c' }}>{formatMoney(item.amount)}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: '#666' }}>日均消耗: <span style={{ fontWeight: 'bold' }}>{formatMoney(item.dailyAvg)}</span></div>
+                                                    <div style={{ fontWeight: '700', color: 'var(--accent-red)' }}>{formatMoney(item.amount)}</div>
+                                                    <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)' }}>日均消耗: <span style={{ fontWeight: '600' }}>{formatMoney(item.dailyAvg)}</span></div>
                                                 </div>
                                             </div>
                                         ))}
@@ -249,28 +286,28 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                                 </div>
                             </div>
                             <div className="glass-card">
-                                <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: '#666' }}>每日支出趨勢</h4>
+                                <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>每日支出趨勢</h4>
                                 <div style={{ height: '200px' }}><Bar data={dashboardData.barChartData} options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }} /></div>
                             </div>
                         </>
                     )}
 
-                    <div className="glass-card" style={{ marginBottom: '15px', borderLeft: '5px solid #f1c40f' }}>
-                        <h3 style={{ marginTop: 0, fontSize: '1rem', color: '#b7791f', display: 'flex', alignItems: 'center' }}>
-                            🤝 代墊款結算中心 <span style={{ fontSize: '0.7rem', marginLeft: '5px', background: '#f1c40f', color: 'white', padding: '2px 5px', borderRadius: '4px' }}>All Time</span>
+                    <div className="glass-card card-animate" style={{ marginBottom: '15px', borderLeft: '4px solid var(--accent-yellow)' }}>
+                        <h3 style={{ marginTop: 0, fontSize: '0.95rem', color: 'var(--accent-orange)', fontWeight: '700', display: 'flex', alignItems: 'center' }}>
+                            🤝 代墊款結算中心 <span style={{ fontSize: '0.68rem', marginLeft: '5px', background: 'var(--accent-yellow)', color: 'white', padding: '2px 6px', borderRadius: 'var(--radius-pill)', fontWeight: '600' }}>All Time</span>
                         </h3>
                         {['userA', 'userB'].map(user => {
                             const debt = calculateDebt(user);
                             const name = user === 'userA' ? '恆恆' : '得得';
                             return (
-                                <div key={user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px dashed #eee' }}>
+                                <div key={user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(0,0,0,0.04)' }}>
                                     <div>
-                                        <div style={{ fontWeight: 'bold', color: '#555' }}>{name} 墊付未結</div>
-                                        {debt > 0 ? (<div style={{ fontSize: '0.8rem', color: '#888', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => { setSettlementTarget(user); setShowSettlementModal(true); }}>查看明細</div>) : (<div style={{ fontSize: '0.8rem', color: '#2ecc71' }}>✨ 已全數結清</div>)}
+                                        <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{name} 墊付未結</div>
+                                        {debt > 0 ? (<div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => { setSettlementTarget(user); setShowSettlementModal(true); }}>查看明細</div>) : (<div style={{ fontSize: '0.78rem', color: 'var(--accent-green)' }}>✨ 已全數結清</div>)}
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: debt > 0 ? '#e67e22' : '#ccc' }}>{formatMoney(debt)}</span>
-                                        {debt > 0 && <button className="glass-btn" style={{ padding: '5px 10px', fontSize: '0.8rem', background: '#2ecc71', color: 'white', border: 'none' }} onClick={() => handleSettle(user)}>結清</button>}
+                                        <span style={{ fontSize: '1.15rem', fontWeight: '700', color: debt > 0 ? 'var(--accent-orange)' : 'var(--text-tertiary)' }}>{formatMoney(debt)}</span>
+                                        {debt > 0 && <button className="glass-btn glass-btn-cta" style={{ padding: '5px 12px', fontSize: '0.78rem' }} onClick={() => handleSettle(user)}>結清</button>}
                                     </div>
                                 </div>
                             );
@@ -300,146 +337,160 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                     </div>
 
                     {filteredHistory.length === 0 ? (
-                        <div className="glass-card" style={{ textAlign: 'center', color: '#888' }}><p>📭 沒有符合篩選條件的紀錄</p></div>
+                        <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}><p>📭 沒有符合篩選條件的紀錄</p></div>
                     ) : (
-                        [...filteredHistory].reverse().map((record) => {
-                            let showSign = ''; let amountColor = '#1d1d1f';
-                            if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) { showSign = '+'; amountColor = '#2ecc71'; }
-                            else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy', 'personal_invest_buy'].includes(record.type)) { showSign = '-'; amountColor = '#1d1d1f'; }
-                            else if (['settle', 'transfer', 'exchange', 'calibrate'].includes(record.type)) {
-                                showSign = '🔄 ';
-                                amountColor = record.type === 'calibrate' ? '#95a5a6' : '#3498db';
-                            }
+                        <>
+                            {visibleHistory.map((record) => {
+                                let showSign = ''; let amountColor = 'var(--text-primary)';
+                                if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) { showSign = '+'; amountColor = 'var(--accent-green)'; }
+                                else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy', 'personal_invest_buy'].includes(record.type)) { showSign = '-'; amountColor = 'var(--text-primary)'; }
+                                else if (['settle', 'transfer', 'exchange', 'calibrate'].includes(record.type)) {
+                                    showSign = '🔄 ';
+                                    amountColor = record.type === 'calibrate' ? 'var(--text-tertiary)' : 'var(--accent-blue)';
+                                }
 
-                            const isDeleted = record.isDeleted;
-                            const opacity = isDeleted ? 0.6 : 1;
-                            const textDeco = isDeleted ? 'line-through' : 'none';
-                            if (isDeleted) amountColor = '#aaa';
-                            const borderColor = isDeleted ? '#ccc' : getTypeColor(record.type);
+                                const isDeleted = record.isDeleted;
+                                const opacity = isDeleted ? 0.6 : 1;
+                                const textDeco = isDeleted ? 'line-through' : 'none';
+                                if (isDeleted) amountColor = '#aaa';
+                                const borderColor = isDeleted ? '#ccc' : getTypeColor(record.type);
 
-                            return (
-                                <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `5px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
-                                    <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '8px', alignItems: 'center', zIndex: 10 }}>
-                                        {record.type === 'settle' && !isDeleted && (<div style={{ background: '#e0f7fa', color: '#00b894', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>✅ 系統結算</div>)}
-                                        {!isDeleted ? (
-                                            <>
-                                                <button onClick={() => setEditModalData({ index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(52, 152, 219, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: '#3498db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
-                                                <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？`)) onDelete(record.originalIndex); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
-                                            </>
-                                        ) : (
-                                            <div style={{ background: '#ffeaa7', color: '#d35400', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' }}>🚫 已作廢</div>
-                                        )}
-                                    </div>
-
-                                    <div style={{ paddingBottom: '5px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                                            <span style={{ fontWeight: 'bold', fontSize: '1.1rem', fontFamily: 'monospace', color: '#444', textDecoration: textDeco }}>{record.date || record.month}</span>
-                                            <span style={{ fontSize: '0.8rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>{record.category}</span>
-                                            {record.advancedBy && (
-                                                <span style={{ fontSize: '0.75rem', border: record.isSettled ? '1px solid #2ecc71' : '1px solid #f39c12', color: record.isSettled ? '#2ecc71' : '#f39c12', padding: '1px 6px', borderRadius: '10px', background: '#fff', fontWeight: 'bold' }}>
-                                                    {record.advancedBy === 'userA' ? '恆恆' : '得得'}墊付 {record.isSettled ? ' (已結)' : ' (未結)'}
-                                                </span>
+                                return (
+                                    <div key={record.originalIndex} className="glass-card" style={{ marginBottom: '15px', borderLeft: `4px solid ${borderColor}`, position: 'relative', paddingBottom: '10px', opacity: opacity }}>
+                                        <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '8px', alignItems: 'center', zIndex: 10 }}>
+                                            {record.type === 'settle' && !isDeleted && (<div style={{ background: 'rgba(52,199,89,0.08)', color: 'var(--accent-green)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', fontSize: '0.73rem', fontWeight: '600' }}>✅ 系統結算</div>)}
+                                            {!isDeleted ? (
+                                                <>
+                                                    <button onClick={() => setEditModalData({ index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(0,122,255,0.08)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
+                                                    <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？\n作廢後系統會自動將金額加回或扣除，恢復到交易前的狀態。`)) onDelete(record.originalIndex); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                                                </>
+                                            ) : (
+                                                <div style={{ background: 'rgba(255,149,0,0.1)', color: 'var(--accent-orange)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', fontSize: '0.73rem', fontWeight: '600' }}>🚫 已作廢</div>
                                             )}
                                         </div>
 
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: '70px', marginBottom: '5px' }}>
-                                            <span style={{ fontSize: '1.1rem', color: '#1d1d1f', fontWeight: '700', textDecoration: textDeco }}>{record.note === '月結記帳' ? '日記帳' : record.note}</span>
-                                            <span style={{ fontSize: '1.6rem', fontWeight: '800', color: amountColor, textDecoration: textDeco }}>{showSign}{formatMoney(record.total)}</span>
-                                        </div>
+                                        <div style={{ paddingBottom: '5px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontWeight: '700', fontSize: '1.05rem', fontFamily: 'monospace', color: 'var(--text-primary)', textDecoration: textDeco }}>{record.date || record.month}</span>
+                                                <span style={{ fontSize: '0.8rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>{record.category}</span>
+                                                {record.advancedBy && (
+                                                    <span style={{ fontSize: '0.73rem', border: record.isSettled ? '1px solid var(--accent-green)' : '1px solid var(--accent-orange)', color: record.isSettled ? 'var(--accent-green)' : 'var(--accent-orange)', padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                                                        {record.advancedBy === 'userA' ? '恆恆' : '得得'}墊付 {record.isSettled ? ' (已結)' : ' (未結)'}
+                                                    </span>
+                                                )}
+                                            </div>
 
-                                        <div style={{ fontSize: '0.85rem', color: '#888', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px' }}>
-                                            {record.payer === '共同帳戶' ? <span style={{ background: '#eee', padding: '2px 6px', borderRadius: '4px', textDecoration: textDeco }}>🏫 共同帳戶</span> : <span style={{ background: '#e8f0fe', color: '#1967d2', padding: '2px 6px', borderRadius: '4px', textDecoration: textDeco }}>👤 {record.payer}</span>}
-                                        </div>
-
-                                        {isDeleted && (<div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#e74c3c', background: 'rgba(231, 76, 60, 0.1)', padding: '8px', borderRadius: '8px', border: '1px dashed #e74c3c' }}><strong>作廢原因：</strong> {record.deleteReason}</div>)}
-
-                                        {record.auditTrail && !isDeleted && (
-                                            <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#666', background: 'rgba(0,0,0,0.03)', padding: '10px', borderRadius: '8px', borderTop: '1px dashed #ddd' }}>
-                                                <div style={{ marginBottom: '6px', fontWeight: 'bold', color: '#555' }}>🔍 交易前後餘額對比：</div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                    {record.auditTrail.after.jointCash !== record.auditTrail.before.jointCash && (() => {
-                                                        const diff = (record.auditTrail.after.jointCash || 0) - (record.auditTrail.before.jointCash || 0);
-                                                        return <div>🏫 共同現金: <span style={{ textDecoration: 'line-through', color: '#aaa' }}>{formatMoney(record.auditTrail.before.jointCash || 0)}</span> ➔ <span style={{ fontWeight: 'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>{formatMoney(record.auditTrail.after.jointCash || 0)}</span> <span style={{ fontSize: '0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
-                                                    })()}
-
-                                                    {record.auditTrail.after.userA !== record.auditTrail.before.userA && (() => {
-                                                        const diff = (record.auditTrail.after.userA || 0) - (record.auditTrail.before.userA || 0);
-                                                        return <div>🐶 恆恆台幣: <span style={{ textDecoration: 'line-through', color: '#aaa' }}>{formatMoney(record.auditTrail.before.userA || 0)}</span> ➔ <span style={{ fontWeight: 'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>{formatMoney(record.auditTrail.after.userA || 0)}</span> <span style={{ fontSize: '0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
-                                                    })()}
-
-                                                    {(record.auditTrail.after.userA_usd || 0) !== (record.auditTrail.before.userA_usd || 0) && (() => {
-                                                        const diff = (record.auditTrail.after.userA_usd || 0) - (record.auditTrail.before.userA_usd || 0);
-                                                        return <div>🐶 恆恆美金: <span style={{ textDecoration: 'line-through', color: '#aaa' }}>${(record.auditTrail.before.userA_usd || 0).toFixed(2)}</span> ➔ <span style={{ fontWeight: 'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>${(record.auditTrail.after.userA_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
-                                                    })()}
-
-                                                    {record.auditTrail.after.userB !== record.auditTrail.before.userB && (() => {
-                                                        const diff = (record.auditTrail.after.userB || 0) - (record.auditTrail.before.userB || 0);
-                                                        return <div>🐕 得得台幣: <span style={{ textDecoration: 'line-through', color: '#aaa' }}>{formatMoney(record.auditTrail.before.userB || 0)}</span> ➔ <span style={{ fontWeight: 'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>{formatMoney(record.auditTrail.after.userB || 0)}</span> <span style={{ fontSize: '0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
-                                                    })()}
-
-                                                    {(record.auditTrail.after.userB_usd || 0) !== (record.auditTrail.before.userB_usd || 0) && (() => {
-                                                        const diff = (record.auditTrail.after.userB_usd || 0) - (record.auditTrail.before.userB_usd || 0);
-                                                        return <div>🐕 得得美金: <span style={{ textDecoration: 'line-through', color: '#aaa' }}>${(record.auditTrail.before.userB_usd || 0).toFixed(2)}</span> ➔ <span style={{ fontWeight: 'bold', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>${(record.auditTrail.after.userB_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.75rem', color: diff > 0 ? '#2ecc71' : '#e74c3c' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
-                                                    })()}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: '70px', marginBottom: '5px' }}>
+                                                <span style={{ fontSize: '1.05rem', color: 'var(--text-primary)', fontWeight: '700', textDecoration: textDeco }}>{record.note === '月結記帳' ? '日記帳' : record.note}</span>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <span style={{ fontSize: '1.6rem', fontWeight: '800', color: amountColor, textDecoration: textDeco }}>{showSign}{formatMoney(record.total)}</span>
+                                                    {record.usdAmount && (
+                                                        <div style={{ fontSize: '0.82rem', color: isDeleted ? 'var(--text-tertiary)' : 'var(--accent-orange)', fontWeight: '600', textDecoration: textDeco }}>
+                                                            (含美金 ${record.usdAmount.toFixed(2)} USD)
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
-                                        )}
+
+                                            <div style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px' }}>
+                                                {record.payer === '共同帳戶' ? <span style={{ background: 'rgba(120,120,128,0.06)', padding: '2px 6px', borderRadius: 'var(--radius-xs)', textDecoration: textDeco }}>🏫 共同帳戶</span> : <span style={{ background: 'rgba(0,122,255,0.06)', color: 'var(--accent-blue)', padding: '2px 6px', borderRadius: 'var(--radius-xs)', textDecoration: textDeco }}>👤 {record.payer}</span>}
+                                            </div>
+
+                                            {isDeleted && (<div style={{ marginTop: '10px', fontSize: '0.82rem', color: 'var(--accent-red)', background: 'rgba(255,59,48,0.06)', padding: '8px', borderRadius: 'var(--radius-xs)', border: '1px dashed var(--accent-red)' }}><strong>作廢原因：</strong> {record.deleteReason}</div>)}
+
+                                            {record.auditTrail && !isDeleted && (
+                                                <div style={{ marginTop: '10px', fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'rgba(120,120,128,0.04)', padding: '10px', borderRadius: 'var(--radius-xs)', borderTop: '0.5px solid rgba(0,0,0,0.04)' }}>
+                                                    <div style={{ marginBottom: '6px', fontWeight: '600', color: 'var(--text-primary)' }}>🔍 交易前後餘額對比：</div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        {record.auditTrail.after.jointCash !== record.auditTrail.before.jointCash && (() => {
+                                                            const diff = (record.auditTrail.after.jointCash || 0) - (record.auditTrail.before.jointCash || 0);
+                                                            return <div>🏫 共同現金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.jointCash || 0)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{formatMoney(record.auditTrail.after.jointCash || 0)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                                        })()}
+
+                                                        {record.auditTrail.after.userA !== record.auditTrail.before.userA && (() => {
+                                                            const diff = (record.auditTrail.after.userA || 0) - (record.auditTrail.before.userA || 0);
+                                                            return <div>🐶 恆恆台幣: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userA || 0)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{formatMoney(record.auditTrail.after.userA || 0)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                                        })()}
+
+                                                        {(record.auditTrail.after.userA_usd || 0) !== (record.auditTrail.before.userA_usd || 0) && (() => {
+                                                            const diff = (record.auditTrail.after.userA_usd || 0) - (record.auditTrail.before.userA_usd || 0);
+                                                            return <div>🐶 恆恆美金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>${(record.auditTrail.before.userA_usd || 0).toFixed(2)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>${(record.auditTrail.after.userA_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
+                                                        })()}
+
+                                                        {record.auditTrail.after.userB !== record.auditTrail.before.userB && (() => {
+                                                            const diff = (record.auditTrail.after.userB || 0) - (record.auditTrail.before.userB || 0);
+                                                            return <div>🐕 得得台幣: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userB || 0)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{formatMoney(record.auditTrail.after.userB || 0)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                                        })()}
+
+                                                        {(record.auditTrail.after.userB_usd || 0) !== (record.auditTrail.before.userB_usd || 0) && (() => {
+                                                            const diff = (record.auditTrail.after.userB_usd || 0) - (record.auditTrail.before.userB_usd || 0);
+                                                            return <div>🐕 得得美金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>${(record.auditTrail.before.userB_usd || 0).toFixed(2)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>${(record.auditTrail.after.userB_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
+                                );
+                            })}
+                            {renderCount < sortedHistory.length && (
+                                <div ref={loadMoreRef} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: '0.84rem' }}>
+                                    ⬇️ 捲動載入更多 ({renderCount}/{sortedHistory.length})
                                 </div>
-                            );
-                        })
+                            )}
+                        </>
                     )}
                 </>
             )}
 
-            {/* 🌟 核心修復 2：快速編輯彈窗，使用 createPortal 完全獨立渲染到最上層 */}
-            {editModalData && createPortal(
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }} onClick={() => setEditModalData(null)}>
-                    <div style={{ width: '100%', maxWidth: '400px', background: '#ffffff', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ marginTop: 0, color: '#3498db', fontWeight: '700' }}>✏️ 快速修改紀錄</h3>
-                        <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '15px', lineHeight: '1.4' }}>為維護財務報表正確性，金額與帳戶不開放直接修改。如需修改金額，請作廢該筆紀錄後重新記帳。</p>
+            {editModalData && (
+                <div className="modal-backdrop" onClick={() => setEditModalData(null)}>
+                    <div className="modal-content" style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 'var(--radius-xl)', border: '1px solid rgba(255,255,255,0.6)', boxShadow: '0 25px 50px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                        <h3 style={{ marginTop: 0, color: 'var(--accent-blue)', fontWeight: '700' }}>✏️ 修改文字紀錄</h3>
 
-                        <div style={{ marginBottom: '12px' }}>
-                            <label style={{ fontSize: '0.85rem', color: '#333', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>日期</label>
-                            <input type="date" value={editModalData.date} onChange={e => setEditModalData({ ...editModalData, date: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', background: '#f9f9f9', color: '#222', fontSize: '1rem' }} />
+                        <div style={{ background: 'rgba(255,59,48,0.06)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255,59,48,0.15)', marginBottom: '16px' }}>
+                            <p style={{ fontSize: '0.84rem', color: 'var(--accent-red)', margin: 0, fontWeight: '600' }}>⚠️ 會計安全鎖定</p>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '5px 0 0 0' }}>為避免產生幽靈帳，系統禁止直接修改「金額」與「帳戶」。<br />若金額輸入錯誤，請取消修改，並將原紀錄「作廢🗑️」後重新記帳。</p>
                         </div>
 
-                        <div style={{ marginBottom: '12px' }}>
-                            <label style={{ fontSize: '0.85rem', color: '#333', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>分類</label>
-                            <input type="text" value={editModalData.category} onChange={e => setEditModalData({ ...editModalData, category: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', background: '#f9f9f9', color: '#222', fontSize: '1rem' }} />
+                        <div style={{ marginBottom: '10px' }}>
+                            <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>日期</label>
+                            <input type="date" className="glass-input" value={editModalData.date} onChange={e => setEditModalData({ ...editModalData, date: e.target.value })} style={{ width: '100%', boxSizing: 'border-box' }} />
                         </div>
 
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ fontSize: '0.85rem', color: '#333', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>備註</label>
-                            <input type="text" value={editModalData.note} onChange={e => setEditModalData({ ...editModalData, note: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', background: '#f9f9f9', color: '#222', fontSize: '1rem' }} />
+                        <div style={{ marginBottom: '10px' }}>
+                            <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>分類</label>
+                            <input type="text" className="glass-input" value={editModalData.category} onChange={e => setEditModalData({ ...editModalData, category: e.target.value })} style={{ width: '100%', boxSizing: 'border-box' }} />
+                        </div>
+
+                        <div style={{ marginBottom: '18px' }}>
+                            <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>備註</label>
+                            <input type="text" className="glass-input" value={editModalData.note} onChange={e => setEditModalData({ ...editModalData, note: e.target.value })} style={{ width: '100%', boxSizing: 'border-box' }} />
                         </div>
 
                         <div style={{ display: 'flex', gap: '10px' }}>
-                            <button style={{ flex: 1, padding: '10px', background: '#e0e0e0', color: '#333', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }} onClick={() => setEditModalData(null)}>取消</button>
-                            <button style={{ flex: 1, padding: '10px', background: '#3498db', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }} onClick={() => { onEdit(editModalData.index, editModalData); setEditModalData(null); }}>儲存修改</button>
+                            <button className="glass-btn" style={{ flex: 1 }} onClick={() => setEditModalData(null)}>取消</button>
+                            <button className="glass-btn glass-btn-cta" style={{ flex: 1 }} onClick={() => { onEdit(editModalData.index, editModalData); setEditModalData(null); }}>儲存修改</button>
                         </div>
                     </div>
-                </div>,
-                document.body
+                </div>
             )}
 
-            {/* 🌟 核心修復 3：結清明細彈窗一併使用 createPortal 升級，防止被擋住 */}
-            {showSettlementModal && settlementTarget && createPortal(
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }} onClick={() => setShowSettlementModal(false)}>
-                    <div style={{ width: '100%', maxWidth: '400px', maxHeight: '80vh', overflowY: 'auto', background: '#ffffff', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ marginTop: 0, borderBottom: '1px solid #eee', paddingBottom: '10px', fontWeight: '700', color: '#333' }}>{settlementTarget === 'userA' ? '恆恆' : '得得'} 的代墊明細</h3>
+            {showSettlementModal && settlementTarget && (
+                <div className="modal-backdrop" onClick={() => setShowSettlementModal(false)}>
+                    <div className="modal-content glass-card" style={{ maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+                        <h3 style={{ marginTop: 0, borderBottom: '0.5px solid rgba(0,0,0,0.06)', paddingBottom: '10px', fontWeight: '700' }}>{settlementTarget === 'userA' ? '恆恆' : '得得'} 的代墊明細</h3>
                         <div style={{ marginBottom: '20px' }}>
                             {getDebtList(settlementTarget).map((r, idx) => (
-                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px dashed #eee', fontSize: '0.9rem' }}>
-                                    <div><span style={{ color: '#888', marginRight: '10px' }}>{r.date}</span><span style={{ color: '#333' }}>{r.note}</span></div>
-                                    <div style={{ fontWeight: 'bold', color: '#e67e22' }}>{formatMoney(r.total)}</div>
+                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '0.5px solid rgba(0,0,0,0.04)', fontSize: '0.9rem' }}>
+                                    <div><span style={{ color: 'var(--text-tertiary)', marginRight: '10px' }}>{r.date}</span><span>{r.note}</span></div>
+                                    <div style={{ fontWeight: '600' }}>{formatMoney(r.total)}</div>
                                 </div>
                             ))}
                         </div>
-                        <button style={{ width: '100%', padding: '10px', background: '#666', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }} onClick={() => setShowSettlementModal(false)}>關閉</button>
+                        <button className="glass-btn" style={{ width: '100%' }} onClick={() => setShowSettlementModal(false)}>關閉</button>
                     </div>
-                </div>,
-                document.body
+                </div>
             )}
         </div>
     );
