@@ -1,5 +1,6 @@
 // src/components/MonthlyView.jsx
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
 
@@ -443,9 +444,9 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                 </>
             )}
 
-            {editModalData && (
+            {editModalData && createPortal(
                 <div className="modal-backdrop" onClick={() => setEditModalData(null)}>
-                    <div className="modal-content" style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 'var(--radius-xl)', border: '1px solid rgba(255,255,255,0.6)', boxShadow: '0 25px 50px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                    <div className="modal-content glass-card" onClick={e => e.stopPropagation()}>
                         <h3 style={{ marginTop: 0, color: 'var(--accent-blue)', fontWeight: '700' }}>✏️ 修改文字紀錄</h3>
 
                         <div style={{ background: 'rgba(255,59,48,0.06)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255,59,48,0.15)', marginBottom: '16px' }}>
@@ -473,12 +474,13 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                             <button className="glass-btn glass-btn-cta" style={{ flex: 1 }} onClick={() => { onEdit(editModalData.index, editModalData); setEditModalData(null); }}>儲存修改</button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
-            {showSettlementModal && settlementTarget && (
+            {showSettlementModal && settlementTarget && createPortal(
                 <div className="modal-backdrop" onClick={() => setShowSettlementModal(false)}>
-                    <div className="modal-content" style={{ maxHeight: '80vh', overflowY: 'auto', background: 'rgba(255,255,255,0.95)', borderRadius: 'var(--radius-xl)', border: '1px solid rgba(255,255,255,0.6)', boxShadow: '0 25px 50px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                    <div className="modal-content glass-card" style={{ maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
                         <h3 style={{ marginTop: 0, borderBottom: '0.5px solid rgba(0,0,0,0.06)', paddingBottom: '10px', fontWeight: '700' }}>{settlementTarget === 'userA' ? '恆恆' : '得得'} 的代墊明細</h3>
                         <div style={{ marginBottom: '20px' }}>
                             {getDebtList(settlementTarget).map((r, idx) => (
@@ -490,7 +492,8 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                         </div>
                         <button className="glass-btn" style={{ width: '100%' }} onClick={() => setShowSettlementModal(false)}>關閉</button>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
