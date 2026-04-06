@@ -567,7 +567,7 @@ function App() {
     
     return (
       <div className="modal-backdrop" onClick={() => setShowLineSettings(false)}>
-         <div className="modal-content glass-card" style={{ padding:'28px', position:'relative' }} onClick={e => e.stopPropagation()}>
+         <div className="modal-content" style={{ padding:'28px', position:'relative', background:'rgba(255,255,255,0.95)', borderRadius:'var(--radius-xl)', border:'1px solid rgba(255,255,255,0.6)', boxShadow:'0 25px 50px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)' }} onClick={e => e.stopPropagation()}>
             <button onClick={()=>setShowLineSettings(false)} style={{position:'absolute', right:'16px', top:'12px', background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'var(--text-tertiary)', fontWeight:'300'}}>&times;</button>
             <h3 style={{marginTop:0, marginBottom:'20px', fontWeight:'700', letterSpacing:'-0.01em'}}>💬 系統通知管理</h3>
             
