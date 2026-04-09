@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import Login from './components/Login';
 import TotalOverview from './components/TotalOverview';
 import MonthlyView from './components/MonthlyView';
@@ -15,6 +15,53 @@ import { MAKE_WEBHOOK_URL } from './config';
 const USER_MAPPING = {
   "hzh940317@gmail.com": "恆恆🐶",
   "ender.tsai@gmail.com": "得得🐕"
+};
+
+// ★ Module‑level — stable reference so React doesn't remount
+const NAV_ITEMS = [
+  { id: 'overview', icon: '🏠', label: '總覽' },
+  { id: 'monthly', icon: '📊', label: '紀錄' },
+  { id: 'invest',  icon: '📈', label: '投資' },
+  { id: 'transfer', icon: '🛠️', label: '操作' },
+  { id: 'expense', icon: '✍️', label: '記帳' }
+];
+
+// ★ Liquid‑glass bottom nav with sliding pill
+const BottomNav = ({ currentPage, onPageChange }) => {
+  const navRef = useRef(null);
+  const [pillStyle, setPillStyle] = useState({ opacity: 0 });
+
+  useLayoutEffect(() => {
+    if (!navRef.current) return;
+    const idx = NAV_ITEMS.findIndex(item => item.id === currentPage);
+    if (idx < 0) return;
+    // children[0] = pill div, children[1+] = nav‑items
+    const child = navRef.current.children[idx + 1];
+    if (!child) return;
+    setPillStyle({
+      width: child.offsetWidth,
+      height: child.offsetHeight,
+      transform: `translateX(${child.offsetLeft}px)`,
+      opacity: 1,
+    });
+  }, [currentPage]);
+
+  return (
+    <div className="bottom-nav" ref={navRef}>
+      {/* Liquid glass sliding pill */}
+      <div className="nav-pill" style={pillStyle} />
+      {NAV_ITEMS.map(item => (
+        <div
+          key={item.id}
+          className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+          onClick={() => onPageChange(item.id)}
+        >
+          <div className="nav-icon">{item.icon}</div>
+          <div className="nav-label">{item.label}</div>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 // MAKE_WEBHOOK_URL moved to config.js
@@ -605,28 +652,7 @@ function App() {
     );
   };
 
-  const navItems = [
-    { id: 'overview', icon: '🏠', label: '總覽' },
-    { id: 'monthly', icon: '📊', label: '紀錄' },
-    { id: 'invest', icon: '📈', label: '投資' },
-    { id: 'transfer', icon: '🛠️', label: '操作' },
-    { id: 'expense', icon: '✍️', label: '記帳' }
-  ];
-
-  const BottomNav = () => (
-    <div className="bottom-nav">
-      {navItems.map(item => (
-        <div
-          key={item.id}
-          className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-          onClick={() => setCurrentPage(item.id)}
-        >
-          <div className="nav-icon">{item.icon}</div>
-          <div className="nav-label">{item.label}</div>
-        </div>
-      ))}
-    </div>
-  );
+  /* navItems & BottomNav moved to module level for stable pill animation */
 
   return (
     <div style={{ paddingBottom: '110px' }}>
@@ -652,7 +678,7 @@ function App() {
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
       </div>
       <LineSettingsModal />
-      <BottomNav />
+      <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} />
     </div>
   );
 }

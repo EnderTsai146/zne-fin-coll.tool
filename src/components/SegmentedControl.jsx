@@ -33,7 +33,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
       ref={containerRef}
       style={{
         display: 'flex',
-        background: 'rgba(120, 120, 128, 0.08)',
+        background: 'rgba(255, 255, 255, 0.06)',
         borderRadius: '14px',
         padding: '3px',
         gap: '3px',
@@ -49,11 +49,11 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
           top: 3,
           left: 0,
           borderRadius: '11px',
-          background: 'rgba(255, 255, 255, 0.80)',
+          background: 'rgba(255, 255, 255, 0.14)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
           boxShadow:
-            '0 1px 4px rgba(0,0,0,0.10), 0 0.5px 1px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.7)',
+            '0 1px 4px rgba(0,0,0,0.18), 0 0.5px 1px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.12)',
           zIndex: 0,
           pointerEvents: 'none',
           transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)',
