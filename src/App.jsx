@@ -25,6 +25,11 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('overview');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
+
+  // ★ Sync body data-page attribute for per-page background gradients
+  useEffect(() => {
+    document.body.setAttribute('data-page', currentPage);
+  }, [currentPage]);
   
   const [showLineSettings, setShowLineSettings] = useState(false);
   const [tempLineCount, setTempLineCount] = useState('');

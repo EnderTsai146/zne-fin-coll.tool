@@ -197,21 +197,58 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     if (investType === 'stock' && stockMarket === 'US' && !settleCurrency) return alert("請選擇交割帳戶！");
     if (investAction === 'day_trade' && !dayTradeResult) return alert("請選擇當沖結果！");
 
-    const val = parseInt(investAmount);
-    if (investAction !== 'day_trade' && (!val || val <= 0)) return alert("請確認收支總額！");
-    if (investAction === 'day_trade' && (!val || val <= 0)) return alert("請輸入當沖淨差額！");
-    
-    if (investType === 'stock' && stockMarket === 'US' && investAction === 'sell') {
+    // ★ Context-aware validation: only require fields relevant to the current path
+    const isUsStock = investType === 'stock' && stockMarket === 'US';
+    const isUsdSettle = isUsStock && settleCurrency === 'USD';
+    const isTwdSettle = isUsStock && settleCurrency === 'TWD';
+
+    if (isUsStock) {
+      // US stock always needs USD total
+      const usdVal = parseFloat(usTotalUsd);
+      if (!usdVal || usdVal <= 0) return alert("請確認美金總額 (USD)！");
+
+      if (isUsdSettle && investAction === 'buy') {
+        // USD settlement buy: only needs usTotalUsd — no investAmount, no FX rate needed
+        // Auto-compute investAmount (台幣本金) for bookkeeping using current FX rate
+        const autoTwd = Math.round(usdVal * Number(usFxRate || currentFxRate || 31.5));
+        if (!investAmount || parseInt(investAmount) <= 0) {
+          setInvestAmount(autoTwd.toString());
+        }
+      } else if (isTwdSettle && investAction === 'buy') {
+        // TWD settlement buy: needs investAmount (台幣交割額) + usFxRate
+        const val = parseInt(investAmount);
+        if (!val || val <= 0) return alert("請確認台幣交割總額！");
+      } else if (investAction === 'sell') {
+        // US stock sell: needs usInvestPrincipalUsd + investPrincipal
         if (!usInvestPrincipalUsd) return alert("請輸入美金成本！");
         if (!investPrincipal) return alert("請輸入扣除台幣本金！");
-    }
-    if (investType === 'stock' && stockMarket === 'TW' && investAction === 'sell') {
+        if (isTwdSettle) {
+          const val = parseInt(investAmount);
+          if (!val || val <= 0) return alert("請確認台幣收回總額！");
+        }
+      }
+    } else if (investAction === 'day_trade') {
+      const val = parseInt(investAmount);
+      if (!val || val <= 0) return alert("請輸入當沖淨差額！");
+    } else {
+      // TW stock or non-stock (fund/deposit/other)
+      const val = parseInt(investAmount);
+      if (!val || val <= 0) return alert("請確認收支總額！");
+      // TW stock sell needs principal
+      if (investType === 'stock' && stockMarket === 'TW' && investAction === 'sell') {
         if (!investPrincipal) return alert("請輸入扣除台幣本金！");
+      }
     }
     
     let finalSymbol = stockSymbol ? stockSymbol.toUpperCase().trim() : '';
     if (investType === 'stock' && stockMarket === 'TW' && finalSymbol && !finalSymbol.includes('.')) {
       finalSymbol += '.TW';
+    }
+
+    // For USD settle buy, ensure investAmount is computed before saving
+    let finalInvestAmount = investAmount;
+    if (isUsdSettle && investAction === 'buy' && (!finalInvestAmount || parseInt(finalInvestAmount) <= 0)) {
+      finalInvestAmount = Math.round(parseFloat(usTotalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
     }
 
     setInvestCart([...investCart, {
@@ -225,8 +262,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
         stockShares,
         stockPrice,
         usTotalUsd,
-        usFxRate,
-        investAmount,
+        usFxRate: usFxRate || (currentFxRate || 31.5).toString(),
+        investAmount: finalInvestAmount,
         investPrincipal,
         usInvestPrincipalUsd,
         dayTradeResult
@@ -238,7 +275,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
   const handleInvestSubmit = () => {
     const items = [...investCart];
-    if (investAmount && parseInt(investAmount) > 0) {
+    // Check if there's unsaved data in the form (either investAmount or usTotalUsd has value)
+    if ((investAmount && parseInt(investAmount) > 0) || (usTotalUsd && parseFloat(usTotalUsd) > 0)) {
       return alert("請先點擊「➕ 暫存此筆」，將資料加入清單後再送出喔！");
     }
     if (items.length === 0) return alert("暫存清單沒有任何項目！");
@@ -469,13 +507,16 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
                       if (settleCurrency === 'TWD') setInvestAmount(Math.round(Number(e.target.value) * Number(usFxRate)).toString());
                     }} placeholder="依元大輸入" />
                   </div>
-                  <div style={{ flex: 1, minWidth: '80px' }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>成交匯率</label>
-                    <input type="number" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usFxRate} onChange={e => {
-                      setUsFxRate(e.target.value);
-                      if (settleCurrency === 'TWD') setInvestAmount(Math.round(Number(usTotalUsd) * Number(e.target.value)).toString());
-                    }} placeholder="31.5" />
-                  </div>
+                  {/* ★ Only show exchange rate when TWD settlement is selected (USD settlement doesn't need it) */}
+                  {settleCurrency === 'TWD' && (
+                    <div style={{ flex: 1, minWidth: '80px' }}>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>成交匯率</label>
+                      <input type="number" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usFxRate} onChange={e => {
+                        setUsFxRate(e.target.value);
+                        setInvestAmount(Math.round(Number(usTotalUsd) * Number(e.target.value)).toString());
+                      }} placeholder="31.5" />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -495,7 +536,8 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
             </div>
           )}
 
-          {(!stockMarket || stockMarket === 'TW' || (stockMarket === 'US' && settleCurrency === 'TWD')) && (
+          {/* ★ Show TWD amount field: always for non-US, for US only when TWD settlement, or for day_trade */}
+          {(investType !== 'stock' || !stockMarket || stockMarket === 'TW' || (stockMarket === 'US' && settleCurrency === 'TWD') || investAction === 'day_trade') && (
             <div style={{ marginBottom: '15px' }}>
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <span>{investAction === 'buy' ? '最終交割總額 (台幣)' : investAction === 'sell' ? '最終拿回現金 (台幣)' : '結算淨差額 (台幣)'}</span>
