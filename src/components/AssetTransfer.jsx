@@ -219,10 +219,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
         const val = parseInt(investAmount);
         if (!val || val <= 0) return alert("請確認台幣交割總額！");
       } else if (investAction === 'sell') {
-        // US stock sell: needs usInvestPrincipalUsd + investPrincipal
+        // US stock sell: needs usInvestPrincipalUsd. investPrincipal is only required for TWD settle
         if (!usInvestPrincipalUsd) return alert("請輸入美金成本！");
-        if (!investPrincipal) return alert("請輸入扣除台幣本金！");
         if (isTwdSettle) {
+          if (!investPrincipal) return alert("請輸入扣除台幣本金！");
           const val = parseInt(investAmount);
           if (!val || val <= 0) return alert("請確認台幣收回總額！");
         }
@@ -245,10 +245,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       finalSymbol += '.TW';
     }
 
-    // For USD settle buy, ensure investAmount is computed before saving
     let finalInvestAmount = investAmount;
     if (isUsdSettle && investAction === 'buy' && (!finalInvestAmount || parseInt(finalInvestAmount) <= 0)) {
       finalInvestAmount = Math.round(parseFloat(usTotalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
+    }
+    
+    let finalInvestPrincipal = investPrincipal;
+    if (isUsdSettle && investAction === 'sell' && (!finalInvestPrincipal || parseInt(finalInvestPrincipal) <= 0)) {
+      finalInvestPrincipal = Math.round(parseFloat(usInvestPrincipalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
     }
 
     setInvestCart([...investCart, {
@@ -264,7 +268,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
         usTotalUsd,
         usFxRate: usFxRate || (currentFxRate || 31.5).toString(),
         investAmount: finalInvestAmount,
-        investPrincipal,
+        investPrincipal: finalInvestPrincipal,
         usInvestPrincipalUsd,
         dayTradeResult
     }]);
@@ -560,10 +564,16 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
                 <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>元大顯示的「美金持有成本」<span style={{ color: 'var(--accent-red)' }}>(必填計算獲利)</span></label>
                 <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(e.target.value)} placeholder="例: 800" />
               </div>
-              <div style={{ marginTop: '8px' }}>
-                <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>這批股票當初投入的「大約台幣本金」<br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
-                <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="例: 25200" />
-              </div>
+              {settleCurrency !== 'USD' ? (
+                <div style={{ marginTop: '8px' }}>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>這批股票當初投入的「大約台幣本金」<br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
+                  <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="例: 25200" />
+                </div>
+              ) : (
+                <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.4)', padding: '6px', borderRadius: '4px' }}>
+                  💡 美金交割模式下，系統會直接依當前匯率自動換算並扣除台幣帳面本金，無需手動輸入。
+                </div>
+              )}
             </div>
           )}
 
