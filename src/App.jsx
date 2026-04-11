@@ -80,7 +80,6 @@ function App() {
   
   const [showLineSettings, setShowLineSettings] = useState(false);
   const [tempLineCount, setTempLineCount] = useState('');
-  const batchSendingRef = useRef(false);
 
   const [assets, setAssets] = useState({
     userA: 0,
@@ -178,38 +177,7 @@ function App() {
     setDoc(docRef, newAssets).catch((err) => alert("連線錯誤：" + err.message));
   };
 
-  // Fix #1: 批次通知 — 用 useRef 鎖 + batchSentDate 防止無限迴圈與雙人重複觸發
-  useEffect(() => {
-    if (!assets || !assets.lineConfig || !assets.lineConfig.batchMode) return;
-    if (batchSendingRef.current) return; // 正在發送中，跳過
-    const now = new Date();
-    const hr = now.getHours();
-    const todayStr = now.toISOString().split('T')[0];
-    // 只在 22:00 之後觸發，且今日尚未發送過
-    if (hr >= 22 && assets.pendingLineNotifications && assets.pendingLineNotifications.length > 0 && assets.lineConfig.batchSentDate !== todayStr) {
-       batchSendingRef.current = true;
-       const summaryList = assets.pendingLineNotifications.map((n, i) => `${i+1}. ${n.title}: ${n.note} (${n.amount})`).join('\n').slice(0, 800);
-       const batchPayload = {
-          title: "晚間批次變動彙整",
-          amount: `共 ${assets.pendingLineNotifications.length} 筆`,
-          category: "系統彙整",
-          note: summaryList,
-          date: todayStr,
-          color: "#9b59b6",
-          operator: "管家自動推播",
-          isSummary: true
-       };
-       sendLineNotification(batchPayload);
-       const finalAssets = getUpdatedAssetsWithLineCount({
-         ...assets,
-         pendingLineNotifications: [],
-         lineConfig: { ...assets.lineConfig, batchSentDate: todayStr }
-       }, 1);
-       saveToCloud(finalAssets);
-       // 延遲解鎖，避免 onSnapshot 的回寫觸發第二輪
-       setTimeout(() => { batchSendingRef.current = false; }, 3000);
-    }
-  }, [assets]);
+  // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
 
   const sendLineNotification = async (data) => {
     try {
@@ -617,6 +585,46 @@ function App() {
     if (!showLineSettings) return null;
     const isBatch = assets.lineConfig?.batchMode || false;
     
+    const handleToggleBatchMode = () => {
+      if (isBatch) {
+        // 從開啟狀態（收集模式）切換為關閉：立刻發出所有累積的通知並清空原本等候名單
+        let willSend = false;
+        
+        if (assets.pendingLineNotifications && assets.pendingLineNotifications.length > 0) {
+          const summaryList = assets.pendingLineNotifications.map((n, i) => `${i+1}. ${n.title}: ${n.note} (${n.amount})`).join('\\n').slice(0, 800);
+          const batchPayload = {
+            title: "手動批次變動彙整",
+            amount: `共 ${assets.pendingLineNotifications.length} 筆`,
+            category: "系統彙整",
+            note: summaryList,
+            date: new Date().toISOString().split('T')[0],
+            color: "#9b59b6",
+            operator: "累積總結推播",
+            isSummary: true
+          };
+          sendLineNotification(batchPayload);
+          willSend = true;
+          alert(`📤 已為您合併發出共 ${assets.pendingLineNotifications.length} 筆通知！`);
+        } else {
+           alert(`沒有累積等待中的通知。已關閉暫存模式。`);
+        }
+        
+        const finalAssets = getUpdatedAssetsWithLineCount({
+           ...assets,
+           pendingLineNotifications: [],
+           lineConfig: { ...assets.lineConfig, batchMode: false }
+        }, willSend ? 1 : 0);
+        
+        saveToCloud(finalAssets);
+      } else {
+        // 從關閉切換為開啟：狀態變為暫停推播並累積新帳單
+        saveToCloud({
+           ...assets,
+           lineConfig: { ...assets.lineConfig, batchMode: true }
+        });
+      }
+    };
+    
     return (
       <div className="modal-backdrop" onClick={() => setShowLineSettings(false)}>
          <div className="modal-content glass-card" style={{ padding:'28px', position:'relative' }} onClick={e => e.stopPropagation()}>
@@ -630,15 +638,17 @@ function App() {
 
             <div style={{marginBottom:'22px', padding:'16px', background:'rgba(120,120,128,0.06)', borderRadius:'var(--radius-md)', border: isBatch ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition:'all 0.3s ease'}}>
               <label style={{display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer'}}>
-                <span style={{fontWeight:'600', fontSize:'0.92rem', color: isBatch ? 'var(--accent-blue)' : 'var(--text-primary)'}}>🌙 晚間10點批次發送</span>
-                <input type="checkbox" checked={isBatch} onChange={() => saveToCloud({ ...assets, lineConfig: { ...assets.lineConfig, batchMode: !isBatch } })} style={{transform:'scale(1.3)', accentColor:'var(--accent-blue)'}} />
+                <span style={{fontWeight:'600', fontSize:'0.92rem', color: isBatch ? 'var(--accent-blue)' : 'var(--text-primary)'}}>
+                  {isBatch ? '📦 已暫停 Line 推播並開始收集' : '📦 暫停推播並開始收集新通知'}
+                </span>
+                <input type="checkbox" checked={isBatch} onChange={handleToggleBatchMode} style={{transform:'scale(1.3)', accentColor:'var(--accent-blue)'}} />
               </label>
               <p style={{fontSize:'0.73rem', color:'var(--text-tertiary)', marginTop:'10px', lineHeight:'1.6'}}>
-                開啟此模式後，每日之所有操作將不會立刻推播，而是暫存在雲端。待晚上 10 點過後系統會將累積的變動合併為單一提要發送。
+                開啟此開關以暫停每筆獨立提醒，所有的操作將存入雲端等候名單。當你將此開關「關閉」時，會一次性合開發送所有等候中的變動。
               </p>
               {isBatch && (
                 <div style={{fontSize:'0.82rem', color:'var(--accent-orange)', marginTop:'10px', fontWeight:'600', animation:'slideUpFade 0.3s ease-out'}}>
-                   🛒 雲端目前累積未發：{assets.pendingLineNotifications?.length || 0} 筆
+                   🛒 等待發送的通知數量：{assets.pendingLineNotifications?.length || 0} 筆
                 </div>
               )}
             </div>
@@ -646,7 +656,7 @@ function App() {
             <button className="glass-btn glass-btn-cta" style={{width:'100%', fontWeight:'700'}} onClick={() => {
                saveToCloud({ ...assets, lineNotifCount: { month: new Date().toISOString().slice(0, 7), count: Number(tempLineCount) || 0 } });
                setShowLineSettings(false);
-            }}>確認儲存</button>
+            }}>確認儲存設定</button>
          </div>
       </div>
     );
