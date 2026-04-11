@@ -274,7 +274,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     }]);
 
     setInvestAmount(''); setInvestPrincipal(''); setStockPrice(''); setStockShares(''); setStockSymbol(''); setUsTotalUsd(''); setUsInvestPrincipalUsd('');
-    setInvestType(null); setStockMarket(null); setSettleCurrency(null); setInvestAction(null); setInvestAccount(null); setDayTradeResult(null);
+    // 依要求：保留 investType, stockMarket, settleCurrency, investAction, investAccount, dayTradeResult 的選項進度
   };
 
   const handleInvestSubmit = () => {

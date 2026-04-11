@@ -3,10 +3,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { MY_GOOGLE_API_URL } from '../config';
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
+const formatUsd = (num) => `$${Number(num).toFixed(2)}`;
 
 const InvestmentView = ({ assets }) => {
   const [activeTab, setActiveTab] = useState('jointCash'); 
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [expandedSymbol, setExpandedSymbol] = useState(null);
 
   const [livePrices, setLivePrices] = useState({});
   const [liveFx, setLiveFx] = useState(31.5); 
@@ -22,24 +24,68 @@ const InvestmentView = ({ assets }) => {
   const currentData = activeTab === 'jointCash' ? safeJoint : (activeTab === 'userA' ? safeUserA : safeUserB);
   const currentHistoryFilter = activeTab === 'jointCash' ? '共同帳戶' : (activeTab === 'userA' ? '恆恆' : '得得');
 
+  // ★ 修正核心：使用 FIFO 計算正確的持倉成本
   const stockHoldings = useMemo(() => {
       const holdings = {};
-      history.filter(r => !r.isDeleted && r.payer && r.payer.includes(currentHistoryFilter)).forEach(r => {
-          if (!r.symbol) return;
+      // 按日期排序，確保 FIFO 正確
+      const sorted = [...history]
+        .filter(r => !r.isDeleted && r.symbol && r.payer && r.payer.includes(currentHistoryFilter))
+        .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || '').localeCompare(b.timestamp || ''));
+      
+      sorted.forEach(r => {
           const sym = r.symbol;
-          if (!holdings[sym]) holdings[sym] = { shares: 0, market: r.market || 'TW', buyCost: 0, sellRevenue: 0 };
+          if (!holdings[sym]) holdings[sym] = {
+            shares: 0,
+            market: r.market || 'TW',
+            // 用 lots 陣列追蹤每筆買入，方便 FIFO 計算
+            lots: [],
+            realizedProfitUsd: 0,
+            realizedProfitTwd: 0,
+          };
+          const h = holdings[sym];
+          // 更新 market：如果後來的記錄有 market 資訊，覆蓋
+          if (r.market) h.market = r.market;
           
           if (r.type.includes('buy')) {
-              holdings[sym].shares += (Number(r.shares) || 0);
-              holdings[sym].buyCost += (Number(r.total) || 0);
+              const shares = Number(r.shares) || 0;
+              const totalTwd = Number(r.total) || 0;
+              const totalUsd = Number(r.usdAmount) || 0;
+              const buyPriceUsd = Number(r.buyPrice) || 0;
+              
+              h.lots.push({
+                shares,
+                costTwd: totalTwd,
+                costUsd: totalUsd,
+                priceUsd: buyPriceUsd,
+                priceTwd: shares > 0 ? totalTwd / shares : 0,
+              });
+              h.shares += shares;
           } else if (r.type.includes('sell')) {
-              holdings[sym].shares -= (Number(r.shares) || 0);
-              holdings[sym].sellRevenue += (Number(r.total) || 0);
+              const sellShares = Number(r.shares) || 0;
+              let remaining = sellShares;
+              
+              // FIFO: 從最早的 lot 開始扣除
+              while (remaining > 0 && h.lots.length > 0) {
+                const lot = h.lots[0];
+                if (lot.shares <= remaining) {
+                  remaining -= lot.shares;
+                  h.lots.shift();
+                } else {
+                  // 部分賣出此 lot
+                  const fraction = remaining / lot.shares;
+                  lot.costTwd -= lot.costTwd * fraction;
+                  lot.costUsd -= lot.costUsd * fraction;
+                  lot.shares -= remaining;
+                  remaining = 0;
+                }
+              }
+              h.shares -= sellShares;
           }
       });
-      // 移除已經賣光且沒有賺賠紀錄的幽靈股票
+      
+      // 清理已完全賣出的持倉
       Object.keys(holdings).forEach(k => { 
-        if (holdings[k].shares <= 0 && holdings[k].buyCost === 0 && holdings[k].sellRevenue === 0) {
+        if (holdings[k].shares <= 0) {
           delete holdings[k]; 
         }
       });
@@ -96,7 +142,7 @@ const InvestmentView = ({ assets }) => {
       return () => { isMounted = false; };
   }, [activeTab, stockHoldings, refreshKey]);
 
-  // 計算現值與損益
+  // ★ 計算持倉列表（以 USD 為核心計算，轉台幣僅做展示）
   let stockMarketValue = 0;
   let totalUnrealizedProfit = 0;
   
@@ -104,36 +150,75 @@ const InvestmentView = ({ assets }) => {
       const holding = stockHoldings[sym];
       if (holding.shares <= 0) return null;
       
-      const currentPrice = livePrices[sym] || 0;
-      let valTwd = currentPrice * holding.shares;
+      const currentPriceUsd = livePrices[sym] || 0;
+      const isUS = holding.market === 'US';
       
-      if (holding.market === 'TW') {
-          const fee = Math.max(20, Math.floor(valTwd * 0.001425 * 0.6));
-          const tax = Math.floor(valTwd * 0.003);
-          valTwd = valTwd - fee - tax;
-      } else {
-          // 美股換算台幣邏輯
-          const feeUsd = valTwd * 0.001;
-          valTwd = (valTwd - feeUsd) * liveFx;
-      }
+      // 從 lots 計算正確的總成本
+      const totalCostUsd = holding.lots.reduce((s, l) => s + l.costUsd, 0);
+      const totalCostTwd = holding.lots.reduce((s, l) => s + l.costTwd, 0);
       
-      stockMarketValue += valTwd;
+      // 均價
+      const avgCostUsd = holding.shares > 0 ? totalCostUsd / holding.shares : 0;
+      const avgCostTwd = holding.shares > 0 ? totalCostTwd / holding.shares : 0;
       
-      const avgCost = holding.shares > 0 ? holding.buyCost / holding.shares : 0;
-      const profit = valTwd - holding.buyCost;
-      totalUnrealizedProfit += profit;
-      const profitPercent = holding.buyCost > 0 ? (profit / holding.buyCost) * 100 : 0;
+      // 市值計算
+      let marketValueUsd = 0;
+      let marketValueTwd = 0;
 
-      return {
+      if (isUS) {
+        // 美股：市價為 USD，轉台幣用匯率
+        marketValueUsd = currentPriceUsd * holding.shares;
+        marketValueTwd = marketValueUsd * liveFx;
+        
+        // 損益使用 USD 計算（和投資先生一致）
+        const profitUsd = marketValueUsd - totalCostUsd;
+        const profitTwd = profitUsd * liveFx;
+        const profitPercent = totalCostUsd > 0 ? (profitUsd / totalCostUsd) * 100 : 0;
+
+        stockMarketValue += marketValueTwd;
+        totalUnrealizedProfit += profitTwd;
+
+        return {
           sym,
           shares: holding.shares,
-          avgCost: avgCost,
-          currentPrice: currentPrice,
-          marketValue: valTwd,
-          profit: profit,
-          profitPercent: profitPercent,
-          market: holding.market
-      };
+          market: 'US',
+          currentPriceUsd,
+          currentPriceTwd: currentPriceUsd * liveFx,
+          avgCostUsd,
+          avgCostTwd: avgCostUsd * liveFx,
+          marketValueUsd,
+          marketValueTwd,
+          totalCostUsd,
+          totalCostTwd: totalCostUsd * liveFx,
+          profitUsd,
+          profitTwd,
+          profitPercent,
+        };
+      } else {
+        // 台股：市價為 TWD
+        const rawMarketValue = currentPriceUsd * holding.shares; // currentPriceUsd 其實是 TWD price for TW stocks
+        const fee = Math.max(20, Math.floor(rawMarketValue * 0.001425 * 0.6));
+        const tax = Math.floor(rawMarketValue * 0.003);
+        marketValueTwd = rawMarketValue - fee - tax;
+        
+        const profitTwd = marketValueTwd - totalCostTwd;
+        const profitPercent = totalCostTwd > 0 ? (profitTwd / totalCostTwd) * 100 : 0;
+
+        stockMarketValue += marketValueTwd;
+        totalUnrealizedProfit += profitTwd;
+
+        return {
+          sym,
+          shares: holding.shares,
+          market: 'TW',
+          currentPriceTwd: currentPriceUsd,  // TW stocks: price is already TWD
+          avgCostTwd,
+          marketValueTwd,
+          totalCostTwd,
+          profitTwd,
+          profitPercent,
+        };
+      }
   }).filter(Boolean);
 
   const nonStockInvest = (currentData.fund || 0) + (currentData.deposit || 0) + (currentData.other || 0);
@@ -149,6 +234,142 @@ const InvestmentView = ({ assets }) => {
       if (dateRange.end && (r.date || r.month) > dateRange.end) return false;
       return true;
   }).reverse();
+
+  // ★ 類投資先生風格的持股卡片
+  const StockCard = ({ h }) => {
+    const isExpanded = expandedSymbol === h.sym;
+    const isUS = h.market === 'US';
+    const isProfit = isUS ? h.profitUsd >= 0 : h.profitTwd >= 0;
+    const profitColor = isProfit ? 'var(--accent-green)' : 'var(--accent-red)';
+    
+    return (
+      <div 
+        style={{
+          background: 'rgba(120,120,128,0.04)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '10px',
+          overflow: 'hidden',
+          border: '0.5px solid rgba(120,120,128,0.08)',
+          transition: 'all 0.25s ease',
+        }}
+      >
+        {/* 主列：點擊展開/收起 */}
+        <div 
+          onClick={() => setExpandedSymbol(isExpanded ? null : h.sym)}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto auto',
+            alignItems: 'center',
+            padding: '14px 16px',
+            cursor: 'pointer',
+            gap: '12px',
+          }}
+        >
+          {/* 左：名稱 */}
+          <div>
+            <div style={{ fontWeight: '700', fontSize: '1.05rem', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+              {h.sym}
+              {isUS && <span style={{ fontSize: '0.65rem', color: 'var(--accent-orange)', marginLeft: '6px', fontWeight: '500', verticalAlign: 'middle' }}>美國</span>}
+            </div>
+          </div>
+
+          {/* 中：市價 / 均價 / 股數 */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+              {isUS ? formatUsd(h.currentPriceUsd) : formatMoney(h.currentPriceTwd)}
+            </div>
+            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+              {isUS ? formatUsd(h.avgCostUsd) : formatMoney(h.avgCostTwd)}
+            </div>
+          </div>
+
+          {/* 右上：股數 / 損益 */}
+          <div style={{ textAlign: 'right', minWidth: '80px' }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '2px' }}>
+              {h.shares} 股
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: '700', color: profitColor }}>
+              {isUS 
+                ? `${isProfit ? '+' : ''}${formatUsd(h.profitUsd)}`
+                : `${isProfit ? '+' : ''}${formatMoney(h.profitTwd)}`
+              }
+            </div>
+            <div style={{ fontSize: '0.73rem', fontWeight: '600', color: profitColor }}>
+              {h.profitPercent >= 0 ? '+' : ''}{h.profitPercent.toFixed(2)}%
+            </div>
+          </div>
+        </div>
+
+        {/* 標頭說明列 */}
+        {!isExpanded && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto auto',
+            padding: '0 16px 8px',
+            gap: '12px',
+          }}>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}></div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>市價 / 均價</div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', textAlign: 'right' }}>股數 / 損益</div>
+          </div>
+        )}
+
+        {/* 展開區：總市值 / 總成本 */}
+        {isExpanded && (
+          <div style={{
+            padding: '0 16px 14px',
+            borderTop: '0.5px solid rgba(120,120,128,0.1)',
+            animation: 'slideUpFade 0.25s ease-out',
+          }}>
+            <div style={{ paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {isUS && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>總市值 (USD)</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{formatUsd(h.marketValueUsd)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>總市值 (TWD)</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{formatMoney(h.marketValueTwd)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>總成本 (USD)</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{formatUsd(h.totalCostUsd)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>總成本 (TWD)</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{formatMoney(h.totalCostTwd)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>損益 (TWD)</span>
+                    <span style={{ fontWeight: '700', color: profitColor }}>{h.profitTwd >= 0 ? '+' : ''}{formatMoney(h.profitTwd)}</span>
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textAlign: 'right', marginTop: '2px' }}>
+                    *匯率：USD/TWD {liveFx.toFixed(2)}
+                  </div>
+                </>
+              )}
+              {!isUS && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>總市值 (TWD)</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{formatMoney(h.marketValueTwd)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>總成本 (TWD)</span>
+                    <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{formatMoney(h.totalCostTwd)}</span>
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', textAlign: 'right', marginTop: '2px' }}>
+                    *市值已扣估算手續費與證交稅
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="page-transition-enter">
@@ -186,25 +407,23 @@ const InvestmentView = ({ assets }) => {
           {holdingList.length === 0 ? (
               <div style={{textAlign:'center', color:'var(--text-tertiary)', padding:'12px', fontSize:'0.9rem'}}>目前沒有持股</div>
           ) : (
-              holdingList.map((h, idx) => (
-                  <div key={idx} style={{display:'flex', justifyContent:'space-between', padding:'12px 0', borderBottom:'0.5px solid rgba(0,0,0,0.04)'}}>
-                      <div>
-                          <div style={{fontWeight:'700', color:'var(--text-primary)', fontSize:'1.05rem'}}>{h.sym}</div>
-                          <div style={{fontSize:'0.78rem', color:'var(--text-secondary)'}}>庫存: <span style={{fontWeight:'600'}}>{h.shares}</span> 股</div>
-                          <div style={{fontSize:'0.73rem', color:'var(--text-tertiary)'}}>
-                              台幣均價: {formatMoney(h.avgCost)} <br/>
-                              現價: <span style={{color: h.market==='US'?'var(--accent-orange)':'var(--text-primary)', fontWeight: h.market==='US'?'600':'400'}}>{h.market==='US'?'USD $':''}{h.currentPrice.toFixed(2)}</span>
-                          </div>
-                      </div>
-                      <div style={{textAlign:'right'}}>
-                          <div style={{fontWeight:'700', fontSize:'1.05rem', color:'var(--text-primary)'}}>{formatMoney(h.marketValue)}</div>
-                          <div style={{fontSize:'0.82rem', fontWeight:'700', color: h.profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}}>
-                              {h.profit >= 0 ? '▲' : '▼'} {formatMoney(Math.abs(h.profit))} ({h.profitPercent.toFixed(1)}%)
-                          </div>
-                          {h.market === 'US' && <div style={{fontSize:'0.68rem', color:'var(--text-tertiary)'}}>*已依匯率 {liveFx.toFixed(2)} 換算</div>}
-                      </div>
-                  </div>
-              ))
+              <>
+                {/* 欄位標頭 */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto auto',
+                  padding: '0 16px 8px',
+                  gap: '12px',
+                  fontSize: '0.7rem',
+                  color: 'var(--text-tertiary)',
+                  fontWeight: '500',
+                }}>
+                  <div>名稱</div>
+                  <div style={{ textAlign: 'center' }}>市價 / 均價</div>
+                  <div style={{ textAlign: 'right' }}>股數 / 損益</div>
+                </div>
+                {holdingList.map((h, idx) => <StockCard key={h.sym} h={h} />)}
+              </>
           )}
 
           <div style={{marginTop:'15px', paddingTop:'15px', borderTop:'0.5px solid rgba(0,0,0,0.06)'}}>
@@ -252,7 +471,7 @@ const InvestmentView = ({ assets }) => {
                           <div style={{textAlign:'right'}}>
                               <div style={{fontWeight:'700', fontSize:'1.05rem', color: amountColor}}>{amountStr}</div>
                               {r.usdAmount && <div style={{fontSize:'0.73rem', color:'var(--accent-orange)', fontWeight:'600'}}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
-                              {profitStr && <div style={{fontSize:'0.73rem', color: profitStr.includes('賺') ? 'var(--accent-green)' : 'var(--accent-red)'}}>{profitStr}</div>}
+                              {profitStr && <div style={{fontSize:'0.73rem', color: profitStr.includes('賺') ? 'var(--accent-green)' : 'var(--accent-red)'}}>{ profitStr}</div>}
                           </div>
                       </div>
                   );
