@@ -760,6 +760,7 @@ function App() {
         {currentPage === 'invest' && <InvestmentView assets={assets} />}
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
+      </div>
       <LineSettingsModal />
       <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} assets={assets} />
     </div>
