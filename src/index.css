@@ -91,7 +91,7 @@ body {
     radial-gradient(ellipse at 15% 80%, var(--page-grad-2) 0%, transparent 40%),
     radial-gradient(ellipse at 8% 60%, var(--page-grad-3) 0%, transparent 35%);
   background-attachment: fixed;
-  background-size: 120% 120%;
+  background-size: 140% 140%;
   animation: liquidShift 12s ease-in-out infinite alternate;
   position: relative;
   overflow-x: hidden;
@@ -431,22 +431,22 @@ h4 {
 @keyframes liquidShift {
   0% {
     background-position: 0% 100%;
-    background-size: 120% 120%;
+    background-size: 140% 140%;
   }
 
   33% {
-    background-position: -12% 108%;
-    background-size: 145% 145%;
+    background-position: -5% 100%;
+    background-size: 150% 150%;
   }
 
   66% {
-    background-position: 8% 92%;
-    background-size: 130% 130%;
+    background-position: 3% 97%;
+    background-size: 145% 145%;
   }
 
   100% {
-    background-position: -5% 105%;
-    background-size: 140% 140%;
+    background-position: -2% 100%;
+    background-size: 155% 155%;
   }
 }
 
