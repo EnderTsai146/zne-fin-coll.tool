@@ -91,8 +91,7 @@ body {
     radial-gradient(ellipse at 15% 80%, var(--page-grad-2) 0%, transparent 40%),
     radial-gradient(ellipse at 8% 60%, var(--page-grad-3) 0%, transparent 35%);
   background-attachment: fixed;
-  background-size: 140% 140%;
-  animation: liquidShift 12s ease-in-out infinite alternate;
+  background-size: 100% 100%;
   position: relative;
   overflow-x: hidden;
 
@@ -110,26 +109,31 @@ body::after {
   border-radius: 50%;
   pointer-events: none;
   z-index: 0;
-  filter: blur(60px);
-  opacity: 0.5;
+  filter: blur(80px);
 }
 
 body::before {
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle, var(--page-grad-1) 0%, transparent 70%);
-  top: -80px;
-  right: -60px;
-  animation: geoFloat1 10s ease-in-out infinite alternate;
+  width: 140vw;
+  height: 140vw;
+  max-width: 1200px;
+  max-height: 1200px;
+  background: radial-gradient(circle, var(--page-grad-1) 0%, transparent 65%);
+  top: -40vh;
+  left: -20vw;
+  animation: geoFloat1 18s ease-in-out infinite alternate;
+  opacity: 0.65;
 }
 
 body::after {
-  width: 280px;
-  height: 280px;
-  background: radial-gradient(circle, var(--page-grad-2) 0%, transparent 70%);
-  bottom: 15%;
-  left: -40px;
-  animation: geoFloat2 14s ease-in-out infinite alternate;
+  width: 120vw;
+  height: 120vw;
+  max-width: 1000px;
+  max-height: 1000px;
+  background: radial-gradient(circle, var(--page-grad-2) 0%, transparent 65%);
+  bottom: -30vh;
+  right: -20vw;
+  animation: geoFloat2 22s ease-in-out infinite alternate;
+  opacity: 0.65;
 }
 
 #root {
@@ -428,55 +432,20 @@ h4 {
 
 /* === 6. Animations === */
 
-@keyframes liquidShift {
-  0% {
-    background-position: 0% 100%;
-    background-size: 140% 140%;
-  }
-
-  33% {
-    background-position: -5% 100%;
-    background-size: 150% 150%;
-  }
-
-  66% {
-    background-position: 3% 97%;
-    background-size: 145% 145%;
-  }
-
-  100% {
-    background-position: -2% 100%;
-    background-size: 155% 155%;
-  }
-}
 
 /* ★ Floating geometric shape animations */
 @keyframes geoFloat1 {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-
-  50% {
-    transform: translate(-40px, 60px) scale(1.15);
-  }
-
-  100% {
-    transform: translate(20px, 30px) scale(0.9);
-  }
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(15vw, 10vh) scale(1.1); }
+  66% { transform: translate(-10vw, 20vh) scale(0.9); }
+  100% { transform: translate(25vw, -5vh) scale(1.15); }
 }
 
 @keyframes geoFloat2 {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-
-  50% {
-    transform: translate(50px, -40px) scale(1.2);
-  }
-
-  100% {
-    transform: translate(-20px, -60px) scale(0.95);
-  }
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-20vw, -15vh) scale(1.2); }
+  66% { transform: translate(10vw, -25vh) scale(0.85); }
+  100% { transform: translate(-15vw, 10vh) scale(1.1); }
 }
 
 @keyframes fadeIn {
