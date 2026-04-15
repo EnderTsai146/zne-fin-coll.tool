@@ -27,7 +27,7 @@ const NAV_ITEMS = [
 ];
 
 // ★ Liquid‑glass bottom nav with sliding pill
-const BottomNav = ({ currentPage, onPageChange }) => {
+const BottomNav = ({ currentPage, onPageChange, assets }) => {
   const navRef = useRef(null);
   const [pillStyle, setPillStyle] = useState({ opacity: 0 });
 
@@ -46,6 +46,11 @@ const BottomNav = ({ currentPage, onPageChange }) => {
     });
   }, [currentPage]);
 
+  const hasPendingBills = assets?.bills?.some(b => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return Math.ceil((new Date(b.nextDate) - new Date(todayStr)) / (1000 * 60 * 60 * 24)) <= 3;
+  });
+
   return (
     <div className="bottom-nav" ref={navRef}>
       {/* Liquid glass sliding pill */}
@@ -55,8 +60,14 @@ const BottomNav = ({ currentPage, onPageChange }) => {
           key={item.id}
           className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
           onClick={() => onPageChange(item.id)}
+          style={{ position: 'relative' }}
         >
-          <div className="nav-icon">{item.icon}</div>
+          <div className="nav-icon">
+            {item.icon}
+            {item.id === 'expense' && hasPendingBills && (
+              <span className="nav-warning-dot" />
+            )}
+          </div>
           <div className="nav-label">{item.label}</div>
         </div>
       ))}
@@ -749,9 +760,8 @@ function App() {
         {currentPage === 'invest' && <InvestmentView assets={assets} />}
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} />}
-      </div>
       <LineSettingsModal />
-      <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} />
+      <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} assets={assets} />
     </div>
   );
 }
