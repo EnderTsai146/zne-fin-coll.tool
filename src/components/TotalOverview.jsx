@@ -54,7 +54,8 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
               }).catch(e => console.log('Background backup error (usually cors/redirect thrown by browser):', e));
               
               setBackupWarning(false);
-              setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
+              // ★ Fix: 傳入完整物件而非函式（setAssets 實際上是 handleAssetsUpdate，期望收到物件）
+              setAssets({ ...assets, lastBackupDate: todayStr });
           } finally {
               isBackingUpRef.current = false;
           }
@@ -105,7 +106,14 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
   };
 
   const stockHoldings = useMemo(() => {
+      // ★ 先載入歸檔紀錄累積的持股基底
       const holdings = {};
+      if (assets.currentStockHoldings) {
+          Object.entries(assets.currentStockHoldings).forEach(([sym, data]) => {
+              holdings[sym] = { ...data };
+          });
+      }
+      // 再疊加目前主文件中的交易紀錄
       (assets.monthlyExpenses || []).filter(r => !r.isDeleted).forEach(r => {
           if (!r.symbol) return; 
           const sym = r.symbol;
@@ -115,7 +123,7 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
       });
       Object.keys(holdings).forEach(k => { if (holdings[k].shares <= 0) delete holdings[k]; });
       return holdings;
-  }, [assets.monthlyExpenses]);
+  }, [assets.monthlyExpenses, assets.currentStockHoldings]);
 
   // ----------------------------------------------------
   // 2. 每日打卡快照引擎 (抓取真實市場現值)
@@ -179,7 +187,8 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
               const finalNetWorth = Math.round(totalTwdCash + usdCashTwd + nonStockInvest + stockMarketValue);
 
               setLiveMarketNetWorth(finalNetWorth);
-              setAssets(prev => ({ ...prev, dailyNetWorth: { ...(prev.dailyNetWorth || {}), [recordDate]: finalNetWorth } }));
+              // ★ Fix: 傳入完整物件而非函式，確保 dailyNetWorth 快照真正寫入 Firebase
+              setAssets({ ...assets, dailyNetWorth: { ...(assets.dailyNetWorth || {}), [recordDate]: finalNetWorth } });
           } catch (e) { 
             console.error("快照失敗:", e); 
           } finally { 
@@ -280,8 +289,8 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => formatMoney(ctx.raw) } } },
       scales: {
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 } } },
-          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: (value) => '$' + (value/10000).toFixed(0) + '萬', font: { size: 10 } } }
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 }, color: 'rgba(235,235,245,0.6)' } },
+          y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { callback: (value) => '$' + (value/10000).toFixed(0) + '萬', font: { size: 10 }, color: 'rgba(235,235,245,0.6)' } }
       },
       onClick: (evt, elements) => {
           if (elements.length > 0) setSelectedChartDate(historyData.labels[elements[0].index]);
@@ -372,40 +381,46 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
 
       const marketFluctuation = diff - netTransactions;
 
+      // ★ 判斷是否有可靠的快照數據來計算市場波動
+      const hasCurrentSnapshot = !!(assets.dailyNetWorth && assets.dailyNetWorth[selectedChartDate]);
+      const prevDate = idx > 0 ? historyData.labels[idx - 1] : null;
+      const hasPrevSnapshot = !!(prevDate && assets.dailyNetWorth && assets.dailyNetWorth[prevDate]);
+      const hasSnapshotData = hasCurrentSnapshot || hasPrevSnapshot;
+
       return (
-          <div style={{ marginTop: '15px', padding: '16px', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--accent-purple)', background: 'rgba(88,86,214,0.04)', animation: 'slideDown 0.3s ease-out' }}>
+          <div style={{ marginTop: '15px', padding: '16px', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--accent-purple)', background: 'rgba(255,255,255,0.06)', animation: 'slideDown 0.3s ease-out' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight:'700' }}>📅 {selectedChartDate} 資產變動分析</h4>
-                  <button onClick={() => setSelectedChartDate(null)} style={{ background:'transparent', border:'none', cursor:'pointer', fontSize:'1.2rem' }}>✖</button>
+                  <button onClick={() => setSelectedChartDate(null)} style={{ background:'transparent', border:'none', cursor:'pointer', fontSize:'1.2rem', color:'var(--text-secondary)' }}>✖</button>
               </div>
               
               <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: '15px' }}>
                  <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>總資產變動: </div>
-                 <div style={{ padding:'3px 10px', borderRadius:'var(--radius-pill)', fontSize: '0.84rem', fontWeight: '700', background: diff >= 0 ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.08)', color: diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                     較昨日 {diff >= 0 ? '+' : ''}{formatMoney(diff)}
+                 <div style={{ padding:'3px 10px', borderRadius:'var(--radius-pill)', fontSize: '0.84rem', fontWeight: '700', background: diff >= 0 ? 'rgba(52,199,89,0.12)' : 'rgba(255,59,48,0.10)', color: diff >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                     較前一日 {diff >= 0 ? '+' : ''}{formatMoney(diff)}
                  </div>
               </div>
 
               {dayRecords.length > 0 && (
-                  <div style={{ marginBottom: '12px', background:'rgba(120,120,128,0.04)', padding:'12px', borderRadius:'var(--radius-sm)' }}>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', marginBottom: '6px' }}>
+                  <div style={{ marginBottom: '12px', background:'rgba(255,255,255,0.06)', padding:'12px', borderRadius:'var(--radius-sm)' }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderBottom: '0.5px solid rgba(255,255,255,0.08)', paddingBottom: '4px', marginBottom: '6px' }}>
                           📝 當日人為操作 (實質淨額影響: <span style={{color: netTransactions>=0?'var(--accent-green)':'var(--accent-red)', fontWeight:'700'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
                       </div>
                       {dayRecords.map((r, i) => {
                           const isExternalOut = ['spend', 'expense', 'fixed', 'personal_invest_loss'].includes(r.type);
                           const isExternalIn = ['income', 'personal_invest_profit'].includes(r.type);
                           
-                          let sign = ''; let color = '#888'; let isNeutral = true;
-                          if (isExternalOut) { sign = '-'; color = '#e74c3c'; isNeutral = false; }
-                          else if (isExternalIn) { sign = '+'; color = '#2ecc71'; isNeutral = false; }
-                          else if (r.type === 'calibrate') { sign = '⚖️ '; color = '#95a5a6'; }
-                          else if (r.type.includes('sell')) { sign = '+'; color = '#3498db'; } 
-                          else if (r.type.includes('buy')) { sign = '-'; color = '#3498db'; } 
-                          else { sign = '🔄 '; color = '#9b59b6'; } 
+                          let sign = ''; let color = 'var(--text-secondary)'; let isNeutral = true;
+                          if (isExternalOut) { sign = '-'; color = '#ff6b6b'; isNeutral = false; }
+                          else if (isExternalIn) { sign = '+'; color = 'var(--accent-green)'; isNeutral = false; }
+                          else if (r.type === 'calibrate') { sign = '⚖️ '; color = 'var(--text-tertiary)'; }
+                          else if (r.type.includes('sell')) { sign = '+'; color = 'var(--accent-teal)'; } 
+                          else if (r.type.includes('buy')) { sign = '-'; color = 'var(--accent-teal)'; } 
+                          else { sign = '🔄 '; color = 'var(--accent-purple)'; } 
                           
                           return (
                               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px', alignItems: 'center' }}>
-                                  <span style={{color: isNeutral ? '#888' : '#444', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%'}}>
+                                  <span style={{color: isNeutral ? 'var(--text-secondary)' : 'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%'}}>
                                       {r.note || r.category} {isNeutral && <span style={{fontSize:'0.68rem', color:'var(--text-tertiary)', marginLeft:'5px'}}>(轉換/校正)</span>}
                                   </span>
                                   <span style={{ color: color, fontWeight: isNeutral ? 'normal' : 'bold' }}>{sign}{formatMoney(r.total)}</span>
@@ -415,11 +430,17 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                   </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', fontSize: '0.88rem', color: 'var(--text-secondary)', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', fontSize: '0.88rem', color: 'var(--text-secondary)', borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
                   <span>📈 市場與匯率波動估算</span>
-                  <span style={{ fontWeight: '700', fontSize: '1.05rem', color: marketFluctuation >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                      {marketFluctuation >= 0 ? '+' : ''}{formatMoney(marketFluctuation)}
-                  </span>
+                  {hasSnapshotData ? (
+                      <span style={{ fontWeight: '700', fontSize: '1.05rem', color: marketFluctuation >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                          {marketFluctuation >= 0 ? '+' : ''}{formatMoney(marketFluctuation)}
+                      </span>
+                  ) : (
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                          ⚠️ 無快照 · 僅帳面變動
+                      </span>
+                  )}
               </div>
           </div>
       );
@@ -522,16 +543,16 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                     }
 
                     return (
-                        <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display:'flex', justifyContent:'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.4)', padding: '4px 8px', borderRadius: 'var(--radius-xs)' }}>
+                        <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display:'flex', justifyContent:'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: 'var(--radius-xs)' }}>
                                 <span style={{fontWeight: '600', color: 'var(--text-primary)'}}>📅 帳單日: {record.date}</span>
                                 <span>⏱ 登錄: {formatDateTime(record.timestamp)} | 👤 {record.operator || '系統'}</span>
                             </div>
                             
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
-                                {cashDiff !== 0 && ( <div style={{ color: cashDiff > 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold', fontSize: '1rem' }}>[{label}現鈔] {cashDiff > 0 ? '增加' : '扣除'} {cashDiff > 0 ? '+' : ''}{formatMoney(cashDiff)}</div> )}
-                                {usdDiff !== 0 && ( <div style={{ color: usdDiff > 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold', fontSize: '1rem' }}>[{label}美金] {usdDiff > 0 ? '增加' : '扣除'} {usdDiff > 0 ? '+' : ''}${usdDiff.toFixed(2)}</div> )}
-                                {invDiff !== 0 && ( <div style={{ color: invDiff > 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold', fontSize: '1rem' }}>[{label}投資] {invDiff > 0 ? '增加' : '扣除'} {invDiff > 0 ? '+' : ''}{formatMoney(invDiff)}</div> )}
+                                {cashDiff !== 0 && ( <div style={{ color: cashDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: 'bold', fontSize: '1rem' }}>[{label}現鈔] {cashDiff > 0 ? '增加' : '扣除'} {cashDiff > 0 ? '+' : ''}{formatMoney(cashDiff)}</div> )}
+                                {usdDiff !== 0 && ( <div style={{ color: usdDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: 'bold', fontSize: '1rem' }}>[{label}美金] {usdDiff > 0 ? '增加' : '扣除'} {usdDiff > 0 ? '+' : ''}${usdDiff.toFixed(2)}</div> )}
+                                {invDiff !== 0 && ( <div style={{ color: invDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: 'bold', fontSize: '1rem' }}>[{label}投資] {invDiff > 0 ? '增加' : '扣除'} {invDiff > 0 ? '+' : ''}{formatMoney(invDiff)}</div> )}
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -540,7 +561,7 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                             </div>
                             
                             {b && a && (
-                                <div style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.6)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.05)', marginTop: '4px' }}>
+                                <div style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.06)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', marginTop: '4px' }}>
                                     <div style={{ marginBottom: '4px', display:'flex', justifyContent:'space-between' }}>
                                         <span style={{color:'var(--text-tertiary)'}}>變動前：</span><span style={{color:'var(--text-tertiary)'}}>現 {formatMoney(bCash)} | 美 ${bUsd.toFixed(2)} ｜ 投 {formatMoney(bInv)}</span>
                                     </div>

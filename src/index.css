@@ -84,7 +84,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* ★ Dark base — gradient concentrated in bottom‑left corner */
+  /* ★ Dark base — gradient concentrated in bottom-left corner */
   background-color: #000000;
   background-image:
     radial-gradient(ellipse at 0% 100%, var(--page-grad-1) 0%, transparent 50%),
@@ -92,12 +92,44 @@ body {
     radial-gradient(ellipse at 8% 60%, var(--page-grad-3) 0%, transparent 35%);
   background-attachment: fixed;
   background-size: 120% 120%;
-  animation: liquidShift 25s ease-in-out infinite alternate;
+  animation: liquidShift 12s ease-in-out infinite alternate;
+  position: relative;
+  overflow-x: hidden;
 
   /* Smooth gradient colour transition on page change */
   transition: --page-grad-1 0.8s ease,
     --page-grad-2 0.8s ease,
     --page-grad-3 0.8s ease;
+}
+
+/* ★ Floating geometric shapes for visible liquid glass refraction */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(60px);
+  opacity: 0.5;
+}
+
+body::before {
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, var(--page-grad-1) 0%, transparent 70%);
+  top: -80px;
+  right: -60px;
+  animation: geoFloat1 10s ease-in-out infinite alternate;
+}
+
+body::after {
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, var(--page-grad-2) 0%, transparent 70%);
+  bottom: 15%;
+  left: -40px;
+  animation: geoFloat2 14s ease-in-out infinite alternate;
 }
 
 #root {
@@ -402,14 +434,48 @@ h4 {
     background-size: 120% 120%;
   }
 
-  50% {
-    background-position: -5% 105%;
-    background-size: 135% 135%;
+  33% {
+    background-position: -12% 108%;
+    background-size: 145% 145%;
+  }
+
+  66% {
+    background-position: 8% 92%;
+    background-size: 130% 130%;
   }
 
   100% {
-    background-position: 5% 95%;
-    background-size: 125% 125%;
+    background-position: -5% 105%;
+    background-size: 140% 140%;
+  }
+}
+
+/* ★ Floating geometric shape animations */
+@keyframes geoFloat1 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(-40px, 60px) scale(1.15);
+  }
+
+  100% {
+    transform: translate(20px, 30px) scale(0.9);
+  }
+}
+
+@keyframes geoFloat2 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(50px, -40px) scale(1.2);
+  }
+
+  100% {
+    transform: translate(-20px, -60px) scale(0.95);
   }
 }
 

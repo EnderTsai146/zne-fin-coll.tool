@@ -136,28 +136,79 @@ function App() {
            needsUpdate = true;
         }
 
-        // Fix #3: 自動歸檔 — 移除 3 個月前的 auditTrail 以控制文件大小
-        const pruneDate = new Date();
-        pruneDate.setMonth(pruneDate.getMonth() - 3);
-        const pruneCutoff = pruneDate.toISOString().slice(0, 10);
-        if (data.monthlyExpenses) {
-          data.monthlyExpenses = data.monthlyExpenses.map(r => {
-            if (r.date && r.date < pruneCutoff && (r.auditTrail || r.deleteAuditTrail)) {
-              needsUpdate = true;
-              const { auditTrail, deleteAuditTrail, ...rest } = r;
-              return rest;
+        // ★ 月度歸檔引擎 — 將 2 個完整月以前的記錄搬到 finance/arc_YYYY-MM（不刪除任何資料）
+        if (data.monthlyExpenses && data.monthlyExpenses.length > 0) {
+          const now = new Date();
+          // 保留當月 + 上個月，更早的歸檔
+          const keepMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const keepCutoff = `${keepMonth.getFullYear()}-${String(keepMonth.getMonth() + 1).padStart(2, '0')}`;
+
+          // 將記錄分為「保留」和「待歸檔」
+          const toKeep = [];
+          const toArchive = {}; // grouped by YYYY-MM
+          data.monthlyExpenses.forEach(r => {
+            const rMonth = (r.month || (r.date || '').slice(0, 7));
+            if (rMonth >= keepCutoff) {
+              toKeep.push(r);
+            } else {
+              if (!toArchive[rMonth]) toArchive[rMonth] = [];
+              toArchive[rMonth].push(r);
             }
-            return r;
           });
-        }
-        // 清理 2 年以前的 dailyNetWorth 快照
-        if (data.dailyNetWorth) {
-          const nwCutoff = new Date();
-          nwCutoff.setFullYear(nwCutoff.getFullYear() - 2);
-          const nwCutoffStr = nwCutoff.toISOString().slice(0, 10);
-          Object.keys(data.dailyNetWorth).forEach(d => {
-            if (d < nwCutoffStr) { delete data.dailyNetWorth[d]; needsUpdate = true; }
-          });
+
+          const archiveMonths = Object.keys(toArchive).sort();
+          if (archiveMonths.length > 0) {
+            // 計算歸檔記錄中的 dailyNetWorth 快照
+            const sumAssets = (state) => {
+              if (!state) return 0;
+              const twd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
+              const usd = (state.userA_usd || 0) + (state.userB_usd || 0) + (state.jointCash_usd || 0);
+              const sumInv = (obj) => Object.values(obj || {}).reduce((s, v) => s + v, 0);
+              const invest = sumInv(state.jointInvestments) + sumInv(state.userInvestments?.userA) + sumInv(state.userInvestments?.userB);
+              return twd + Math.round(usd * (currentFxRate || 31.5)) + invest;
+            };
+
+            const newSnapshots = { ...(data.dailyNetWorth || {}) };
+            // 累積持股基底：從即將歸檔的記錄中提取持股資訊
+            const holdingsBase = data.currentStockHoldings ? { ...data.currentStockHoldings } : {};
+
+            archiveMonths.forEach(month => {
+              const records = toArchive[month];
+              // 為每個有 auditTrail 的記錄的日期生成快照
+              records.filter(r => !r.isDeleted && r.auditTrail?.after).forEach(r => {
+                if (r.date && !newSnapshots[r.date]) {
+                  newSnapshots[r.date] = sumAssets(r.auditTrail.after);
+                }
+              });
+              // 累積持股
+              records.filter(r => !r.isDeleted && r.symbol).forEach(r => {
+                const sym = r.symbol;
+                if (!holdingsBase[sym]) holdingsBase[sym] = { shares: 0, market: r.market || 'TW' };
+                if (r.type.includes('buy')) holdingsBase[sym].shares += (Number(r.shares) || 0);
+                else if (r.type.includes('sell')) holdingsBase[sym].shares -= (Number(r.shares) || 0);
+              });
+            });
+
+            // 清理零股或負股的持股
+            Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
+
+            // 非同步寫入歸檔文件（不阻塞主流程）
+            archiveMonths.forEach(month => {
+              const archiveDocRef = doc(db, "finance", `arc_${month}`);
+              setDoc(archiveDocRef, {
+                month: month,
+                archivedAt: new Date().toISOString(),
+                records: toArchive[month]
+              }).catch(e => console.error(`歸檔 ${month} 失敗:`, e));
+            });
+
+            // 更新主文件
+            data.monthlyExpenses = toKeep;
+            data.dailyNetWorth = newSnapshots;
+            data.currentStockHoldings = holdingsBase;
+            needsUpdate = true;
+            console.log(`📦 已歸檔 ${archiveMonths.join(', ')} 共 ${Object.values(toArchive).flat().length} 筆記錄`);
+          }
         }
 
         if (needsUpdate) setDoc(docRef, data);
@@ -597,7 +648,7 @@ function App() {
             amount: `共 ${assets.pendingLineNotifications.length} 筆`,
             category: "系統彙整",
             note: summaryList,
-            date: new Date().toISOString().split('T')[0],
+            date: new Date().toISOString().split('T')[0] + '（本日期為系統彙整日，以上逐筆個別日期請至App中查看。）',
             color: "#9b59b6",
             operator: "累積總結推播",
             isSummary: true

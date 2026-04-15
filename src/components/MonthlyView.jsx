@@ -197,9 +197,9 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h1 className="page-title" style={{ margin: 0 }}>財務資料庫</h1>
-                <div style={{ background: 'rgba(255,255,255,0.3)', borderRadius: '20px', padding: '4px', display: 'flex' }}>
+                <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '20px', padding: '4px', display: 'flex' }}>
                     {['chart', 'list'].map(mode => (
-                        <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? 'rgba(255,255,255,0.6)' : 'transparent', border: 'none', borderRadius: 'var(--radius-pill)', padding: '6px 14px', cursor: 'pointer', fontWeight: '600', color: viewMode === mode ? 'var(--text-primary)' : 'var(--text-tertiary)', boxShadow: viewMode === mode ? '0 2px 8px rgba(0,0,0,0.06)' : 'none', backdropFilter: viewMode === mode ? 'blur(8px)' : 'none' }}>
+                        <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? 'rgba(255,255,255,0.14)' : 'transparent', border: 'none', borderRadius: 'var(--radius-pill)', padding: '6px 14px', cursor: 'pointer', fontWeight: '600', color: viewMode === mode ? 'var(--text-primary)' : 'var(--text-tertiary)', boxShadow: viewMode === mode ? '0 2px 8px rgba(0,0,0,0.15)' : 'none', backdropFilter: viewMode === mode ? 'blur(8px)' : 'none' }}>
                             {mode === 'chart' ? '儀表板' : '流水帳'}
                         </button>
                     ))}
@@ -226,7 +226,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                                 </div>
                             )}
                         </div>
-                        <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '10px', height: '14px', width: '100%', overflow: 'hidden' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '10px', height: '14px', width: '100%', overflow: 'hidden' }}>
                             <div style={{ background: progressColor, width: `${budgetPercent}%`, height: '100%', transition: 'width 0.5s ease' }}></div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '500' }}>
@@ -238,12 +238,12 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(52,199,89,0.12), rgba(52,199,89,0.04))' }}>
                             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總收入</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-green)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.income.total)}</div>
-                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '5px' }}>恆: {formatMoney(dashboardData.stats.income.userA)} | 得: {formatMoney(dashboardData.stats.income.userB)}</div>
+                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>恆: {formatMoney(dashboardData.stats.income.userA)} | 得: {formatMoney(dashboardData.stats.income.userB)}</div>
                         </div>
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(255,59,48,0.1), rgba(255,59,48,0.03))' }}>
                             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總支出</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-red)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.expense.total)}</div>
-                            <div style={{ fontSize: '0.73rem', color: dashboardData.momColor, fontWeight: '600', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '5px' }}>
+                            <div style={{ fontSize: '0.73rem', color: dashboardData.momColor, fontWeight: '600', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>
                                 {dashboardData.momText}
                             </div>
                         </div>
@@ -252,7 +252,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                             <div style={{ fontSize: '1.25rem', fontWeight: '700', color: dashboardData.netCashFlow >= 0 ? 'var(--accent-blue)' : 'var(--accent-red)', marginBottom: '5px' }}>
                                 {dashboardData.netCashFlow > 0 ? '+' : ''}{formatMoney(dashboardData.netCashFlow)}
                             </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(0,0,0,0.04)', paddingTop: '5px' }}>儲蓄率: <span style={{ fontWeight: '700', color: 'var(--accent-blue)' }}>{dashboardData.savingsRate}%</span></div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>儲蓄率: <span style={{ fontWeight: '700', color: 'var(--accent-blue)' }}>{dashboardData.savingsRate}%</span></div>
                         </div>
                     </div>
 
@@ -269,7 +269,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                                     <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>💸 花費排行榜 & 抓漏</h4>
                                     <div>
                                         {dashboardData.leaderboard.map((item, idx) => (
-                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '0.5px solid rgba(0,0,0,0.04)' }}>
+                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                     <span style={{ fontSize: '1.2rem' }}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹'}</span>
                                                     <div>
@@ -301,7 +301,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                             const debt = calculateDebt(user);
                             const name = user === 'userA' ? '恆恆' : '得得';
                             return (
-                                <div key={user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(0,0,0,0.04)' }}>
+                                <div key={user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                                     <div>
                                         <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{name} 墊付未結</div>
                                         {debt > 0 ? (<div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => { setSettlementTarget(user); setShowSettlementModal(true); }}>查看明細</div>) : (<div style={{ fontSize: '0.78rem', color: 'var(--accent-green)' }}>✨ 已全數結清</div>)}
@@ -375,7 +375,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                                                 <span style={{ fontWeight: '700', fontSize: '1.05rem', fontFamily: 'monospace', color: 'var(--text-primary)', textDecoration: textDeco }}>{record.date || record.month}</span>
                                                 <span style={{ fontSize: '0.8rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>{record.category}</span>
                                                 {record.advancedBy && (
-                                                    <span style={{ fontSize: '0.73rem', border: record.isSettled ? '1px solid var(--accent-green)' : '1px solid var(--accent-orange)', color: record.isSettled ? 'var(--accent-green)' : 'var(--accent-orange)', padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                                                    <span style={{ fontSize: '0.73rem', border: record.isSettled ? '1px solid var(--accent-green)' : '1px solid var(--accent-orange)', color: record.isSettled ? 'var(--accent-green)' : 'var(--accent-orange)', padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'rgba(255,255,255,0.06)', fontWeight: '600' }}>
                                                         {record.advancedBy === 'userA' ? '恆恆' : '得得'}墊付 {record.isSettled ? ' (已結)' : ' (未結)'}
                                                     </span>
                                                 )}
@@ -400,7 +400,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                                             {isDeleted && (<div style={{ marginTop: '10px', fontSize: '0.82rem', color: 'var(--accent-red)', background: 'rgba(255,59,48,0.06)', padding: '8px', borderRadius: 'var(--radius-xs)', border: '1px dashed var(--accent-red)' }}><strong>作廢原因：</strong> {record.deleteReason}</div>)}
 
                                             {record.auditTrail && !isDeleted && (
-                                                <div style={{ marginTop: '10px', fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'rgba(120,120,128,0.04)', padding: '10px', borderRadius: 'var(--radius-xs)', borderTop: '0.5px solid rgba(0,0,0,0.04)' }}>
+                                                <div style={{ marginTop: '10px', fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', padding: '10px', borderRadius: 'var(--radius-xs)', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
                                                     <div style={{ marginBottom: '6px', fontWeight: '600', color: 'var(--text-primary)' }}>🔍 交易前後餘額對比：</div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                         {record.auditTrail.after.jointCash !== record.auditTrail.before.jointCash && (() => {
@@ -484,7 +484,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                         <h3 style={{ marginTop: 0, borderBottom: '0.5px solid rgba(0,0,0,0.06)', paddingBottom: '10px', fontWeight: '700' }}>{settlementTarget === 'userA' ? '恆恆' : '得得'} 的代墊明細</h3>
                         <div style={{ marginBottom: '20px' }}>
                             {getDebtList(settlementTarget).map((r, idx) => (
-                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '0.5px solid rgba(0,0,0,0.04)', fontSize: '0.9rem' }}>
+                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: '0.9rem' }}>
                                     <div><span style={{ color: 'var(--text-tertiary)', marginRight: '10px' }}>{r.date}</span><span>{r.note}</span></div>
                                     <div style={{ fontWeight: '600' }}>{formatMoney(r.total)}</div>
                                 </div>
