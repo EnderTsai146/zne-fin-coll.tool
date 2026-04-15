@@ -183,9 +183,21 @@ function App() {
               // 累積持股
               records.filter(r => !r.isDeleted && r.symbol).forEach(r => {
                 const sym = r.symbol;
-                if (!holdingsBase[sym]) holdingsBase[sym] = { shares: 0, market: r.market || 'TW' };
-                if (r.type.includes('buy')) holdingsBase[sym].shares += (Number(r.shares) || 0);
-                else if (r.type.includes('sell')) holdingsBase[sym].shares -= (Number(r.shares) || 0);
+                const payer = r.payer ? r.payer.replace(/🐶|🐕/g, '') : '共同帳戶';
+                const key = `${payer}_${sym}`;
+                if (!holdingsBase[key]) holdingsBase[key] = { shares: 0, market: r.market || 'TW', costTwd: 0, costUsd: 0 };
+                
+                if (r.type.includes('buy')) {
+                  holdingsBase[key].shares += (Number(r.shares) || 0);
+                  holdingsBase[key].costTwd += (Number(r.total) || 0);
+                  holdingsBase[key].costUsd += (Number(r.usdAmount) || 0);
+                } else if (r.type.includes('sell')) {
+                  const sellShares = Number(r.shares) || 0;
+                  const ratio = holdingsBase[key].shares > 0 ? sellShares / holdingsBase[key].shares : 0;
+                  holdingsBase[key].costTwd -= (holdingsBase[key].costTwd * ratio);
+                  holdingsBase[key].costUsd -= (holdingsBase[key].costUsd * ratio);
+                  holdingsBase[key].shares -= sellShares;
+                }
               });
             });
 

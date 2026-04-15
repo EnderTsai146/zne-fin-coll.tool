@@ -29,11 +29,33 @@ const InvestmentView = ({ assets }) => {
       const holdings = {};
       // ★ 先載入歸檔紀錄累積的持股基底
       if (assets.currentStockHoldings) {
-          Object.entries(assets.currentStockHoldings).forEach(([sym, data]) => {
-              if (data.market && (currentHistoryFilter === '共同帳戶' ? sym.includes('joint_') : true)) {
-                  // Note: base holdings are simplified (shares + market only)
-                  // FIFO lots cannot be reconstructed from archived data, so base holdings
-                  // are treated as a single lot with zero cost (cost comes from recent records)
+          Object.entries(assets.currentStockHoldings).forEach(([key, data]) => {
+              let owner = '共同帳戶';
+              let actualSym = key;
+              
+              if (key.includes('_')) {
+                  const parts = key.split('_');
+                  owner = parts[0];
+                  actualSym = parts.slice(1).join('_');
+              }
+              
+              // Map the owner to the currentHistoryFilter ('恆恆', '得得', '共同帳戶')
+              const ownerMatch = owner.replace(/🐶|🐕/g, '');
+              
+              if (data.market && currentHistoryFilter.includes(ownerMatch)) {
+                  holdings[actualSym] = {
+                      shares: data.shares || 0,
+                      market: data.market,
+                      lots: [{
+                          shares: data.shares || 0,
+                          costTwd: data.costTwd || 0,
+                          costUsd: data.costUsd || 0,
+                          priceUsd: 0,
+                          priceTwd: 0
+                      }],
+                      realizedProfitUsd: 0,
+                      realizedProfitTwd: 0,
+                  };
               }
           });
       }
