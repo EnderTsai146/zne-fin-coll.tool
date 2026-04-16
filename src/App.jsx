@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import Login from './components/Login';
 import TotalOverview from './components/TotalOverview';
 import MonthlyView from './components/MonthlyView';
@@ -8,7 +8,7 @@ import InvestmentView from './components/InvestmentView';
 import ExpenseEntry from './components/ExpenseEntry';
 import './index.css';
 import { db, auth } from './firebase';
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MAKE_WEBHOOK_URL } from './config';
 
@@ -109,6 +109,43 @@ function App() {
     bills: []
   });
 
+  const [archivedRecords, setArchivedRecords] = useState({});
+  const [isFetchingArchive, setIsFetchingArchive] = useState(false);
+
+  const loadArchiveMonth = useCallback(async (monthStr) => {
+    if (!monthStr || archivedRecords[monthStr] !== undefined) return;
+    setIsFetchingArchive(true);
+    try {
+      const snap = await getDoc(doc(db, "finance", `arc_${monthStr}`));
+      if (snap.exists() && snap.data().records) {
+        setArchivedRecords(prev => ({ ...prev, [monthStr]: snap.data().records }));
+      } else {
+        setArchivedRecords(prev => ({ ...prev, [monthStr]: [] }));
+      }
+    } catch (e) {
+      console.error("載入歸檔失敗:", e);
+    } finally {
+      setIsFetchingArchive(false);
+    }
+  }, [archivedRecords]);
+
+  const getCombinedHistory = useCallback(() => {
+    const combined = (assets.monthlyExpenses || []).map((r, i) => ({
+      ...r,
+      _context: { source: 'main', index: i }
+    }));
+    
+    Object.keys(archivedRecords).forEach(month => {
+      (archivedRecords[month] || []).forEach((r, i) => {
+        combined.push({
+          ...r,
+          _context: { source: 'archive', month: month, index: i }
+        });
+      });
+    });
+    return combined;
+  }, [assets.monthlyExpenses, archivedRecords]);
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -149,88 +186,92 @@ function App() {
 
         // ★ 月度歸檔引擎 — 將 2 個完整月以前的記錄搬到 finance/arc_YYYY-MM（不刪除任何資料）
         if (data.monthlyExpenses && data.monthlyExpenses.length > 0) {
-          const now = new Date();
-          // 保留當月 + 上個月，更早的歸檔
-          const keepMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          const keepCutoff = `${keepMonth.getFullYear()}-${String(keepMonth.getMonth() + 1).padStart(2, '0')}`;
+          try {
+            const now = new Date();
+            // 保留當月 + 上個月，更早的歸檔
+            const keepMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const keepCutoff = `${keepMonth.getFullYear()}-${String(keepMonth.getMonth() + 1).padStart(2, '0')}`;
 
-          // 將記錄分為「保留」和「待歸檔」
-          const toKeep = [];
-          const toArchive = {}; // grouped by YYYY-MM
-          data.monthlyExpenses.forEach(r => {
-            const rMonth = (r.month || (r.date || '').slice(0, 7));
-            if (rMonth >= keepCutoff) {
-              toKeep.push(r);
-            } else {
-              if (!toArchive[rMonth]) toArchive[rMonth] = [];
-              toArchive[rMonth].push(r);
+            // 將記錄分為「保留」和「待歸檔」
+            const toKeep = [];
+            const toArchive = {}; // grouped by YYYY-MM
+            data.monthlyExpenses.forEach(r => {
+              const rMonth = (r.month || (r.date || '').slice(0, 7));
+              if (rMonth >= keepCutoff) {
+                toKeep.push(r);
+              } else {
+                if (!toArchive[rMonth]) toArchive[rMonth] = [];
+                toArchive[rMonth].push(r);
+              }
+            });
+
+            const archiveMonths = Object.keys(toArchive).sort();
+            if (archiveMonths.length > 0) {
+              // 計算歸檔記錄中的 dailyNetWorth 快照
+              const sumAssets = (state) => {
+                if (!state) return 0;
+                const twd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
+                const usd = (state.userA_usd || 0) + (state.userB_usd || 0) + (state.jointCash_usd || 0);
+                const sumInv = (obj) => Object.values(obj || {}).reduce((s, v) => s + v, 0);
+                const invest = sumInv(state.jointInvestments) + sumInv(state.userInvestments?.userA) + sumInv(state.userInvestments?.userB);
+                return twd + Math.round(usd * (currentFxRate || 31.5)) + invest;
+              };
+
+              const newSnapshots = { ...(data.dailyNetWorth || {}) };
+              // 累積持股基底：從即將歸檔的記錄中提取持股資訊
+              const holdingsBase = data.currentStockHoldings ? { ...data.currentStockHoldings } : {};
+
+              archiveMonths.forEach(month => {
+                const records = toArchive[month];
+                // 為每個有 auditTrail 的記錄的日期生成快照
+                records.filter(r => !r.isDeleted && r.auditTrail?.after).forEach(r => {
+                  if (r.date && !newSnapshots[r.date]) {
+                    newSnapshots[r.date] = sumAssets(r.auditTrail.after);
+                  }
+                });
+                // 累積持股
+                records.filter(r => !r.isDeleted && r.symbol).forEach(r => {
+                  const sym = r.symbol;
+                  const payer = r.payer ? r.payer.replace(/🐶|🐕/g, '') : '共同帳戶';
+                  const key = `${payer}_${sym}`;
+                  if (!holdingsBase[key]) holdingsBase[key] = { shares: 0, market: r.market || 'TW', costTwd: 0, costUsd: 0 };
+                  
+                  if (r.type?.includes('buy')) {
+                    holdingsBase[key].shares += (Number(r.shares) || 0);
+                    holdingsBase[key].costTwd += (Number(r.total) || 0);
+                    holdingsBase[key].costUsd += (Number(r.usdAmount) || 0);
+                  } else if (r.type?.includes('sell')) {
+                    const sellShares = Number(r.shares) || 0;
+                    const ratio = holdingsBase[key].shares > 0 ? sellShares / holdingsBase[key].shares : 0;
+                    holdingsBase[key].costTwd -= (holdingsBase[key].costTwd * ratio);
+                    holdingsBase[key].costUsd -= (holdingsBase[key].costUsd * ratio);
+                    holdingsBase[key].shares -= sellShares;
+                  }
+                });
+              });
+
+              // 清理零股或負股的持股
+              Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
+
+              // 非同步寫入歸檔文件（不阻塞主流程）
+              archiveMonths.forEach(month => {
+                const archiveDocRef = doc(db, "finance", `arc_${month}`);
+                setDoc(archiveDocRef, {
+                  month: month,
+                  archivedAt: new Date().toISOString(),
+                  records: toArchive[month]
+                }).catch(e => console.error(`歸檔 ${month} 失敗:`, e));
+              });
+
+              // 更新主文件
+              data.monthlyExpenses = toKeep;
+              data.dailyNetWorth = newSnapshots;
+              data.currentStockHoldings = holdingsBase;
+              needsUpdate = true;
+              console.log(`📦 已歸檔 ${archiveMonths.join(', ')} 共 ${Object.values(toArchive).flat().length} 筆記錄`);
             }
-          });
-
-          const archiveMonths = Object.keys(toArchive).sort();
-          if (archiveMonths.length > 0) {
-            // 計算歸檔記錄中的 dailyNetWorth 快照
-            const sumAssets = (state) => {
-              if (!state) return 0;
-              const twd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
-              const usd = (state.userA_usd || 0) + (state.userB_usd || 0) + (state.jointCash_usd || 0);
-              const sumInv = (obj) => Object.values(obj || {}).reduce((s, v) => s + v, 0);
-              const invest = sumInv(state.jointInvestments) + sumInv(state.userInvestments?.userA) + sumInv(state.userInvestments?.userB);
-              return twd + Math.round(usd * (currentFxRate || 31.5)) + invest;
-            };
-
-            const newSnapshots = { ...(data.dailyNetWorth || {}) };
-            // 累積持股基底：從即將歸檔的記錄中提取持股資訊
-            const holdingsBase = data.currentStockHoldings ? { ...data.currentStockHoldings } : {};
-
-            archiveMonths.forEach(month => {
-              const records = toArchive[month];
-              // 為每個有 auditTrail 的記錄的日期生成快照
-              records.filter(r => !r.isDeleted && r.auditTrail?.after).forEach(r => {
-                if (r.date && !newSnapshots[r.date]) {
-                  newSnapshots[r.date] = sumAssets(r.auditTrail.after);
-                }
-              });
-              // 累積持股
-              records.filter(r => !r.isDeleted && r.symbol).forEach(r => {
-                const sym = r.symbol;
-                const payer = r.payer ? r.payer.replace(/🐶|🐕/g, '') : '共同帳戶';
-                const key = `${payer}_${sym}`;
-                if (!holdingsBase[key]) holdingsBase[key] = { shares: 0, market: r.market || 'TW', costTwd: 0, costUsd: 0 };
-                
-                if (r.type.includes('buy')) {
-                  holdingsBase[key].shares += (Number(r.shares) || 0);
-                  holdingsBase[key].costTwd += (Number(r.total) || 0);
-                  holdingsBase[key].costUsd += (Number(r.usdAmount) || 0);
-                } else if (r.type.includes('sell')) {
-                  const sellShares = Number(r.shares) || 0;
-                  const ratio = holdingsBase[key].shares > 0 ? sellShares / holdingsBase[key].shares : 0;
-                  holdingsBase[key].costTwd -= (holdingsBase[key].costTwd * ratio);
-                  holdingsBase[key].costUsd -= (holdingsBase[key].costUsd * ratio);
-                  holdingsBase[key].shares -= sellShares;
-                }
-              });
-            });
-
-            // 清理零股或負股的持股
-            Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
-
-            // 非同步寫入歸檔文件（不阻塞主流程）
-            archiveMonths.forEach(month => {
-              const archiveDocRef = doc(db, "finance", `arc_${month}`);
-              setDoc(archiveDocRef, {
-                month: month,
-                archivedAt: new Date().toISOString(),
-                records: toArchive[month]
-              }).catch(e => console.error(`歸檔 ${month} 失敗:`, e));
-            });
-
-            // 更新主文件
-            data.monthlyExpenses = toKeep;
-            data.dailyNetWorth = newSnapshots;
-            data.currentStockHoldings = holdingsBase;
-            needsUpdate = true;
-            console.log(`📦 已歸檔 ${archiveMonths.join(', ')} 共 ${Object.values(toArchive).flat().length} 筆記錄`);
+          } catch (error) {
+            console.error("歸檔引擎處理時發生錯誤，跳過歸檔階段以確保正常載入資料:", error);
           }
         }
 
@@ -422,15 +463,24 @@ function App() {
   };
 
   // ★ 嚴格防護的修改功能：只准改文字與日期，金額絕不可動
-  const handleEditTransaction = (indexToEdit, newData) => {
+  const handleEditTransaction = (context, newData) => {
     const newAssets = { ...assets };
-    const updatedExpenses = [...newAssets.monthlyExpenses];
+    
+    let list;
+    let targetRecord;
+    if (context.source === 'main') {
+      list = [...newAssets.monthlyExpenses];
+      targetRecord = list[context.index];
+    } else {
+      list = [...archivedRecords[context.month]];
+      targetRecord = list[context.index];
+    }
 
-    const oldDate = updatedExpenses[indexToEdit].date;
+    const oldDate = targetRecord.date;
     const newDate = newData.date;
 
-    updatedExpenses[indexToEdit] = {
-      ...updatedExpenses[indexToEdit],
+    list[context.index] = {
+      ...targetRecord,
       date: newDate,
       month: newDate.slice(0, 7),
       category: newData.category,
@@ -438,12 +488,22 @@ function App() {
       operator: operatorName
     };
 
-    newAssets.monthlyExpenses = updatedExpenses;
-
     // 清除舊日期與新日期的 dailyNetWorth 避免快照干擾重新計算的真實資產線
     if (newAssets.dailyNetWorth) {
       if (newAssets.dailyNetWorth[oldDate]) delete newAssets.dailyNetWorth[oldDate];
       if (newAssets.dailyNetWorth[newDate]) delete newAssets.dailyNetWorth[newDate];
+    }
+
+    if (context.source === 'main') {
+      newAssets.monthlyExpenses = list;
+    } else {
+      // 若為歷史庫，更新暫存並回推 firebase 歷史庫
+      setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
+      setDoc(doc(db, "finance", `arc_${context.month}`), {
+        month: context.month,
+        archivedAt: new Date().toISOString(),
+        records: list
+      }).catch(e => alert("歸檔紀錄唯讀同步失敗：" + e.message));
     }
 
     saveToCloud(newAssets);
@@ -451,8 +511,17 @@ function App() {
   };
 
   // ★ 完美還原的作廢功能
-  const handleDeleteTransaction = (indexToDelete) => {
-    const record = assets.monthlyExpenses[indexToDelete];
+  const handleDeleteTransaction = (context) => {
+    let list;
+    let record;
+    if (context.source === 'main') {
+      list = [...(assets.monthlyExpenses || [])];
+      record = list[context.index];
+    } else {
+      list = [...(archivedRecords[context.month] || [])];
+      record = list[context.index];
+    }
+
     if (!record) return;
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
     if (record.isSettled && record.advancedBy) return alert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
@@ -556,20 +625,17 @@ function App() {
     }
 
     const snapshotAfter = getSnapshot(newAssets);
-    const markedExpenses = updatedExpenses.map((r, i) =>
-      i === indexToDelete
-        ? {
-          ...r,
-          isDeleted: true,
-          deleteReason: reason.trim(),
-          deleteTimestamp: new Date().toISOString(),
-          deleteAuditTrail: { before: snapshotBefore, after: snapshotAfter }
-        }
-        : r
-    );
+    const updatedRecord = {
+      ...record,
+      isDeleted: true,
+      deleteReason: reason.trim(),
+      deleteTimestamp: new Date().toISOString(),
+      deleteAuditTrail: { before: snapshotBefore, after: snapshotAfter }
+    };
+    list[context.index] = updatedRecord;
 
     // ★ 新增一筆「作廢退款」可見紀錄，讓 TotalOverview 的變動軌跡能追蹤到這個操作
-    markedExpenses.push({
+    const calibrateRecord = {
       date: new Date().toISOString().split('T')[0],
       month: new Date().toISOString().slice(0, 7),
       type: 'calibrate',
@@ -580,9 +646,24 @@ function App() {
       operator: operatorName,
       timestamp: new Date().toISOString(),
       auditTrail: { before: snapshotBefore, after: snapshotAfter }
-    });
+    };
 
-    newAssets.monthlyExpenses = markedExpenses;
+    let mainList = [...(assets.monthlyExpenses || [])];
+
+    if (context.source === 'main') {
+      mainList = list;
+      mainList.push(calibrateRecord);
+    } else {
+      mainList.push(calibrateRecord);
+      setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
+      setDoc(doc(db, "finance", `arc_${context.month}`), {
+         month: context.month,
+         archivedAt: new Date().toISOString(),
+         records: list
+      }).catch(e => alert("歸檔紀錄同步失敗：" + e.message));
+    }
+
+    newAssets.monthlyExpenses = mainList;
 
     const isBatch = assets.lineConfig?.batchMode;
     const finalAssets = getUpdatedAssetsWithLineCount(newAssets, isBatch ? 0 : 1);
@@ -743,11 +824,13 @@ function App() {
       <Topbar />
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
 
-        {currentPage === 'overview' && <TotalOverview assets={assets} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
+        {currentPage === 'overview' && <TotalOverview assets={assets} combinedHistory={getCombinedHistory()} loadArchiveMonth={loadArchiveMonth} isFetchingArchive={isFetchingArchive} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
 
         {currentPage === 'monthly' && (
           <MonthlyView
             assets={assets}
+            combinedHistory={getCombinedHistory()}
+            loadArchiveMonth={loadArchiveMonth}
             setAssets={handleAssetsUpdate}
             onDelete={handleDeleteTransaction}
             onEdit={handleEditTransaction}

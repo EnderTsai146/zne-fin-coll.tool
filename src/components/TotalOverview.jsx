@@ -15,12 +15,33 @@ const formatDate = (date) => date.toISOString().split('T')[0];
 const today = new Date();
 const lastYear = new Date(); lastYear.setFullYear(today.getFullYear() - 1);
 
-const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) => {
+const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingArchive, setAssets, currentFxRate, setCurrentFxRate }) => {
   const [chartDateRange, setChartDateRange] = useState({ start: formatDate(lastYear), end: formatDate(today) });
   const [activeHistory, setActiveHistory] = useState(null); 
   const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
   const [backupWarning, setBackupWarning] = useState(false);
   const [selectedChartDate, setSelectedChartDate] = useState(null);
+
+  // ★ 當用戶點擊折線圖的某一天時，系統自動背景調取那一個月的歸檔紀錄
+  useEffect(() => {
+    if (selectedChartDate && loadArchiveMonth) {
+      loadArchiveMonth(selectedChartDate.slice(0, 7));
+    }
+  }, [selectedChartDate, loadArchiveMonth]);
+
+  // ★ 當帳戶明細要求超大範圍時，自動遍歷該區間背景提領
+  useEffect(() => {
+    if (activeHistory && historyDateRange.start && historyDateRange.end && loadArchiveMonth) {
+      let d = new Date(historyDateRange.start);
+      const endD = new Date(historyDateRange.end);
+      let count = 0;
+      while (d <= endD && count < 60) {
+        loadArchiveMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        d.setMonth(d.getMonth() + 1);
+        count++;
+      }
+    }
+  }, [activeHistory, historyDateRange, loadArchiveMonth]);
 
   // ★ 儲存包含股票漲跌的「真實總市值」
   const [liveMarketNetWorth, setLiveMarketNetWorth] = useState(0);
@@ -212,7 +233,7 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
       };
 
       const chartDataPoints = {};
-      const sortedRecords = [...(assets.monthlyExpenses || [])]
+      const sortedRecords = [...(combinedHistory || [])]
           .filter(r => !r.isDeleted && r.auditTrail?.after && r.auditTrail?.before)
           // 嚴格依照日期與時間排序
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
@@ -313,7 +334,7 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
   // ----------------------------------------------------
   const getAccountHistory = () => {
       if (!activeHistory) return [];
-      let filtered = (assets.monthlyExpenses || []).filter(r => !r.isDeleted);
+      let filtered = (combinedHistory || []).filter(r => !r.isDeleted);
       
       filtered = filtered.filter(r => {
           if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) return false;
@@ -366,7 +387,7 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
       const prevVal = idx > 0 ? historyData.data[idx - 1] : currentVal;
       const diff = currentVal - prevVal; 
 
-      const dayRecords = (assets.monthlyExpenses || []).filter(r => !r.isDeleted && r.date === selectedChartDate)
+      const dayRecords = (combinedHistory || []).filter(r => !r.isDeleted && r.date === selectedChartDate)
           .sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
       
       let netTransactions = 0;
@@ -390,7 +411,9 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
       return (
           <div style={{ marginTop: '15px', padding: '16px', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--accent-purple)', background: 'rgba(255,255,255,0.06)', animation: 'slideDown 0.3s ease-out' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight:'700' }}>📅 {selectedChartDate} 資產變動分析</h4>
+                  <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight:'700' }}>
+                      📅 {selectedChartDate} 資產變動分析 {isFetchingArchive && <span style={{fontSize: '0.7rem', color: 'var(--accent-blue)', animation: 'pulse 1.5s infinite'}}>(載入歷史中...)</span>}
+                  </h4>
                   <button onClick={() => setSelectedChartDate(null)} style={{ background:'transparent', border:'none', cursor:'pointer', fontSize:'1.2rem', color:'var(--text-secondary)' }}>✖</button>
               </div>
               
@@ -401,12 +424,13 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                  </div>
               </div>
 
-              {dayRecords.length > 0 && (
-                  <div style={{ marginBottom: '12px', background:'rgba(255,255,255,0.06)', padding:'12px', borderRadius:'var(--radius-sm)' }}>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderBottom: '0.5px solid rgba(255,255,255,0.08)', paddingBottom: '4px', marginBottom: '6px' }}>
-                          📝 當日人為操作 (實質淨額影響: <span style={{color: netTransactions>=0?'var(--accent-green)':'var(--accent-red)', fontWeight:'700'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
-                      </div>
-                      {dayRecords.map((r, i) => {
+              <div style={{ marginBottom: '12px', background:'rgba(255,255,255,0.06)', padding:'12px', borderRadius:'var(--radius-sm)' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderBottom: '0.5px solid rgba(255,255,255,0.08)', paddingBottom: '4px', marginBottom: '6px' }}>
+                      📝 當日人為操作 (實質淨額影響: <span style={{color: netTransactions>=0?'var(--accent-green)':'var(--accent-red)', fontWeight:'700'}}>{netTransactions >= 0 ? '+' : ''}{formatMoney(netTransactions)}</span>)
+                  </div>
+                  {dayRecords.length === 0 ? (
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', textAlign: 'center', padding: '10px 0' }}>{isFetchingArchive ? '努力從冷倉庫撈取資料中...' : '當日無任何紀錄'}</div>
+                  ) : dayRecords.map((r, i) => {
                           const isExternalOut = ['spend', 'expense', 'fixed', 'personal_invest_loss'].includes(r.type);
                           const isExternalIn = ['income', 'personal_invest_profit'].includes(r.type);
                           
@@ -428,7 +452,6 @@ const TotalOverview = ({ assets, setAssets, currentFxRate, setCurrentFxRate }) =
                           );
                       })}
                   </div>
-              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', fontSize: '0.88rem', color: 'var(--text-secondary)', borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
                   <span>📈 市場與匯率波動估算</span>

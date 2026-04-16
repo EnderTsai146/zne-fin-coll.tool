@@ -8,8 +8,8 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
-const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification, currentUser, getUpdatedAssetsWithLineCount }) => {
-    const history = assets.monthlyExpenses || [];
+const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, sendLineNotification, currentUser, getUpdatedAssetsWithLineCount }) => {
+    const history = combinedHistory || [];
 
     const [viewMode, setViewMode] = useState('chart');
     const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 7));
@@ -21,6 +21,15 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
     const [settlementTarget, setSettlementTarget] = useState(null);
 
     const [editModalData, setEditModalData] = useState(null);
+
+    // ★ 當選擇儀表板或列表篩選月份時自動去庫調取歷史檔案
+    useEffect(() => {
+        if (loadArchiveMonth) loadArchiveMonth(selectedMonth);
+    }, [selectedMonth, loadArchiveMonth]);
+
+    useEffect(() => {
+        if (loadArchiveMonth) loadArchiveMonth(filterDate);
+    }, [filterDate, loadArchiveMonth]);
 
     const [isEditingBudget, setIsEditingBudget] = useState(false);
     const [tempBudget, setTempBudget] = useState(assets.monthlyBudget || 40000);
@@ -362,8 +371,8 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
                                             {record.type === 'settle' && !isDeleted && (<div style={{ background: 'rgba(52,199,89,0.08)', color: 'var(--accent-green)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', fontSize: '0.73rem', fontWeight: '600' }}>✅ 系統結算</div>)}
                                             {!isDeleted ? (
                                                 <>
-                                                    <button onClick={() => setEditModalData({ index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(0,122,255,0.08)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
-                                                    <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？\n作廢後系統會自動將金額加回或扣除，恢復到交易前的狀態。`)) onDelete(record.originalIndex); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                                                    <button onClick={() => setEditModalData({ context: record._context, index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(0,122,255,0.08)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
+                                                    <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？\n作廢後系統會自動將金額加回或扣除，恢復到交易前的狀態。`)) onDelete(record._context); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
                                                 </>
                                             ) : (
                                                 <div style={{ background: 'rgba(255,149,0,0.1)', color: 'var(--accent-orange)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', fontSize: '0.73rem', fontWeight: '600' }}>🚫 已作廢</div>
@@ -471,7 +480,7 @@ const MonthlyView = ({ assets, onDelete, onEdit, setAssets, sendLineNotification
 
                         <div style={{ display: 'flex', gap: '10px' }}>
                             <button className="glass-btn" style={{ flex: 1 }} onClick={() => setEditModalData(null)}>取消</button>
-                            <button className="glass-btn glass-btn-cta" style={{ flex: 1 }} onClick={() => { onEdit(editModalData.index, editModalData); setEditModalData(null); }}>儲存修改</button>
+                            <button className="glass-btn glass-btn-cta" style={{ flex: 1 }} onClick={() => { onEdit(editModalData.context, editModalData); setEditModalData(null); }}>儲存修改</button>
                         </div>
                     </div>
                 </div>,
