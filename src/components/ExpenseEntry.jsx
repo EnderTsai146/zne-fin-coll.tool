@@ -18,7 +18,7 @@ const addMonthsSafe = (dateStr, months) => {
     return newD.toISOString().split('T')[0];
 };
 
-const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) => {
+const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTransaction }) => {
   const [activeTab, setActiveTab] = useState('joint'); 
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -57,9 +57,10 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
 
   // --- 共同記帳邏輯 ---
   const handleAddJointCart = () => {
+      if (!jointAdvanced) return alert("請選擇付款方式 (誰墊付/共同出)！");
       if (!jointCat) return alert("請選擇分類！");
       if (!jointAmount || isNaN(jointAmount) || Number(jointAmount) <= 0) return alert("請輸入有效金額！");
-      setJointCart([...jointCart, { id: Date.now(), cat: jointCat, amount: Number(jointAmount), note: jointNote }]);
+      setJointCart([...jointCart, { id: Date.now(), advancedBy: jointAdvanced, cat: jointCat, amount: Number(jointAmount), note: jointNote }]);
       setJointAmount(''); 
       setJointNote(''); 
       setJointCat(null);
@@ -70,40 +71,81 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   };
 
   const handleJointSubmit = () => {
-    if (!jointAdvanced) return alert("請選擇付款方式 (誰墊付/共同出)！");
-    const finalItems = [...jointCart];
+    let finalItems = [...jointCart];
     if (jointAmount) {
+      if (!jointAdvanced) return alert("最後一筆(下方還未加入暫存)請選擇付款方式！");
       if (isNaN(jointAmount) || Number(jointAmount) <= 0) return alert("請輸入有效金額！");
       if (!jointCat) return alert("最後一筆輸入尚未選擇分類！");
-      finalItems.push({ cat: jointCat, amount: Number(jointAmount), note: jointNote });
+      finalItems.push({ advancedBy: jointAdvanced, cat: jointCat, amount: Number(jointAmount), note: jointNote });
     }
     if (finalItems.length === 0) return alert("請輸入花費金額或加入暫存！");
 
-    const total = finalItems.reduce((sum, item) => sum + item.amount, 0);
-    const isMulti = finalItems.length > 1;
-    const mainCat = isMulti ? '多筆合併' : finalItems[0].cat;
-    
-    const finalNote = finalItems.map(i => { 
-      let s = isMulti ? `[${i.cat}] $${i.amount}` : ''; 
-      if (i.note) s += (s ? ` - ${i.note}` : i.note); 
-      if (!s) s = i.cat; 
-      return s; 
-    }).join('，');
-    
-    onAddJointExpense(txDate, mainCat, total, jointAdvanced, finalNote);
+    const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
+    let newAssets = getDeepCopy(assets);
+    let records = [];
+
+    // Group items by advancedBy
+    const grouped = {};
+    finalItems.forEach(item => {
+       if (!grouped[item.advancedBy]) grouped[item.advancedBy] = [];
+       grouped[item.advancedBy].push(item);
+    });
+
+    Object.keys(grouped).forEach(advancedBy => {
+      let items = grouped[advancedBy];
+      const total = items.reduce((sum, item) => sum + item.amount, 0);
+      const isMulti = items.length > 1;
+      const mainCat = isMulti ? '多筆合併' : items[0].cat;
+      
+      const safeNote = items.map(i => { 
+        let s = isMulti ? `[${i.cat}] $${i.amount}` : ''; 
+        if (i.note) s += (s ? ` - ${i.note}` : i.note); 
+        if (!s) s = i.cat; 
+        return s; 
+      }).join('，');
+      
+      let paymentMethodName = "共同帳戶直接付";
+      if (advancedBy === 'jointCash') {
+        if (newAssets.jointCash < total) return alert("❌ 共同現金不足以支付總額：" + formatMoney(total));
+        newAssets.jointCash -= total;
+      } else if (advancedBy === 'userA') {
+        if (newAssets.userA < total) return alert("❌ 恆恆的個人餘額不足以代墊：" + formatMoney(total));
+        newAssets.userA -= total;
+        paymentMethodName = "恆恆先墊 (User A)";
+      } else if (advancedBy === 'userB') {
+        if (newAssets.userB < total) return alert("❌ 得得的個人餘額不足以代墊：" + formatMoney(total));
+        newAssets.userB -= total;
+        paymentMethodName = "得得先墊 (User B)";
+      }
+
+      records.push({
+        date: txDate, month: txDate.slice(0, 7), type: 'spend', category: '共同支出', payer: '共同帳戶',
+        total: total, note: safeNote ? `${mainCat} - ${safeNote}` : mainCat,
+        advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
+        isSettled: false
+      });
+    });
+
+    if (!window.confirm(`確定要送出這 ${finalItems.length} 筆共同記帳嗎？\n(包含 ${Object.keys(grouped).length} 種不同的扣款來源)`)) return;
+
+    if (onTransaction) {
+       onTransaction(newAssets, records);
+    } else {
+       alert("Error: onTransaction method is not provided");
+    }
     
     setJointCart([]); 
     setJointAmount(''); 
     setJointNote(''); 
     setJointCat(null);
-    setJointAdvanced(null);
   };
 
   // --- 個人記帳邏輯 ---
   const handleAddPersCart = () => {
+      if (!persUser) return alert("請選擇記誰的帳！");
       if (!persCat) return alert("請選擇分類！");
       if (!persAmount || isNaN(persAmount) || Number(persAmount) <= 0) return alert("請輸入有效金額！");
-      setPersCart([...persCart, { id: Date.now(), cat: persCat, amount: Number(persAmount), note: persNote }]);
+      setPersCart([...persCart, { id: Date.now(), user: persUser, cat: persCat, amount: Number(persAmount), note: persNote }]);
       setPersAmount(''); 
       setPersNote(''); 
       setPersCat(null);
@@ -114,38 +156,70 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
   };
 
   const handlePersonalSubmit = () => {
-    if (!persUser) return alert("請選擇記誰的帳！");
-    const finalItems = [...persCart];
+    let finalItems = [...persCart];
     if (persAmount) {
+      if (!persUser) return alert("最後一筆(下方還未加入暫存)請選擇記誰的帳！");
       if (isNaN(persAmount) || Number(persAmount) <= 0) return alert("請輸入有效金額！");
       if (!persCat) return alert("最後一筆輸入尚未選擇分類！");
-      finalItems.push({ cat: persCat, amount: Number(persAmount), note: persNote });
+      finalItems.push({ user: persUser, cat: persCat, amount: Number(persAmount), note: persNote });
     }
     if (finalItems.length === 0) return alert("請輸入花費金額或加入暫存！");
 
-    const total = finalItems.reduce((sum, item) => sum + item.amount, 0);
-    const isMulti = finalItems.length > 1;
-    const finalNote = finalItems.map(i => { 
-      let s = isMulti ? `[${i.cat}] $${i.amount}` : ''; 
-      if (i.note) s += (s ? ` - ${i.note}` : i.note); 
-      if (!s) s = i.cat; 
-      return s; 
-    }).join('，');
+    const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
+    let newAssets = getDeepCopy(assets);
+    let records = [];
 
-    const expenseData = { food: 0, shopping: 0, fixed: 0, other: 0 };
-    const catMap = { '餐費': 'food', '購物': 'shopping', '固定費用': 'fixed', '固定': 'fixed', '其他': 'other' };
-    
-    finalItems.forEach(i => { 
-      expenseData[catMap[i.cat] || 'other'] += i.amount; 
+    const grouped = {};
+    finalItems.forEach(item => {
+       if (!grouped[item.user]) grouped[item.user] = [];
+       grouped[item.user].push(item);
     });
 
-    onAddExpense(txDate, expenseData, total, persUser, finalNote);
+    Object.keys(grouped).forEach(user => {
+      let items = grouped[user];
+      const total = items.reduce((sum, item) => sum + item.amount, 0);
+      const isMulti = items.length > 1;
+      const finalNote = items.map(i => { 
+        let s = isMulti ? `[${i.cat}] $${i.amount}` : ''; 
+        if (i.note) s += (s ? ` - ${i.note}` : i.note); 
+        if (!s) s = i.cat; 
+        return s; 
+      }).join('，');
+
+      const expenseData = { food: 0, shopping: 0, fixed: 0, other: 0 };
+      const catMap = { '餐費': 'food', '購物': 'shopping', '固定費用': 'fixed', '固定': 'fixed', '其他': 'other' };
+      
+      items.forEach(i => { 
+        expenseData[catMap[i.cat] || 'other'] += i.amount; 
+      });
+
+      const payerKey = user === 'heng' ? 'userA' : 'userB';
+      const payerName = user === 'heng' ? '恆恆🐶' : '得得🐕';
+
+      if (newAssets[payerKey] < total) {
+          alert(`⚠️ 取消送出：${payerName} 的個人餘額不足以支付 ${formatMoney(total)}！`);
+          throw new Error("Insufficient Balance");
+      }
+      newAssets[payerKey] -= total;
+
+      records.push({
+        date: txDate, month: txDate.slice(0, 7), type: 'expense', category: '個人支出', details: expenseData,
+        total: total, payer: payerName, note: finalNote || '日記帳'
+      });
+    });
+
+    if (!window.confirm(`確定要送出這 ${finalItems.length} 筆個人記帳嗎？\n(包含來自 ${Object.keys(grouped).length} 個不同帳戶)`)) return;
+
+    if (onTransaction) {
+       onTransaction(newAssets, records);
+    } else {
+       alert("Error: onTransaction is undefined");
+    }
     
     setPersCart([]); 
     setPersAmount(''); 
     setPersNote(''); 
     setPersCat(null);
-    setPersUser(null);
   };
 
   const handleSaveNewBill = () => {
@@ -281,6 +355,9 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
                      <div key={item.id} style={{display:'flex', justifyContent:'space-between', fontSize:'0.9rem', marginBottom:'6px', borderBottom:'0.5px solid rgba(0,0,0,0.04)', paddingBottom:'4px'}}>
                          <span style={{color:'var(--text-primary)'}}>
                            <span style={{background:'rgba(120,120,128,0.08)', padding:'2px 6px', borderRadius:'6px', fontSize:'0.73rem', marginRight:'5px', fontWeight:'500'}}>{item.cat}</span>
+                           <span style={{fontSize:'0.75rem', color:'var(--accent-indigo)', marginRight:'5px', fontWeight:'600'}}>
+                             [{item.advancedBy === 'jointCash' ? '🏫 共同' : (item.advancedBy === 'userA' ? '🐶 恆恆' : '🐕 得得')}]
+                           </span>
                            {item.note}
                          </span>
                          <span style={{fontWeight:'500'}}>
@@ -338,6 +415,9 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense }) =>
                      <div key={item.id} style={{display:'flex', justifyContent:'space-between', fontSize:'0.9rem', marginBottom:'6px', borderBottom:'0.5px solid rgba(0,0,0,0.04)', paddingBottom:'4px'}}>
                          <span style={{color:'var(--text-primary)'}}>
                            <span style={{background:'rgba(120,120,128,0.08)', padding:'2px 6px', borderRadius:'6px', fontSize:'0.73rem', marginRight:'5px', fontWeight:'500'}}>{item.cat}</span>
+                           <span style={{fontSize:'0.75rem', color:'var(--accent-purple)', marginRight:'5px', fontWeight:'600'}}>
+                             [{item.user === 'heng' ? '🐶 恆恆' : '🐕 得得'}]
+                           </span>
                            {item.note}
                          </span>
                          <span style={{fontWeight:'500'}}>

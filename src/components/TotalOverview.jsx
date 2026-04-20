@@ -130,8 +130,15 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
       // ★ 先載入歸檔紀錄累積的持股基底
       const holdings = {};
       if (assets.currentStockHoldings) {
-          Object.entries(assets.currentStockHoldings).forEach(([sym, data]) => {
-              holdings[sym] = { ...data };
+          Object.entries(assets.currentStockHoldings).forEach(([key, data]) => {
+              let actualSym = key;
+              if (key.includes('_')) {
+                  actualSym = key.split('_').slice(1).join('_');
+              }
+              if (!holdings[actualSym]) {
+                  holdings[actualSym] = { shares: 0, market: data.market || 'TW' };
+              }
+              holdings[actualSym].shares += (data.shares || 0);
           });
       }
       // 再疊加目前主文件中的交易紀錄
@@ -142,7 +149,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
           if (r.type.includes('buy')) holdings[sym].shares += (Number(r.shares) || 0);
           else if (r.type.includes('sell')) holdings[sym].shares -= (Number(r.shares) || 0);
       });
-      Object.keys(holdings).forEach(k => { if (holdings[k].shares <= 0) delete holdings[k]; });
+      Object.keys(holdings).forEach(k => { if (holdings[k].shares <= 0.0001) delete holdings[k]; });
       return holdings;
   }, [assets.monthlyExpenses, assets.currentStockHoldings]);
 

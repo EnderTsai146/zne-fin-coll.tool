@@ -593,6 +593,9 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
                            <span style={{background:'rgba(120,120,128,0.08)', padding:'2px 6px', borderRadius:'6px', fontSize:'0.73rem', marginRight:'5px', fontWeight:'500'}}>
                              {item.investAction === 'buy' ? '買入' : item.investAction === 'sell' ? '賣出' : '當沖'}
                            </span>
+                           <span style={{fontSize:'0.75rem', color:'var(--accent-indigo)', marginRight:'5px', fontWeight:'600'}}>
+                             [{item.investAccount === 'jointCash' ? '🏫 共同' : (item.investAccount === 'userA' ? '🐶 恆恆' : '🐕 得得')}]
+                           </span>
                            {item.stockSymbol || { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[item.investType]}
                          </span>
                          <span style={{fontWeight:'500'}}>

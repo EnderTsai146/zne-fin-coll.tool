@@ -117,7 +117,7 @@ const InvestmentView = ({ assets }) => {
       
       // 清理已完全賣出的持倉
       Object.keys(holdings).forEach(k => { 
-        if (holdings[k].shares <= 0) {
+        if (holdings[k].shares <= 0.0001) {
           delete holdings[k]; 
         }
       });
@@ -229,8 +229,8 @@ const InvestmentView = ({ assets }) => {
       } else {
         // 台股：市價為 TWD
         const rawMarketValue = currentPriceUsd * holding.shares; // currentPriceUsd 其實是 TWD price for TW stocks
-        const fee = Math.max(20, Math.floor(rawMarketValue * 0.001425 * 0.6));
-        const tax = Math.floor(rawMarketValue * 0.003);
+        const fee = currentPriceUsd > 0 ? Math.max(20, Math.floor(rawMarketValue * 0.001425 * 0.6)) : 0;
+        const tax = currentPriceUsd > 0 ? Math.floor(rawMarketValue * 0.003) : 0;
         marketValueTwd = rawMarketValue - fee - tax;
         
         const profitTwd = marketValueTwd - totalCostTwd;
