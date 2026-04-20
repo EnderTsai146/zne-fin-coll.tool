@@ -81,6 +81,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [operatorName, setOperatorName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
   const [currentPage, setCurrentPage] = useState('overview');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
 
@@ -152,11 +153,13 @@ function App() {
       if (user) {
         setCurrentUser(user);
         setOperatorName(USER_MAPPING[user.email] || user.email.split('@')[0]);
+        // ★ 不要在此設 loading=false，等 Firestore 資料到位後再解鎖
       } else {
         setCurrentUser(null);
         setOperatorName('');
+        setDataReady(false);
+        setLoading(false); // 未登入時直接解鎖，讓 Login 頁面顯示
       }
-      setLoading(false);
     });
     return () => unsubscribeAuth();
   }, []);
@@ -304,10 +307,14 @@ function App() {
         if (needsUpdate) setDoc(docRef, data);
 
         setAssets(data);
+        setDataReady(true);
+        setLoading(false);
       } else {
         setDoc(docRef, assets);
+        setDataReady(true);
+        setLoading(false);
       }
-    }, (error) => console.error("資料讀取失敗:", error));
+    }, (error) => { console.error("資料讀取失敗:", error); setLoading(false); });
     return () => unsubscribe();
     // eslint-disable-next-line
   }, [currentUser]);
@@ -741,10 +748,44 @@ function App() {
     return { ...assetsCopy, lineNotifCount: newCountObj };
   };
 
-  if (loading) return (
-    <div className="loading-container">
-      <div className="loading-emoji">🥔</div>
-      <div className="loading-text">馬鈴薯甦醒中...</div>
+  if (loading || (currentUser && !dataReady)) return (
+    <div className="splash-screen">
+      {/* Orbital rings */}
+      <div className="splash-orbit splash-orbit-1" />
+      <div className="splash-orbit splash-orbit-2" />
+      <div className="splash-orbit splash-orbit-3" />
+      
+      {/* Glowing core */}
+      <div className="splash-core">
+        <div className="splash-core-glow" />
+        <div className="splash-emoji">🥔</div>
+      </div>
+      
+      {/* Particle dots */}
+      <div className="splash-particles">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="splash-particle" style={{
+            '--angle': `${i * 45}deg`,
+            '--delay': `${i * 0.15}s`,
+            '--distance': `${80 + (i % 3) * 20}px`
+          }} />
+        ))}
+      </div>
+      
+      {/* Text */}
+      <div className="splash-text-group">
+        <div className="splash-title">馬鈴薯甦醒中</div>
+        <div className="splash-dots">
+          <span className="splash-dot" style={{ animationDelay: '0s' }}>.</span>
+          <span className="splash-dot" style={{ animationDelay: '0.2s' }}>.</span>
+          <span className="splash-dot" style={{ animationDelay: '0.4s' }}>.</span>
+        </div>
+      </div>
+      
+      {/* Shimmer bar */}
+      <div className="splash-progress">
+        <div className="splash-progress-bar" />
+      </div>
     </div>
   );
   if (!currentUser) return <Login />;

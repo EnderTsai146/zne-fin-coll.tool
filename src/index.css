@@ -716,27 +716,220 @@ h4 {
   margin-bottom: 0;
 }
 
-/* Loading */
-.loading-container {
+/* ======================================================
+   === Premium Splash Screen — Potato Awakening ===
+   ====================================================== */
+.splash-screen {
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  gap: 16px;
+  background: radial-gradient(ellipse at 50% 40%, rgba(30, 35, 60, 0.95) 0%, rgba(10, 10, 14, 1) 70%);
+  z-index: 99999;
+  overflow: hidden;
 }
 
-.loading-emoji {
-  font-size: 3.5rem;
-  animation: float 2.5s ease-in-out infinite;
+/* --- Orbital Rings --- */
+.splash-orbit {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  pointer-events: none;
 }
 
-.loading-text {
+.splash-orbit-1 {
+  width: 200px; height: 200px;
+  border-color: rgba(0, 122, 255, 0.12);
+  animation: splashOrbitSpin 6s linear infinite;
+  box-shadow: 0 0 30px rgba(0, 122, 255, 0.06), inset 0 0 30px rgba(0, 122, 255, 0.04);
+}
+
+.splash-orbit-2 {
+  width: 280px; height: 280px;
+  border-color: rgba(88, 86, 214, 0.10);
+  animation: splashOrbitSpin 10s linear infinite reverse;
+  box-shadow: 0 0 40px rgba(88, 86, 214, 0.05), inset 0 0 40px rgba(88, 86, 214, 0.03);
+}
+
+.splash-orbit-3 {
+  width: 360px; height: 360px;
+  border-color: rgba(90, 200, 250, 0.07);
+  animation: splashOrbitSpin 16s linear infinite;
+  box-shadow: 0 0 50px rgba(90, 200, 250, 0.04);
+}
+
+/* Gradient arc on each orbit */
+.splash-orbit-1::after,
+.splash-orbit-2::after,
+.splash-orbit-3::after {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px; right: -1px; bottom: -1px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(0, 122, 255, 0.5);
+  filter: blur(1px);
+}
+
+.splash-orbit-2::after { border-top-color: rgba(175, 82, 222, 0.45); }
+.splash-orbit-3::after { border-top-color: rgba(90, 200, 250, 0.35); }
+
+@keyframes splashOrbitSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* --- Glowing Core --- */
+.splash-core {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-core-glow {
+  position: absolute;
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 122, 255, 0.25) 0%, rgba(88, 86, 214, 0.12) 40%, transparent 70%);
+  animation: splashCoreBreath 3s ease-in-out infinite;
+  filter: blur(20px);
+}
+
+@keyframes splashCoreBreath {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50%      { transform: scale(1.35); opacity: 1; }
+}
+
+.splash-emoji {
+  font-size: 4.5rem;
+  position: relative;
+  z-index: 3;
+  animation: splashPotatoFloat 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 20px rgba(0, 122, 255, 0.3)) drop-shadow(0 0 60px rgba(88, 86, 214, 0.15));
+}
+
+@keyframes splashPotatoFloat {
+  0%, 100% { transform: translateY(0) scale(1) rotate(0deg); }
+  25%      { transform: translateY(-10px) scale(1.04) rotate(-3deg); }
+  50%      { transform: translateY(-6px) scale(1.08) rotate(0deg); }
+  75%      { transform: translateY(-12px) scale(1.03) rotate(3deg); }
+}
+
+/* --- Particles --- */
+.splash-particles {
+  position: absolute;
+  z-index: 1;
+}
+
+.splash-particle {
+  position: absolute;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: rgba(0, 122, 255, 0.7);
+  box-shadow: 0 0 8px rgba(0, 122, 255, 0.5);
+  animation: splashParticleOrbit 4s ease-in-out infinite;
+  animation-delay: var(--delay);
+  transform: rotate(var(--angle)) translateX(var(--distance));
+}
+
+.splash-particle:nth-child(odd) {
+  background: rgba(175, 82, 222, 0.7);
+  box-shadow: 0 0 8px rgba(175, 82, 222, 0.5);
+  width: 3px; height: 3px;
+}
+
+.splash-particle:nth-child(3n) {
+  background: rgba(90, 200, 250, 0.7);
+  box-shadow: 0 0 8px rgba(90, 200, 250, 0.5);
+  width: 5px; height: 5px;
+}
+
+@keyframes splashParticleOrbit {
+  0%   { transform: rotate(var(--angle)) translateX(var(--distance)) scale(0.4); opacity: 0.2; }
+  50%  { transform: rotate(calc(var(--angle) + 180deg)) translateX(calc(var(--distance) + 15px)) scale(1); opacity: 1; }
+  100% { transform: rotate(calc(var(--angle) + 360deg)) translateX(var(--distance)) scale(0.4); opacity: 0.2; }
+}
+
+/* --- Text Group --- */
+.splash-text-group {
+  margin-top: 48px;
+  display: flex;
+  align-items: baseline;
+  z-index: 2;
+  animation: splashTextReveal 0.8s ease-out 0.3s both;
+}
+
+@keyframes splashTextReveal {
+  from { opacity: 0; transform: translateY(16px); filter: blur(8px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.splash-title {
   font-family: var(--font-family);
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(0, 122, 255, 0.8), rgba(175, 82, 222, 0.7));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: splashTitleShimmer 3s ease-in-out infinite;
+}
+
+@keyframes splashTitleShimmer {
+  0%, 100% { background-position: 0% center; }
+  50%      { background-position: 100% center; }
+}
+
+.splash-dots {
+  display: flex;
+  margin-left: 2px;
+}
+
+.splash-dot {
+  font-family: var(--font-family);
+  font-size: 1.4rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(0, 122, 255, 0.8));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: splashDotBounce 1.4s ease-in-out infinite;
+}
+
+@keyframes splashDotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+  30%           { transform: translateY(-6px); opacity: 1; }
+}
+
+/* --- Progress Shimmer Bar --- */
+.splash-progress {
+  position: absolute;
+  bottom: 80px;
+  width: 160px;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  z-index: 2;
+}
+
+.splash-progress-bar {
+  width: 40%;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, rgba(0, 122, 255, 0.7), rgba(175, 82, 222, 0.6), transparent);
+  animation: splashProgressSlide 1.8s ease-in-out infinite;
+}
+
+@keyframes splashProgressSlide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
 }
 
 /* ======================================================
