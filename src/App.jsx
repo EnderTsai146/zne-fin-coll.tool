@@ -111,6 +111,7 @@ function App() {
 
   const [archivedRecords, setArchivedRecords] = useState({});
   const [isFetchingArchive, setIsFetchingArchive] = useState(false);
+  const archivingInProgress = useRef(false);
 
   const loadArchiveMonth = useCallback(async (monthStr) => {
     if (!monthStr || archivedRecords[monthStr] !== undefined) return;
@@ -184,94 +185,119 @@ function App() {
            needsUpdate = true;
         }
 
-        // ★ 月度歸檔引擎 — 將 2 個完整月以前的記錄搬到 finance/arc_YYYY-MM（不刪除任何資料）
+        // ★ 安全月度歸檔引擎 — 序列化處理以防資料遺失
         if (data.monthlyExpenses && data.monthlyExpenses.length > 0) {
           try {
             const now = new Date();
-            // 保留當月 + 上個月，更早的歸檔
             const keepMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
             const keepCutoff = `${keepMonth.getFullYear()}-${String(keepMonth.getMonth() + 1).padStart(2, '0')}`;
 
-            // 將記錄分為「保留」和「待歸檔」
-            const toKeep = [];
-            const toArchive = {}; // grouped by YYYY-MM
+            const toArchive = {};
             data.monthlyExpenses.forEach(r => {
               const rMonth = (r.month || (r.date || '').slice(0, 7));
-              if (rMonth >= keepCutoff) {
-                toKeep.push(r);
-              } else {
+              if (rMonth < keepCutoff) {
                 if (!toArchive[rMonth]) toArchive[rMonth] = [];
                 toArchive[rMonth].push(r);
               }
             });
 
             const archiveMonths = Object.keys(toArchive).sort();
-            if (archiveMonths.length > 0) {
-              // 計算歸檔記錄中的 dailyNetWorth 快照
-              const sumAssets = (state) => {
-                if (!state) return 0;
-                const twd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
-                const usd = (state.userA_usd || 0) + (state.userB_usd || 0) + (state.jointCash_usd || 0);
-                const sumInv = (obj) => Object.values(obj || {}).reduce((s, v) => s + v, 0);
-                const invest = sumInv(state.jointInvestments) + sumInv(state.userInvestments?.userA) + sumInv(state.userInvestments?.userB);
-                return twd + Math.round(usd * (currentFxRate || 31.5)) + invest;
+            if (archiveMonths.length > 0 && !archivingInProgress.current) {
+              archivingInProgress.current = true;
+              console.log(`[系統優化] 觸發安全的序向歸檔機制，準備寫入：`, archiveMonths);
+
+              const runSafeArchival = async () => {
+                try {
+                  const sumAssets = (state) => {
+                    if (!state) return 0;
+                    const twd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
+                    const usd = (state.userA_usd || 0) + (state.userB_usd || 0) + (state.jointCash_usd || 0);
+                    const sumInv = (obj) => Object.values(obj || {}).reduce((s, v) => s + v, 0);
+                    const invest = sumInv(state.jointInvestments) + sumInv(state.userInvestments?.userA) + sumInv(state.userInvestments?.userB);
+                    return twd + Math.round(usd * (currentFxRate || 31.5)) + invest;
+                  };
+
+                  let archivedTimestamps = new Set();
+
+                  // 1. 先安全合併到個別歷史檔案（防止覆蓋）
+                  for (const month of archiveMonths) {
+                    const archiveDocRef = doc(db, "finance", `arc_${month}`);
+                    const arcSnap = await getDoc(archiveDocRef);
+                    const rawRecords = arcSnap.exists() ? (arcSnap.data().records || []) : [];
+                    
+                    const existingMap = new Map();
+                    rawRecords.forEach(r => existingMap.set(r.timestamp, r));
+                    
+                    toArchive[month].forEach(r => {
+                        existingMap.set(r.timestamp, r); // 如果有同時間戳的更新，以主檔案 (即將歸檔的這筆) 為主
+                        archivedTimestamps.add(r.timestamp);
+                    });
+
+                    await setDoc(archiveDocRef, {
+                      month: month,
+                      archivedAt: new Date().toISOString(),
+                      records: Array.from(existingMap.values())
+                    });
+                    console.log(`✅ 已安全合併歸檔 ${month}，共儲存 ${existingMap.size} 筆`);
+                  }
+
+                  // 2. 所有歷史檔案都確定寫入成功後，重新抓取最新的主檔案進行清理
+                  const mainDocRef = doc(db, "finance", "data");
+                  const mainSnap = await getDoc(mainDocRef);
+                  if (mainSnap.exists()) {
+                     const mainData = mainSnap.data();
+                     const safeMonthly = (mainData.monthlyExpenses || []).filter(r => !archivedTimestamps.has(r.timestamp));
+                     
+                     const newSnapshots = { ...(mainData.dailyNetWorth || {}) };
+                     const holdingsBase = mainData.currentStockHoldings ? { ...mainData.currentStockHoldings } : {};
+                     
+                     // 根據剛成功歸檔的資料更新快照與持股基準
+                     archiveMonths.forEach(month => {
+                       toArchive[month].forEach(r => {
+                         if (!r.isDeleted && r.auditTrail?.after && r.date && !newSnapshots[r.date]) {
+                             newSnapshots[r.date] = sumAssets(r.auditTrail.after);
+                         }
+                         if (!r.isDeleted && r.symbol) {
+                            const sym = r.symbol;
+                            const payer = r.payer ? r.payer.replace(/🐶|🐕/g, '') : '共同帳戶';
+                            const key = `${payer}_${sym}`;
+                            if (!holdingsBase[key]) holdingsBase[key] = { shares: 0, market: r.market || 'TW', costTwd: 0, costUsd: 0 };
+                            if (r.type?.includes('buy')) {
+                              holdingsBase[key].shares += (Number(r.shares) || 0);
+                              holdingsBase[key].costTwd += (Number(r.total) || 0);
+                              holdingsBase[key].costUsd += (Number(r.usdAmount) || 0);
+                            } else if (r.type?.includes('sell')) {
+                              const sellShares = Number(r.shares) || 0;
+                              const ratio = holdingsBase[key].shares > 0 ? sellShares / holdingsBase[key].shares : 0;
+                              holdingsBase[key].costTwd -= (holdingsBase[key].costTwd * ratio);
+                              holdingsBase[key].costUsd -= (holdingsBase[key].costUsd * ratio);
+                              holdingsBase[key].shares -= sellShares;
+                            }
+                         }
+                       });
+                     });
+                     
+                     Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
+
+                     await setDoc(mainDocRef, {
+                        ...mainData,
+                        monthlyExpenses: safeMonthly,
+                        dailyNetWorth: newSnapshots,
+                        currentStockHoldings: holdingsBase
+                     }, { merge: true });
+                     console.log(`🚀 主檔案已成功清理完成，系統永續優化成功`);
+                  }
+                } catch (error) {
+                  console.error("❌ 歸檔引擎中途連線失敗，已中止清理主流程。確保資料不會遺失:", error);
+                } finally {
+                  archivingInProgress.current = false;
+                }
               };
 
-              const newSnapshots = { ...(data.dailyNetWorth || {}) };
-              // 累積持股基底：從即將歸檔的記錄中提取持股資訊
-              const holdingsBase = data.currentStockHoldings ? { ...data.currentStockHoldings } : {};
-
-              archiveMonths.forEach(month => {
-                const records = toArchive[month];
-                // 為每個有 auditTrail 的記錄的日期生成快照
-                records.filter(r => !r.isDeleted && r.auditTrail?.after).forEach(r => {
-                  if (r.date && !newSnapshots[r.date]) {
-                    newSnapshots[r.date] = sumAssets(r.auditTrail.after);
-                  }
-                });
-                // 累積持股
-                records.filter(r => !r.isDeleted && r.symbol).forEach(r => {
-                  const sym = r.symbol;
-                  const payer = r.payer ? r.payer.replace(/🐶|🐕/g, '') : '共同帳戶';
-                  const key = `${payer}_${sym}`;
-                  if (!holdingsBase[key]) holdingsBase[key] = { shares: 0, market: r.market || 'TW', costTwd: 0, costUsd: 0 };
-                  
-                  if (r.type?.includes('buy')) {
-                    holdingsBase[key].shares += (Number(r.shares) || 0);
-                    holdingsBase[key].costTwd += (Number(r.total) || 0);
-                    holdingsBase[key].costUsd += (Number(r.usdAmount) || 0);
-                  } else if (r.type?.includes('sell')) {
-                    const sellShares = Number(r.shares) || 0;
-                    const ratio = holdingsBase[key].shares > 0 ? sellShares / holdingsBase[key].shares : 0;
-                    holdingsBase[key].costTwd -= (holdingsBase[key].costTwd * ratio);
-                    holdingsBase[key].costUsd -= (holdingsBase[key].costUsd * ratio);
-                    holdingsBase[key].shares -= sellShares;
-                  }
-                });
-              });
-
-              // 清理零股或負股的持股
-              Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
-
-              // 非同步寫入歸檔文件（不阻塞主流程）
-              archiveMonths.forEach(month => {
-                const archiveDocRef = doc(db, "finance", `arc_${month}`);
-                setDoc(archiveDocRef, {
-                  month: month,
-                  archivedAt: new Date().toISOString(),
-                  records: toArchive[month]
-                }).catch(e => console.error(`歸檔 ${month} 失敗:`, e));
-              });
-
-              // 更新主文件
-              data.monthlyExpenses = toKeep;
-              data.dailyNetWorth = newSnapshots;
-              data.currentStockHoldings = holdingsBase;
-              needsUpdate = true;
-              console.log(`📦 已歸檔 ${archiveMonths.join(', ')} 共 ${Object.values(toArchive).flat().length} 筆記錄`);
+              runSafeArchival();
             }
           } catch (error) {
-            console.error("歸檔引擎處理時發生錯誤，跳過歸檔階段以確保正常載入資料:", error);
+            console.error("歸檔引擎觸發階段發生例外:", error);
           }
         }
 
@@ -479,31 +505,57 @@ function App() {
     const oldDate = targetRecord.date;
     const newDate = newData.date;
 
-    list[context.index] = {
+    // ★ 鎖定共同支出的舊分類，避免改變備註後統計圓餅圖跟著跑位
+    let subCategory = targetRecord.subCategory;
+    if (!subCategory && targetRecord.type === 'spend') {
+        const oldNote = targetRecord.note || '';
+        if (oldNote.includes('餐費')) subCategory = '餐費';
+        else if (oldNote.includes('購物')) subCategory = '購物';
+        else if (oldNote.includes('固定')) subCategory = '固定費用';
+        else subCategory = '其他';
+    }
+
+    const mutatedRecord = {
       ...targetRecord,
       date: newDate,
       month: newDate.slice(0, 7),
       category: newData.category,
       note: newData.note,
+      ...(subCategory && { subCategory }),
       operator: operatorName
     };
 
-    // 清除舊日期與新日期的 dailyNetWorth 避免快照干擾重新計算的真實資產線
-    if (newAssets.dailyNetWorth) {
-      if (newAssets.dailyNetWorth[oldDate]) delete newAssets.dailyNetWorth[oldDate];
-      if (newAssets.dailyNetWorth[newDate]) delete newAssets.dailyNetWorth[newDate];
-    }
-
     if (context.source === 'main') {
+      // 快照刪除只在活躍月進行（保護歷史冷資料庫不會因為斷聯而失去計算基準）
+      if (newAssets.dailyNetWorth) {
+        if (newAssets.dailyNetWorth[oldDate]) delete newAssets.dailyNetWorth[oldDate];
+        if (newAssets.dailyNetWorth[newDate]) delete newAssets.dailyNetWorth[newDate];
+      }
+      list[context.index] = mutatedRecord;
       newAssets.monthlyExpenses = list;
     } else {
-      // 若為歷史庫，更新暫存並回推 firebase 歷史庫
-      setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
-      setDoc(doc(db, "finance", `arc_${context.month}`), {
-        month: context.month,
-        archivedAt: new Date().toISOString(),
-        records: list
-      }).catch(e => alert("歸檔紀錄唯讀同步失敗：" + e.message));
+      const targetMonth = newDate.slice(0, 7);
+      if (targetMonth !== context.month) {
+        // ★ 跨月修復機制：若修改的日期跨越當前所屬月份，從舊歸檔庫中拔除，遣返回主區。
+        list.splice(context.index, 1);
+        setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
+        setDoc(doc(db, "finance", `arc_${context.month}`), {
+          month: context.month,
+          archivedAt: new Date().toISOString(),
+          records: list
+        }).catch(e => alert("歷史庫舊紀錄移除失敗：" + e.message));
+        
+        // 遣送回主動區，讓安全的 Archival Engine 等等把它接走重新安置。
+        newAssets.monthlyExpenses = [...(newAssets.monthlyExpenses || []), mutatedRecord];
+      } else {
+        list[context.index] = mutatedRecord;
+        setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
+        setDoc(doc(db, "finance", `arc_${context.month}`), {
+          month: context.month,
+          archivedAt: new Date().toISOString(),
+          records: list
+        }).catch(e => alert("歸檔紀錄唯讀同步失敗：" + e.message));
+      }
     }
 
     saveToCloud(newAssets);
@@ -524,6 +576,7 @@ function App() {
 
     if (!record) return;
     if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
+    if (record.category === '作廢退款') return alert("❌ 「作廢退款」紀錄不可再次作廢！");
     if (record.isSettled && record.advancedBy) return alert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
 
     const reason = window.prompt("⚠️ 即將作廢此紀錄，系統將自動還原對應的金額。\n請輸入作廢原因（必填）：");

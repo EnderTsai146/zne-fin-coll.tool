@@ -124,8 +124,12 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                 if (r.type === 'expense' && r.details) {
                     catStats['餐費'] += Number(r.details.food || 0); catStats['購物'] += Number(r.details.shopping || 0); catStats['固定費用'] += Number(r.details.fixed || 0); catStats['其他'] += Number(r.details.other || 0);
                 } else if (r.type === 'spend') {
-                    const note = r.note || '';
-                    if (note.includes('餐費')) catStats['餐費'] += r.total; else if (note.includes('購物')) catStats['購物'] += r.total; else if (note.includes('固定')) catStats['固定費用'] += r.total; else catStats['其他'] += r.total;
+                    if (r.subCategory) {
+                        catStats[r.subCategory === '固定費用' ? '固定費用' : (r.subCategory || '其他')] += r.total;
+                    } else {
+                        const note = r.note || '';
+                        if (note.includes('餐費')) catStats['餐費'] += r.total; else if (note.includes('購物')) catStats['購物'] += r.total; else if (note.includes('固定')) catStats['固定費用'] += r.total; else catStats['其他'] += r.total;
+                    }
                 }
             }
         });
@@ -372,7 +376,9 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                             {!isDeleted ? (
                                                 <>
                                                     <button onClick={() => setEditModalData({ context: record._context, index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(0,122,255,0.08)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
-                                                    <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？\n作廢後系統會自動將金額加回或扣除，恢復到交易前的狀態。`)) onDelete(record._context); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                                                    {record.category !== '作廢退款' && (
+                                                        <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？\\n作廢後系統會自動將金額加回或扣除，恢復到交易前的狀態。`)) onDelete(record._context); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                                                    )}
                                                 </>
                                             ) : (
                                                 <div style={{ background: 'rgba(255,149,0,0.1)', color: 'var(--accent-orange)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', fontSize: '0.73rem', fontWeight: '600' }}>🚫 已作廢</div>
@@ -469,8 +475,8 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         </div>
 
                         <div style={{ marginBottom: '10px' }}>
-                            <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>分類</label>
-                            <input type="text" className="glass-input" value={editModalData.category} onChange={e => setEditModalData({ ...editModalData, category: e.target.value })} style={{ width: '100%', boxSizing: 'border-box' }} />
+                            <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>分類 (唯讀)</label>
+                            <input type="text" className="glass-input" value={editModalData.category} disabled style={{ width: '100%', boxSizing: 'border-box', opacity: 0.7, cursor: 'not-allowed', background: 'rgba(255,255,255,0.02)' }} />
                         </div>
 
                         <div style={{ marginBottom: '18px' }}>

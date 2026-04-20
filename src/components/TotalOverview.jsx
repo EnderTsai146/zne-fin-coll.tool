@@ -29,6 +29,17 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     }
   }, [selectedChartDate, loadArchiveMonth]);
 
+  // ★ 當開啟「帳戶變動軌跡明細」時，自動背景載入近三個月的資料，確保滾動平順不斷層
+  useEffect(() => {
+    if (activeHistory && loadArchiveMonth) {
+      const now = new Date();
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        loadArchiveMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+    }
+  }, [activeHistory, loadArchiveMonth]);
+
   // ★ 當帳戶明細要求超大範圍時，自動遍歷該區間背景提領
   useEffect(() => {
     if (activeHistory && historyDateRange.start && historyDateRange.end && loadArchiveMonth) {
@@ -341,7 +352,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
   // ----------------------------------------------------
   const getAccountHistory = () => {
       if (!activeHistory) return [];
-      let filtered = (combinedHistory || []).filter(r => !r.isDeleted);
+      let filtered = (combinedHistory || []);
       
       filtered = filtered.filter(r => {
           if (!r.auditTrail || !r.auditTrail.before || !r.auditTrail.after) return false;
@@ -573,9 +584,9 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     }
 
                     return (
-                        <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '8px', opacity: record.isDeleted ? 0.6 : 1 }}>
                             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display:'flex', justifyContent:'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: 'var(--radius-xs)' }}>
-                                <span style={{fontWeight: '600', color: 'var(--text-primary)'}}>📅 帳單日: {record.date}</span>
+                                <span style={{fontWeight: '600', color: 'var(--text-primary)'}}>📅 帳單日: {record.date} {record.isDeleted && <span style={{color: 'var(--accent-red)', marginLeft: '5px'}}>(🚫已作廢)</span>}</span>
                                 <span>⏱ 登錄: {formatDateTime(record.timestamp)} | 👤 {record.operator || '系統'}</span>
                             </div>
                             
@@ -586,8 +597,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ color: 'var(--text-primary)', fontSize: '0.92rem', wordBreak: 'break-word', paddingRight: '10px', fontWeight: '700' }}>📝 {record.note}</div>
-                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>總額: {formatMoney(record.total)}</div>
+                                <div style={{ color: 'var(--text-primary)', fontSize: '0.92rem', wordBreak: 'break-word', paddingRight: '10px', fontWeight: '700', textDecoration: record.isDeleted ? 'line-through' : 'none' }}>📝 {record.note}</div>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', textDecoration: record.isDeleted ? 'line-through' : 'none' }}>總額: {formatMoney(record.total)}</div>
                             </div>
                             
                             {b && a && (
