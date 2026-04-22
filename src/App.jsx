@@ -82,6 +82,9 @@ function App() {
   const [operatorName, setOperatorName] = useState('');
   const [loading, setLoading] = useState(true);
   const [dataReady, setDataReady] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [splashPhase, setSplashPhase] = useState('loading');
+  const dataReadyForSplash = useRef(false);
   const [currentPage, setCurrentPage] = useState('overview');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
 
@@ -89,6 +92,52 @@ function App() {
   useEffect(() => {
     document.body.setAttribute('data-page', currentPage);
   }, [currentPage]);
+
+  // ★ 馬鈴薯進度條動畫引擎
+  useEffect(() => {
+    if (splashPhase === 'done' || splashPhase === 'exit') return;
+    const interval = setInterval(() => {
+      setLoadProgress(prev => {
+        if (prev >= 100) return 100;
+        if (dataReadyForSplash.current) return Math.min(100, prev + 2.5);
+        if (prev < 30) return prev + 0.8;
+        if (prev < 55) return prev + 0.4;
+        if (prev < 75) return prev + 0.12;
+        if (prev < 85) return prev + 0.03;
+        return prev;
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, [splashPhase]);
+
+  // ★ 追蹤實際載入狀態 → 驅動進度條衝刺
+  useEffect(() => {
+    if (!loading && !currentUser) setSplashPhase('done');
+    if (!loading && currentUser && dataReady) dataReadyForSplash.current = true;
+  }, [loading, currentUser, dataReady]);
+
+  // ★ 進度到 100% → 觸發過場
+  useEffect(() => {
+    if (loadProgress >= 100 && splashPhase === 'loading') setSplashPhase('filled');
+  }, [loadProgress, splashPhase]);
+
+  // ★ 過場動畫時間軸
+  useEffect(() => {
+    if (splashPhase === 'filled') {
+      const t = setTimeout(() => setSplashPhase('exit'), 800);
+      return () => clearTimeout(t);
+    }
+    if (splashPhase === 'exit') {
+      const t = setTimeout(() => setSplashPhase('done'), 700);
+      return () => clearTimeout(t);
+    }
+  }, [splashPhase]);
+
+  // ★ 超時安全閥：15 秒後強制完成
+  useEffect(() => {
+    const timeout = setTimeout(() => { dataReadyForSplash.current = true; }, 15000);
+    return () => clearTimeout(timeout);
+  }, []);
   
   const [showLineSettings, setShowLineSettings] = useState(false);
   const [tempLineCount, setTempLineCount] = useState('');
@@ -113,6 +162,7 @@ function App() {
   const [archivedRecords, setArchivedRecords] = useState({});
   const [isFetchingArchive, setIsFetchingArchive] = useState(false);
   const archivingInProgress = useRef(false);
+  const repairAttempted = useRef(false);
 
   const loadArchiveMonth = useCallback(async (monthStr) => {
     if (!monthStr || archivedRecords[monthStr] !== undefined) return;
@@ -253,6 +303,13 @@ function App() {
                      
                      const newSnapshots = { ...(mainData.dailyNetWorth || {}) };
                      const holdingsBase = mainData.currentStockHoldings ? { ...mainData.currentStockHoldings } : {};
+                     // ★ 防禦性初始化：確保所有現有持股項目都有成本欄位
+                     Object.keys(holdingsBase).forEach(k => {
+                       if (holdingsBase[k] && typeof holdingsBase[k] === 'object') {
+                         if (holdingsBase[k].costTwd === undefined) holdingsBase[k].costTwd = 0;
+                         if (holdingsBase[k].costUsd === undefined) holdingsBase[k].costUsd = 0;
+                       }
+                     });
                      
                      // 根據剛成功歸檔的資料更新快照與持股基準
                      archiveMonths.forEach(month => {
@@ -318,6 +375,66 @@ function App() {
     return () => unsubscribe();
     // eslint-disable-next-line
   }, [currentUser]);
+
+  // ★ 自動修復：偵測持股成本資料缺失並從歷史歸檔重建
+  useEffect(() => {
+    if (repairAttempted.current || !currentUser || !dataReady) return;
+    const holdings = assets.currentStockHoldings;
+    if (!holdings) return;
+    const broken = Object.entries(holdings).filter(([, v]) =>
+      v && v.shares > 0 && !v.costTwd && !v.costUsd
+    );
+    if (broken.length === 0) return;
+    repairAttempted.current = true;
+    console.log('[自動修復] 偵測到持股成本缺失:', broken.map(b => b[0]));
+    const doRepair = async () => {
+      try {
+        const updated = JSON.parse(JSON.stringify(holdings));
+        const now = new Date();
+        const allRecs = [...(assets.monthlyExpenses || [])];
+        for (let i = 18; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          try {
+            const snap = await getDoc(doc(db, "finance", `arc_${m}`));
+            if (snap.exists() && snap.data().records) allRecs.push(...snap.data().records);
+          } catch (_) { /* skip */ }
+        }
+        allRecs.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || '').localeCompare(b.timestamp || ''));
+        let changed = false;
+        for (const [key] of broken) {
+          let sym = key, ownerFilter = '共同帳戶';
+          if (key.includes('_')) { const p = key.split('_'); ownerFilter = p[0]; sym = p.slice(1).join('_'); }
+          const lots = [];
+          allRecs.filter(r => !r.isDeleted && r.symbol === sym && r.payer && r.payer.replace(/🐶|🐕/g, '').includes(ownerFilter))
+            .forEach(r => {
+              if (r.type?.includes('buy')) {
+                lots.push({ shares: Number(r.shares) || 0, costTwd: Number(r.total) || 0, costUsd: Number(r.usdAmount) || 0 });
+              } else if (r.type?.includes('sell')) {
+                let rem = Number(r.shares) || 0;
+                while (rem > 0 && lots.length > 0) {
+                  if (lots[0].shares <= rem) { rem -= lots[0].shares; lots.shift(); }
+                  else { const f = rem / lots[0].shares; lots[0].costTwd *= (1 - f); lots[0].costUsd *= (1 - f); lots[0].shares -= rem; rem = 0; }
+                }
+              }
+            });
+          const costTwd = lots.reduce((s, l) => s + l.costTwd, 0);
+          const costUsd = lots.reduce((s, l) => s + l.costUsd, 0);
+          if (costTwd > 0 || costUsd > 0) {
+            updated[key] = { ...updated[key], costTwd, costUsd };
+            changed = true;
+            console.log(`[自動修復] ${key}: costTwd=${Math.round(costTwd)}, costUsd=${costUsd.toFixed(2)}`);
+          }
+        }
+        if (changed) {
+          await setDoc(doc(db, "finance", "data"), { currentStockHoldings: updated }, { merge: true });
+          console.log('[自動修復] 持股成本修復完成');
+        }
+      } catch (err) { console.error('[自動修復] 修復失敗:', err); }
+    };
+    doRepair();
+    // eslint-disable-next-line
+  }, [currentUser, dataReady]);
 
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
@@ -748,8 +865,11 @@ function App() {
     return { ...assetsCopy, lineNotifCount: newCountObj };
   };
 
-  if (loading || (currentUser && !dataReady)) return (
-    <div className="splash-screen">
+  if (splashPhase !== 'done' && (loading || currentUser)) return (
+    <div className={`splash-screen splash-phase-${splashPhase}`}>
+      {/* Background aurora */}
+      <div className="splash-aurora" />
+
       {/* Orbital rings */}
       <div className="splash-orbit splash-orbit-1" />
       <div className="splash-orbit splash-orbit-2" />
@@ -772,20 +892,57 @@ function App() {
         ))}
       </div>
       
-      {/* Text */}
-      <div className="splash-text-group">
-        <div className="splash-title">馬鈴薯甦醒中</div>
-        <div className="splash-dots">
-          <span className="splash-dot" style={{ animationDelay: '0s' }}>.</span>
-          <span className="splash-dot" style={{ animationDelay: '0.2s' }}>.</span>
-          <span className="splash-dot" style={{ animationDelay: '0.4s' }}>.</span>
+      {/* ★ Potato Progress Bar */}
+      <div className="potato-bar-container">
+        <div className="potato-bar">
+          <div className="potato-bar-fill" style={{ height: `${loadProgress}%` }}>
+            {loadProgress > 15 && (
+              <div className="potato-bar-bubbles">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="potato-bubble" style={{
+                    '--bubble-delay': `${i * 0.35}s`,
+                    '--bubble-x': `${15 + i * 16}%`,
+                    '--bubble-size': `${3 + (i % 3) * 2}px`
+                  }} />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="potato-bar-spots">
+            <div className="potato-spot" style={{ top: '18%', left: '15%' }} />
+            <div className="potato-spot" style={{ top: '55%', left: '78%' }} />
+            <div className="potato-spot" style={{ top: '72%', left: '30%' }} />
+          </div>
+          <div className="potato-bar-shine" />
+          <div className="potato-bar-text">{Math.round(loadProgress)}%</div>
         </div>
       </div>
-      
-      {/* Shimmer bar */}
-      <div className="splash-progress">
-        <div className="splash-progress-bar" />
+
+      {/* Text */}
+      <div className="splash-text-group">
+        <div className="splash-title">
+          {splashPhase === 'filled' || splashPhase === 'exit' ? '馬鈴薯已甦醒！' : '馬鈴薯甦醒中'}
+        </div>
+        {splashPhase === 'loading' && (
+          <div className="splash-dots">
+            <span className="splash-dot" style={{ animationDelay: '0s' }}>.</span>
+            <span className="splash-dot" style={{ animationDelay: '0.2s' }}>.</span>
+            <span className="splash-dot" style={{ animationDelay: '0.4s' }}>.</span>
+          </div>
+        )}
       </div>
+      
+      {/* Golden burst rings (on fill complete) */}
+      {(splashPhase === 'filled' || splashPhase === 'exit') && (
+        <div className="splash-golden-burst">
+          <div className="splash-burst-ring splash-burst-ring-1" />
+          <div className="splash-burst-ring splash-burst-ring-2" />
+          <div className="splash-burst-ring splash-burst-ring-3" />
+        </div>
+      )}
+
+      {/* Flash overlay on exit */}
+      {splashPhase === 'exit' && <div className="splash-flash-overlay" />}
     </div>
   );
   if (!currentUser) return <Login />;
