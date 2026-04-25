@@ -6,6 +6,7 @@ import MonthlyView from './components/MonthlyView';
 import AssetTransfer from './components/AssetTransfer';
 import InvestmentView from './components/InvestmentView';
 import ExpenseEntry from './components/ExpenseEntry';
+import ReviewView from './components/ReviewView';
 import './index.css';
 import { db, auth } from './firebase';
 import { doc, onSnapshot, setDoc, getDoc } from "firebase/firestore";
@@ -21,6 +22,7 @@ const USER_MAPPING = {
 const NAV_ITEMS = [
   { id: 'overview', icon: '🏠', label: '總覽' },
   { id: 'monthly', icon: '📊', label: '紀錄' },
+  { id: 'review',  icon: '📖', label: '回顧' },
   { id: 'invest',  icon: '📈', label: '投資' },
   { id: 'transfer', icon: '🛠️', label: '操作' },
   { id: 'expense', icon: '✍️', label: '記帳' }
@@ -1091,6 +1093,7 @@ function App() {
           />
         )}
 
+        {currentPage === 'review' && <ReviewView assets={assets} combinedHistory={getCombinedHistory()} loadArchiveMonth={loadArchiveMonth} />}
         {currentPage === 'invest' && <InvestmentView assets={assets} />}
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} />}
