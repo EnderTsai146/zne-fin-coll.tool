@@ -189,6 +189,12 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     // 當篩選條件變更時重置顯示數量
     useEffect(() => { setRenderCount(15); }, [filterDate, filterType, filterUser]);
 
+    const sortedHistory = useMemo(() =>
+        [...filteredHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
+        [filteredHistory]
+    );
+    const visibleHistory = sortedHistory.slice(0, renderCount);
+
     useEffect(() => {
         const sentinel = loadMoreRef.current;
         if (!sentinel) return;
@@ -198,14 +204,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         );
         observer.observe(sentinel);
         return () => observer.disconnect();
-    // ★ Fix: 加入依賴陣列，避免每次 render 都重建/銷毀 observer
-    }, [sortedHistory.length]);
-
-    const sortedHistory = useMemo(() =>
-        [...filteredHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
-        [filteredHistory]
-    );
-    const visibleHistory = sortedHistory.slice(0, renderCount);
+    }, [filteredHistory.length]);
 
     return (
         <div>

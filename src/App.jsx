@@ -954,12 +954,52 @@ function App() {
   );
   if (!currentUser) return <Login />;
 
-  const Topbar = () => {
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const lineCount = (assets.lineNotifCount && assets.lineNotifCount.month === currentMonth) ? assets.lineNotifCount.count : 0;
-    const limitWarning = lineCount >= 185;
+  // ★ Fix: 不再定義為 render 內的元件，改為預計算變數 + 內嵌 JSX，避免輸入時元件重建導致失焦
+  const currentMonth_tb = new Date().toISOString().slice(0, 7);
+  const lineCount_tb = (assets.lineNotifCount && assets.lineNotifCount.month === currentMonth_tb) ? assets.lineNotifCount.count : 0;
+  const limitWarning_tb = lineCount_tb >= 185;
+  const isBatch_ls = assets.lineConfig?.batchMode || false;
 
-    return (
+  const handleToggleBatchMode = () => {
+    if (isBatch_ls) {
+      let willSend = false;
+      if (assets.pendingLineNotifications && assets.pendingLineNotifications.length > 0) {
+        const summaryList = assets.pendingLineNotifications.map((n, i) => `${i+1}. ${n.title}: ${n.note} (${n.amount})`).join('\\n').slice(0, 800);
+        const batchPayload = {
+          title: "手動批次變動彙整",
+          amount: `共 ${assets.pendingLineNotifications.length} 筆`,
+          category: "系統彙整",
+          note: summaryList,
+          date: new Date().toISOString().split('T')[0] + '（本日期為系統彙整日，以上逐筆個別日期請至App中查看。）',
+          color: "#9b59b6",
+          operator: "累積總結推播",
+          isSummary: true
+        };
+        sendLineNotification(batchPayload);
+        willSend = true;
+        alert(`📤 已為您合併發出共 ${assets.pendingLineNotifications.length} 筆通知！`);
+      } else {
+         alert(`沒有累積等待中的通知。已關閉暫存模式。`);
+      }
+      const finalAssets = getUpdatedAssetsWithLineCount({
+         ...assets,
+         pendingLineNotifications: [],
+         lineConfig: { ...assets.lineConfig, batchMode: false }
+      }, willSend ? 1 : 0);
+      saveToCloud(finalAssets);
+    } else {
+      saveToCloud({
+         ...assets,
+         lineConfig: { ...assets.lineConfig, batchMode: true }
+      });
+    }
+  };
+
+  /* navItems & BottomNav moved to module level for stable pill animation */
+
+  return (
+    <div style={{ paddingBottom: '110px' }}>
+      {/* ★ Topbar — 內嵌 JSX */}
       <nav className="glass-nav" style={{ borderRadius: '0 0 20px 20px', marginBottom: '16px' }}>
         <div style={{ fontSize: '1.15rem', lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontSize: '1.3rem' }}>🥔</span>
@@ -967,119 +1007,14 @@ function App() {
           <span style={{ fontSize: '0.7rem', fontWeight: '500', color: 'var(--text-secondary)', marginLeft: '2px' }}>({operatorName})</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => { setTempLineCount(lineCount); setShowLineSettings(true); }}
-            style={{
-              fontSize: '0.72rem', fontFamily: 'var(--font-family)',
-              background: limitWarning ? 'rgba(255,59,48,0.08)' : 'rgba(120,120,128,0.08)',
-              color: limitWarning ? 'var(--accent-red)' : 'var(--text-secondary)',
-              padding: '6px 12px', borderRadius: 'var(--radius-pill)',
-              display: 'flex', alignItems: 'center', gap: '4px',
-              fontWeight: limitWarning ? '700' : '500',
-              border: limitWarning ? '1px solid rgba(255,59,48,0.25)' : '1px solid transparent',
-              animation: limitWarning ? 'pulseRed 1.5s infinite' : 'none',
-              cursor: 'pointer', transition: 'all 0.2s ease'
-            }}
-          >
-            💬 {lineCount}/200
-            {limitWarning && <span>⚠️</span>}
+          <button onClick={() => { setTempLineCount(lineCount_tb); setShowLineSettings(true); }} style={{ fontSize: '0.72rem', fontFamily: 'var(--font-family)', background: limitWarning_tb ? 'rgba(255,59,48,0.08)' : 'rgba(120,120,128,0.08)', color: limitWarning_tb ? 'var(--accent-red)' : 'var(--text-secondary)', padding: '6px 12px', borderRadius: 'var(--radius-pill)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: limitWarning_tb ? '700' : '500', border: limitWarning_tb ? '1px solid rgba(255,59,48,0.25)' : '1px solid transparent', animation: limitWarning_tb ? 'pulseRed 1.5s infinite' : 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+            💬 {lineCount_tb}/200
+            {limitWarning_tb && <span>⚠️</span>}
           </button>
-          <button
-            className="glass-btn glass-btn-danger"
-            style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-            onClick={handleLogout}
-          >登出</button>
+          <button className="glass-btn glass-btn-danger" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={handleLogout}>登出</button>
         </div>
       </nav>
-    );
-  };
 
-  const LineSettingsModal = () => {
-    if (!showLineSettings) return null;
-    const isBatch = assets.lineConfig?.batchMode || false;
-    
-    const handleToggleBatchMode = () => {
-      if (isBatch) {
-        // 從開啟狀態（收集模式）切換為關閉：立刻發出所有累積的通知並清空原本等候名單
-        let willSend = false;
-        
-        if (assets.pendingLineNotifications && assets.pendingLineNotifications.length > 0) {
-          const summaryList = assets.pendingLineNotifications.map((n, i) => `${i+1}. ${n.title}: ${n.note} (${n.amount})`).join('\\n').slice(0, 800);
-          const batchPayload = {
-            title: "手動批次變動彙整",
-            amount: `共 ${assets.pendingLineNotifications.length} 筆`,
-            category: "系統彙整",
-            note: summaryList,
-            date: new Date().toISOString().split('T')[0] + '（本日期為系統彙整日，以上逐筆個別日期請至App中查看。）',
-            color: "#9b59b6",
-            operator: "累積總結推播",
-            isSummary: true
-          };
-          sendLineNotification(batchPayload);
-          willSend = true;
-          alert(`📤 已為您合併發出共 ${assets.pendingLineNotifications.length} 筆通知！`);
-        } else {
-           alert(`沒有累積等待中的通知。已關閉暫存模式。`);
-        }
-        
-        const finalAssets = getUpdatedAssetsWithLineCount({
-           ...assets,
-           pendingLineNotifications: [],
-           lineConfig: { ...assets.lineConfig, batchMode: false }
-        }, willSend ? 1 : 0);
-        
-        saveToCloud(finalAssets);
-      } else {
-        // 從關閉切換為開啟：狀態變為暫停推播並累積新帳單
-        saveToCloud({
-           ...assets,
-           lineConfig: { ...assets.lineConfig, batchMode: true }
-        });
-      }
-    };
-    
-    return (
-      <div className="modal-backdrop" onClick={() => setShowLineSettings(false)}>
-         <div className="modal-content glass-card" style={{ padding:'28px', position:'relative' }} onClick={e => e.stopPropagation()}>
-            <button onClick={()=>setShowLineSettings(false)} style={{position:'absolute', right:'16px', top:'12px', background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'var(--text-tertiary)', fontWeight:'300'}}>&times;</button>
-            <h3 style={{marginTop:0, marginBottom:'20px', fontWeight:'700', letterSpacing:'-0.01em'}}>💬 系統通知管理</h3>
-            
-            <div style={{marginBottom:'18px'}}>
-              <label style={{display:'block', fontSize:'0.85rem', color:'var(--text-secondary)', marginBottom:'6px', fontWeight:'600'}}>手動校正當月計數</label>
-              <input type="number" className="glass-input" value={tempLineCount} onChange={e=>setTempLineCount(e.target.value)} placeholder="強制覆寫系統已發送數量" style={{marginBottom:0}} />
-            </div>
-
-            <div style={{marginBottom:'22px', padding:'16px', background:'rgba(120,120,128,0.06)', borderRadius:'var(--radius-md)', border: isBatch ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition:'all 0.3s ease'}}>
-              <label style={{display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer'}}>
-                <span style={{fontWeight:'600', fontSize:'0.92rem', color: isBatch ? 'var(--accent-blue)' : 'var(--text-primary)'}}>
-                  {isBatch ? '📦 已暫停 Line 推播並開始收集' : '📦 暫停推播並開始收集新通知'}
-                </span>
-                <input type="checkbox" checked={isBatch} onChange={handleToggleBatchMode} style={{transform:'scale(1.3)', accentColor:'var(--accent-blue)'}} />
-              </label>
-              <p style={{fontSize:'0.73rem', color:'var(--text-tertiary)', marginTop:'10px', lineHeight:'1.6'}}>
-                開啟此開關以暫停每筆獨立提醒，所有的操作將存入雲端等候名單。當你將此開關「關閉」時，會一次性合開發送所有等候中的變動。
-              </p>
-              {isBatch && (
-                <div style={{fontSize:'0.82rem', color:'var(--accent-orange)', marginTop:'10px', fontWeight:'600', animation:'slideUpFade 0.3s ease-out'}}>
-                   🛒 等待發送的通知數量：{assets.pendingLineNotifications?.length || 0} 筆
-                </div>
-              )}
-            </div>
-
-            <button className="glass-btn glass-btn-cta" style={{width:'100%', fontWeight:'700'}} onClick={() => {
-               saveToCloud({ ...assets, lineNotifCount: { month: new Date().toISOString().slice(0, 7), count: Number(tempLineCount) || 0 } });
-               setShowLineSettings(false);
-            }}>確認儲存設定</button>
-         </div>
-      </div>
-    );
-  };
-
-  /* navItems & BottomNav moved to module level for stable pill animation */
-
-  return (
-    <div style={{ paddingBottom: '110px' }}>
-      <Topbar />
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
 
         {currentPage === 'overview' && <TotalOverview assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} isFetchingArchive={isFetchingArchive} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
@@ -1103,7 +1038,40 @@ function App() {
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} />}
       </div>
-      <LineSettingsModal />
+
+      {/* ★ LineSettingsModal — 內嵌 JSX，避免元件重建導致輸入框失焦 */}
+      {showLineSettings && (
+        <div className="modal-backdrop" onClick={() => setShowLineSettings(false)}>
+           <div className="modal-content glass-card" style={{ padding:'28px', position:'relative' }} onClick={e => e.stopPropagation()}>
+              <button onClick={()=>setShowLineSettings(false)} style={{position:'absolute', right:'16px', top:'12px', background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'var(--text-tertiary)', fontWeight:'300'}}>&times;</button>
+              <h3 style={{marginTop:0, marginBottom:'20px', fontWeight:'700', letterSpacing:'-0.01em'}}>💬 系統通知管理</h3>
+              <div style={{marginBottom:'18px'}}>
+                <label style={{display:'block', fontSize:'0.85rem', color:'var(--text-secondary)', marginBottom:'6px', fontWeight:'600'}}>手動校正當月計數</label>
+                <input type="number" className="glass-input" value={tempLineCount} onChange={e=>setTempLineCount(e.target.value)} placeholder="強制覆寫系統已發送數量" style={{marginBottom:0}} />
+              </div>
+              <div style={{marginBottom:'22px', padding:'16px', background:'rgba(120,120,128,0.06)', borderRadius:'var(--radius-md)', border: isBatch_ls ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition:'all 0.3s ease'}}>
+                <label style={{display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer'}}>
+                  <span style={{fontWeight:'600', fontSize:'0.92rem', color: isBatch_ls ? 'var(--accent-blue)' : 'var(--text-primary)'}}>
+                    {isBatch_ls ? '📦 已暫停 Line 推播並開始收集' : '📦 暫停推播並開始收集新通知'}
+                  </span>
+                  <input type="checkbox" checked={isBatch_ls} onChange={handleToggleBatchMode} style={{transform:'scale(1.3)', accentColor:'var(--accent-blue)'}} />
+                </label>
+                <p style={{fontSize:'0.73rem', color:'var(--text-tertiary)', marginTop:'10px', lineHeight:'1.6'}}>
+                  開啟此開關以暫停每筆獨立提醒，所有的操作將存入雲端等候名單。當你將此開關「關閉」時，會一次性合開發送所有等候中的變動。
+                </p>
+                {isBatch_ls && (
+                  <div style={{fontSize:'0.82rem', color:'var(--accent-orange)', marginTop:'10px', fontWeight:'600', animation:'slideUpFade 0.3s ease-out'}}>
+                     🛒 等待發送的通知數量：{assets.pendingLineNotifications?.length || 0} 筆
+                  </div>
+                )}
+              </div>
+              <button className="glass-btn glass-btn-cta" style={{width:'100%', fontWeight:'700'}} onClick={() => {
+                 saveToCloud({ ...assets, lineNotifCount: { month: new Date().toISOString().slice(0, 7), count: Number(tempLineCount) || 0 } });
+                 setShowLineSettings(false);
+              }}>確認儲存設定</button>
+           </div>
+        </div>
+      )}
       <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} assets={assets} />
     </div>
   );
