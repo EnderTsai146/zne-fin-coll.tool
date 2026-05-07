@@ -12,11 +12,11 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointE
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const formatDate = (date) => date.toISOString().split('T')[0];
 
-const today = new Date();
-const lastYear = new Date(); lastYear.setFullYear(today.getFullYear() - 1);
-
 const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingArchive, setAssets, currentFxRate, setCurrentFxRate }) => {
-  const [chartDateRange, setChartDateRange] = useState({ start: formatDate(lastYear), end: formatDate(today) });
+  // ★ Fix: 將日期移入元件內，避免模組級別變數在跨日後過期
+  const today = useMemo(() => new Date(), []);
+  const lastYear = useMemo(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d; }, []);
+  const [chartDateRange, setChartDateRange] = useState({ start: formatDate(new Date(new Date().setFullYear(new Date().getFullYear() - 1))), end: formatDate(new Date()) });
   const [activeHistory, setActiveHistory] = useState(null); 
   const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
   const [backupWarning, setBackupWarning] = useState(false);
@@ -94,7 +94,9 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
       }, 3000); 
       
       return () => clearTimeout(timer);
-  }, [assets, todayStr, setAssets]);
+  // ★ Fix: 移除 assets 依賴，避免 setAssets 後立即重新觸發備份
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayStr, setAssets]);
 
   // ----------------------------------------------------
   // 1. 雙幣別資產計算 (直覺相加邏輯)
@@ -236,7 +238,9 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
           }
       };
       runDailySnapshot();
-  }, [hasSnapshot, stockHoldings, totalTwdCash, totalInvest, assets, setAssets, recordDate]);
+  // ★ Fix: 移除 assets 依賴，避免 setAssets 後立即重新觸發快照造成無窮迴圈
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSnapshot, recordDate]);
 
     // ----------------------------------------------------
     // 3. 繪製折線圖資料
@@ -306,7 +310,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
       
       const data = labels.map(d => chartDataPoints[d]);
       return { labels, data };
-  }, [assets.monthlyExpenses, assets.dailyNetWorth, totalAssets, chartDateRange, currentFxRate, liveMarketNetWorth]);
+  }, [assets.monthlyExpenses, assets.dailyNetWorth, combinedHistory, totalAssets, chartDateRange, currentFxRate, liveMarketNetWorth]);
 
   const lineChartData = {
       labels: historyData.labels,
@@ -391,7 +395,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
       if (activeHistory === account) { setActiveHistory(null); } 
       else { setActiveHistory(account); setHistoryDateRange({ start: '', end: '' }); }
   };
-  const specificHistory = getAccountHistory();
+  // ★ Fix: 將 getAccountHistory 包裹在 useMemo 中，避免每次 render 都重新計算 O(n²)
+  const specificHistory = useMemo(() => getAccountHistory(), [activeHistory, combinedHistory, historyDateRange, assets]);
 
   // ----------------------------------------------------
   // 5. 繪製折線圖點擊後的「變動分析卡片」

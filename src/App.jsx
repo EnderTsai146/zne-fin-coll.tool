@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import Login from './components/Login';
 import TotalOverview from './components/TotalOverview';
 import MonthlyView from './components/MonthlyView';
@@ -162,12 +162,16 @@ function App() {
   });
 
   const [archivedRecords, setArchivedRecords] = useState({});
+  const archivedRecordsRef = useRef({});
   const [isFetchingArchive, setIsFetchingArchive] = useState(false);
   const archivingInProgress = useRef(false);
   const repairAttempted = useRef(false);
 
+  // ★ Fix: 用 ref 同步追蹤已載入的月份，避免 useCallback 依賴 state 導致引用不穩定
+  useEffect(() => { archivedRecordsRef.current = archivedRecords; }, [archivedRecords]);
+
   const loadArchiveMonth = useCallback(async (monthStr) => {
-    if (!monthStr || archivedRecords[monthStr] !== undefined) return;
+    if (!monthStr || archivedRecordsRef.current[monthStr] !== undefined) return;
     setIsFetchingArchive(true);
     try {
       const snap = await getDoc(doc(db, "finance", `arc_${monthStr}`));
@@ -181,9 +185,10 @@ function App() {
     } finally {
       setIsFetchingArchive(false);
     }
-  }, [archivedRecords]);
+  }, []);
 
-  const getCombinedHistory = useCallback(() => {
+  // ★ Fix: useMemo 取代 useCallback + 呼叫，避免每次 render 產生新陣列引用
+  const combinedHistory = useMemo(() => {
     const combined = (assets.monthlyExpenses || []).map((r, i) => ({
       ...r,
       _context: { source: 'main', index: i }
@@ -1077,12 +1082,12 @@ function App() {
       <Topbar />
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
 
-        {currentPage === 'overview' && <TotalOverview assets={assets} combinedHistory={getCombinedHistory()} loadArchiveMonth={loadArchiveMonth} isFetchingArchive={isFetchingArchive} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
+        {currentPage === 'overview' && <TotalOverview assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} isFetchingArchive={isFetchingArchive} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
 
         {currentPage === 'monthly' && (
           <MonthlyView
             assets={assets}
-            combinedHistory={getCombinedHistory()}
+            combinedHistory={combinedHistory}
             loadArchiveMonth={loadArchiveMonth}
             setAssets={handleAssetsUpdate}
             onDelete={handleDeleteTransaction}
@@ -1093,7 +1098,7 @@ function App() {
           />
         )}
 
-        {currentPage === 'review' && <ReviewView assets={assets} combinedHistory={getCombinedHistory()} loadArchiveMonth={loadArchiveMonth} />}
+        {currentPage === 'review' && <ReviewView assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} />}
         {currentPage === 'invest' && <InvestmentView assets={assets} />}
         {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
         {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} />}

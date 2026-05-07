@@ -113,27 +113,31 @@ body::after {
 }
 
 body::before {
-  width: 140vw;
-  height: 140vw;
-  max-width: 1200px;
-  max-height: 1200px;
+  width: 100vw;
+  height: 100vw;
+  max-width: 900px;
+  max-height: 900px;
   background: radial-gradient(circle, var(--page-grad-1) 0%, transparent 65%);
   top: -40vh;
   left: -20vw;
-  animation: geoFloat1 18s ease-in-out infinite alternate;
-  opacity: 0.65;
+  animation: geoFloat1 25s ease-in-out infinite alternate;
+  opacity: 0.55;
+  will-change: transform;
+  contain: strict;
 }
 
 body::after {
-  width: 120vw;
-  height: 120vw;
-  max-width: 1000px;
-  max-height: 1000px;
+  width: 90vw;
+  height: 90vw;
+  max-width: 800px;
+  max-height: 800px;
   background: radial-gradient(circle, var(--page-grad-2) 0%, transparent 65%);
   bottom: -30vh;
   right: -20vw;
-  animation: geoFloat2 22s ease-in-out infinite alternate;
-  opacity: 0.65;
+  animation: geoFloat2 30s ease-in-out infinite alternate;
+  opacity: 0.55;
+  will-change: transform;
+  contain: strict;
 }
 
 #root {
@@ -213,6 +217,8 @@ body[data-page="expense"] {
   overflow: hidden;
   transition: transform var(--duration-normal) var(--ease-out-expo),
     box-shadow var(--duration-normal) var(--ease-out-expo);
+  will-change: transform;
+  contain: layout style;
 }
 
 /* ★ Dynamic refraction border — colours come from the page gradient,
@@ -1484,6 +1490,41 @@ h4 {
 ::selection {
   background: rgba(0, 122, 255, 0.3);
   color: var(--text-primary);
+}
+
+/* ★ Fix: 行動裝置效能優化 — 降低 GPU 消耗以減少發熱與延遲 */
+@media (hover: none) and (pointer: coarse) {
+  body::before,
+  body::after {
+    filter: blur(40px);
+    animation-duration: 35s;
+    opacity: 0.4;
+  }
+
+  .glass-card {
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+  }
+
+  .glass-nav {
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+  }
+
+  .bottom-nav {
+    backdrop-filter: blur(22px) saturate(200%);
+    -webkit-backdrop-filter: blur(22px) saturate(200%);
+  }
+
+  .glass-btn {
+    backdrop-filter: blur(10px) saturate(160%);
+    -webkit-backdrop-filter: blur(10px) saturate(160%);
+  }
+
+  /* 降低 CTA 呼吸動畫的複雜度 */
+  .glass-btn-cta {
+    animation-duration: 6s;
+  }
 }
 /* Navigation Warning Dot */
 .nav-warning-dot {

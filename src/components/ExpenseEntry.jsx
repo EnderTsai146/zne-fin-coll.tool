@@ -175,7 +175,8 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
        grouped[item.user].push(item);
     });
 
-    Object.keys(grouped).forEach(user => {
+    // ★ Fix: 使用 for...of 取代 forEach + throw，確保餘額不足時能正確中斷
+    for (const user of Object.keys(grouped)) {
       let items = grouped[user];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
       const isMulti = items.length > 1;
@@ -198,7 +199,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
       if (newAssets[payerKey] < total) {
           alert(`⚠️ 取消送出：${payerName} 的個人餘額不足以支付 ${formatMoney(total)}！`);
-          throw new Error("Insufficient Balance");
+          return;
       }
       newAssets[payerKey] -= total;
 
@@ -206,7 +207,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         date: txDate, month: txDate.slice(0, 7), type: 'expense', category: '個人支出', details: expenseData,
         total: total, payer: payerName, note: finalNote || '日記帳'
       });
-    });
+    }
 
     if (!window.confirm(`確定要送出這 ${finalItems.length} 筆個人記帳嗎？\n(包含來自 ${Object.keys(grouped).length} 個不同帳戶)`)) return;
 

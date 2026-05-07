@@ -198,7 +198,8 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         );
         observer.observe(sentinel);
         return () => observer.disconnect();
-    });
+    // ★ Fix: 加入依賴陣列，避免每次 render 都重建/銷毀 observer
+    }, [sortedHistory.length]);
 
     const sortedHistory = useMemo(() =>
         [...filteredHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
@@ -377,7 +378,8 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                                 <>
                                                     <button onClick={() => setEditModalData({ context: record._context, index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note })} style={{ background: 'rgba(0,122,255,0.08)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>✏️</button>
                                                     {record.category !== '作廢退款' && (
-                                                        <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？\\n作廢後系統會自動將金額加回或扣除，恢復到交易前的狀態。`)) onDelete(record._context); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
+                                                        <button onClick={() => { if (window.confirm(`⚠️ 確認作廢此筆紀錄？
+作廢後系統會自動將金額加回或扣除，恢復到交易前的狀態。`)) onDelete(record._context); }} style={{ background: 'rgba(255, 0, 0, 0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', color: 'red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🗑️</button>
                                                     )}
                                                 </>
                                             ) : (
