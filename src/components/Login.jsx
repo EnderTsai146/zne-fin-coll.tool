@@ -26,18 +26,7 @@ const Login = () => {
   return (
     <div className="login-container">
       <div className="login-card">
-        <img 
-          src="/apple-touch-icon.png" 
-          alt="馬鈴薯管家 Logo" 
-          style={{ 
-            width: '88px', 
-            height: '88px', 
-            borderRadius: '22px', 
-            display: 'block', 
-            margin: '0 auto 16px', 
-            boxShadow: '0 8px 24px rgba(88,86,214,0.18)' 
-          }} 
-        />
+        <div className="login-logo">🥔</div>
         <div className="login-title">馬鈴薯管家</div>
 
         <form onSubmit={handleLogin}>
