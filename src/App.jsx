@@ -1022,10 +1022,11 @@ function App() {
 
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
 
-        {currentPage === 'overview' && <TotalOverview assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} isFetchingArchive={isFetchingArchive} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
+        {currentPage === 'overview' && <TotalOverview key="overview" assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} isFetchingArchive={isFetchingArchive} setAssets={handleAssetsUpdate} currentFxRate={currentFxRate} setCurrentFxRate={setCurrentFxRate} />}
 
         {currentPage === 'monthly' && (
           <MonthlyView
+            key="monthly"
             assets={assets}
             combinedHistory={combinedHistory}
             loadArchiveMonth={loadArchiveMonth}
@@ -1038,10 +1039,10 @@ function App() {
           />
         )}
 
-        {currentPage === 'review' && <ReviewView assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} />}
-        {currentPage === 'invest' && <InvestmentView assets={assets} />}
-        {currentPage === 'transfer' && <AssetTransfer assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
-        {currentPage === 'expense' && <ExpenseEntry assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} />}
+        {currentPage === 'review' && <ReviewView key="review" assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} />}
+        {currentPage === 'invest' && <InvestmentView key="invest" assets={assets} isFetchingArchive={isFetchingArchive} />}
+        {currentPage === 'transfer' && <AssetTransfer key="transfer" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
+        {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} />}
       </div>
 
       {/* ★ LineSettingsModal — 內嵌 JSX，避免元件重建導致輸入框失焦 */}

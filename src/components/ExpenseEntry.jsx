@@ -226,7 +226,8 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
   const handleSaveNewBill = () => {
     if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限，請確認 App.jsx 是否已更新！");
     if (!billName) return alert("請填寫帳單名稱！");
-    if (billType === 'fixed' && (!billAmount || isNaN(billAmount))) return alert("固定帳單請輸入金額！");
+    const amountVal = Number(billAmount);
+    if (billType === 'fixed' && (isNaN(amountVal) || amountVal <= 0)) return alert("請輸入有效的正數帳單金額！");
 
     const updatedBillData = {
       name: billName,
@@ -301,13 +302,47 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     <div className="page-transition-enter">
       <h1 className="page-title">記帳</h1>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
-        <button className={`glass-btn ${activeTab === 'joint' ? '' : 'inactive'}`} onClick={() => setActiveTab('joint')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>🏫 共同</button>
-        <button className={`glass-btn ${activeTab === 'personal' ? '' : 'inactive'}`} onClick={() => setActiveTab('personal')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>👤 個人</button>
-        <button className={`glass-btn ${activeTab === 'bills' ? '' : 'inactive'}`} onClick={() => setActiveTab('bills')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', border: safeBills.some(b => isApproaching(b.nextDate)) ? '1px solid var(--accent-orange)' : undefined, animation: safeBills.some(b => isApproaching(b.nextDate)) ? 'pulseOrange 2s infinite' : 'none' }}>
-          📅 帳單 {safeBills.some(b => isApproaching(b.nextDate)) && '🔴'}
-        </button>
-      </div>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
+          <button className={`glass-btn ${activeTab === 'joint' ? '' : 'inactive'}`} onClick={() => setActiveTab('joint')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            🏫 共同
+            {jointCart.length > 0 && (
+              <span style={{
+                marginLeft: '6px',
+                background: 'var(--accent-red)',
+                color: '#ffffff',
+                fontSize: '0.72rem',
+                padding: '2px 6px',
+                borderRadius: 'var(--radius-pill)',
+                fontWeight: '700',
+                display: 'inline-block',
+                lineHeight: 1
+              }}>
+                {jointCart.length}
+              </span>
+            )}
+          </button>
+          <button className={`glass-btn ${activeTab === 'personal' ? '' : 'inactive'}`} onClick={() => setActiveTab('personal')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            👤 個人
+            {persCart.length > 0 && (
+              <span style={{
+                marginLeft: '6px',
+                background: 'var(--accent-red)',
+                color: '#ffffff',
+                fontSize: '0.72rem',
+                padding: '2px 6px',
+                borderRadius: 'var(--radius-pill)',
+                fontWeight: '700',
+                display: 'inline-block',
+                lineHeight: 1
+              }}>
+                {persCart.length}
+              </span>
+            )}
+          </button>
+          <button className={`glass-btn ${activeTab === 'bills' ? '' : 'inactive'}`} onClick={() => setActiveTab('bills')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', border: safeBills.some(b => isApproaching(b.nextDate)) ? '1px solid var(--accent-orange)' : undefined, animation: safeBills.some(b => isApproaching(b.nextDate)) ? 'pulseOrange 2s infinite' : 'none' }}>
+            📅 帳單 {safeBills.some(b => isApproaching(b.nextDate)) && '🔴'}
+          </button>
+        </div>
 
       {activeTab !== 'bills' && (
         <div className="glass-card card-animate" style={{ padding: '12px 16px', marginBottom: '18px', borderLeft: '4px solid var(--accent-indigo)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
@@ -318,7 +353,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
       {/* 🏫 共同記帳面板 */}
       {activeTab === 'joint' && (
-        <div className="glass-card card-animate">
+        <div key="joint-panel" className="glass-card card-animate page-transition-enter">
           <h3 style={{ marginTop: 0, marginBottom: '15px', color: 'var(--text-primary)', fontWeight: '700' }}>🏫 共同花費</h3>
 
           <div style={{ marginBottom: '15px' }}>
@@ -378,7 +413,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
       {/* 👤 個人記帳面板 */}
       {activeTab === 'personal' && (
-        <div className="glass-card card-animate">
+        <div key="personal-panel" className="glass-card card-animate page-transition-enter">
           <h3 style={{ marginTop: 0, marginBottom: '15px', color: 'var(--text-primary)', fontWeight: '700' }}>👤 個人日記帳</h3>
 
           <div style={{ marginBottom: '15px' }}>
@@ -438,7 +473,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
       {/* 📅 帳單管家面板 */}
       {activeTab === 'bills' && (
-        <div>
+        <div key="bills-panel" className="page-transition-enter">
           {!showAddBill && (
             <button className="glass-btn" style={{ width: '100%', marginBottom: '18px', fontSize: '0.95rem' }} onClick={() => setShowAddBill(true)}>
               ➕ 新增定期帳單 / 訂閱

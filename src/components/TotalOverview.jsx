@@ -330,7 +330,21 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
     const lineChartOptions = {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => formatMoney(ctx.raw) } } },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(28, 28, 30, 0.85)',
+                titleColor: '#ffffff',
+                bodyColor: '#ffffff',
+                borderColor: 'rgba(255, 255, 255, 0.15)',
+                borderWidth: 1,
+                padding: 10,
+                cornerRadius: 8,
+                titleFont: { size: 13, weight: 'bold' },
+                bodyFont: { size: 12 },
+                callbacks: { label: (ctx) => formatMoney(ctx.raw) }
+            }
+        },
         scales: {
             x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 }, color: 'rgba(235,235,245,0.6)' } },
             y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { callback: (value) => '$' + (value / 10000).toFixed(0) + '萬', font: { size: 10 }, color: 'rgba(235,235,245,0.6)' } }
@@ -664,7 +678,27 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {/* 【第三層】資產分佈圓餅圖 */}
             <div className="glass-card card-animate" style={{ marginBottom: '18px', display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: '15px' }}>
                 <div style={{ flexShrink: 0, width: '120px', height: '120px', display: 'flex', justifyContent: 'center' }}>
-                    {activeAssets.length > 0 ? (<Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }} />) : (<div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>尚無資產</div>)}
+                    {activeAssets.length > 0 ? (<Doughnut data={doughnutData} options={{
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(28, 28, 30, 0.85)',
+                                titleColor: '#ffffff',
+                                bodyColor: '#ffffff',
+                                borderColor: 'rgba(255, 255, 255, 0.15)',
+                                borderWidth: 1,
+                                padding: 10,
+                                cornerRadius: 8,
+                                titleFont: { size: 13, weight: 'bold' },
+                                bodyFont: { size: 12 },
+                                callbacks: {
+                                    label: (ctx) => ` ${ctx.label}: ${formatMoney(ctx.raw)}`
+                                }
+                            }
+                        }
+                    }} />) : (<div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-tertiary)' }}>尚無資產</div>)}
                 </div>
                 <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {activeAssets.map((asset) => (

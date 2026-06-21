@@ -16,6 +16,11 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const [filterType, setFilterType] = useState('all');
     const [filterUser, setFilterUser] = useState('all');
 
+    // Advanced search & filter states
+    const [searchTerm, setSearchTerm] = useState('');
+    const [minAmount, setMinAmount] = useState('');
+    const [maxAmount, setMaxAmount] = useState('');
+
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
     const [showSettlementModal, setShowSettlementModal] = useState(false);
     const [settlementTarget, setSettlementTarget] = useState(null);
@@ -179,6 +184,25 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
             else if (filterUser === 'userA') { if (!payer.includes('大狗狗🐕') && !payer.includes('用戶1') && !payer.includes('userA')) return false; }
             else if (filterUser === 'userB') { if (!payer.includes('阿陞🐶') && !payer.includes('用戶2') && !payer.includes('userB')) return false; }
         }
+        
+        // Search & amount filters
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            const noteMatch = record.note ? record.note.toLowerCase().includes(term) : false;
+            const catMatch = record.category ? record.category.toLowerCase().includes(term) : false;
+            const payerMatch = record.payer ? record.payer.toLowerCase().includes(term) : false;
+            const symbolMatch = record.symbol ? record.symbol.toLowerCase().includes(term) : false;
+            if (!noteMatch && !catMatch && !payerMatch && !symbolMatch) return false;
+        }
+        if (minAmount !== '') {
+            const minVal = Number(minAmount);
+            if (!isNaN(minVal) && record.total < minVal) return false;
+        }
+        if (maxAmount !== '') {
+            const maxVal = Number(maxAmount);
+            if (!isNaN(maxVal) && record.total > maxVal) return false;
+        }
+        
         return true;
     });
 
@@ -187,7 +211,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const loadMoreRef = useRef(null);
 
     // 當篩選條件變更時重置顯示數量
-    useEffect(() => { setRenderCount(15); }, [filterDate, filterType, filterUser]);
+    useEffect(() => { setRenderCount(15); }, [filterDate, filterType, filterUser, searchTerm, minAmount, maxAmount]);
 
     const sortedHistory = useMemo(() =>
         [...filteredHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
@@ -282,7 +306,22 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
                                 <div className="glass-card" style={{ flex: 1, minWidth: '250px' }}>
                                     <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>支出結構</h4>
-                                    <div style={{ height: '200px', display: 'flex', justifyContent: 'center' }}><Pie data={dashboardData.pieData} options={{ maintainAspectRatio: false }} /></div>
+                                    <div style={{ height: '200px', display: 'flex', justifyContent: 'center' }}><Pie data={dashboardData.pieData} options={{
+                                        maintainAspectRatio: false,
+                                        plugins: {
+                                            tooltip: {
+                                                backgroundColor: 'rgba(28, 28, 30, 0.85)',
+                                                titleColor: '#ffffff',
+                                                bodyColor: '#ffffff',
+                                                borderColor: 'rgba(255, 255, 255, 0.15)',
+                                                borderWidth: 1,
+                                                padding: 10,
+                                                cornerRadius: 8,
+                                                titleFont: { size: 13, weight: 'bold' },
+                                                bodyFont: { size: 12 }
+                                            }
+                                        }
+                                    }} /></div>
                                 </div>
                                 <div className="glass-card" style={{ flex: 1.5, minWidth: '250px' }}>
                                     <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>💸 花費排行榜 & 抓漏</h4>
@@ -307,7 +346,24 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             </div>
                             <div className="glass-card">
                                 <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>每日支出趨勢</h4>
-                                <div style={{ height: '200px' }}><Bar data={dashboardData.barChartData} options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }} /></div>
+                                <div style={{ height: '200px' }}><Bar data={dashboardData.barChartData} options={{
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        legend: { display: false },
+                                        tooltip: {
+                                            backgroundColor: 'rgba(28, 28, 30, 0.85)',
+                                            titleColor: '#ffffff',
+                                            bodyColor: '#ffffff',
+                                            borderColor: 'rgba(255, 255, 255, 0.15)',
+                                            borderWidth: 1,
+                                            padding: 10,
+                                            cornerRadius: 8,
+                                            titleFont: { size: 13, weight: 'bold' },
+                                            bodyFont: { size: 12 }
+                                        }
+                                    },
+                                    scales: { y: { beginAtZero: true } }
+                                }} /></div>
                             </div>
                         </>
                     )}
@@ -339,20 +395,43 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
             {viewMode === 'list' && (
                 <>
                     <div className="glass-card" style={{ padding: '15px', marginBottom: '20px' }}>
-                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                            <input type="month" className="glass-input" style={{ flex: '2', minWidth: '120px', margin: 0, padding: '8px' }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
-                            <select className="glass-input" style={{ flex: '1', minWidth: '80px', margin: 0, padding: '8px' }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                                <option value="all">全部類型</option>
-                                <option value="expense">支出</option>
-                                <option value="income">收入</option>
-                                <option value="invest">投資、外幣與系統</option>
-                            </select>
-                            <select className="glass-input" style={{ flex: '1', minWidth: '80px', margin: 0, padding: '8px' }} value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
-                                <option value="all">所有人</option>
-                                <option value="joint">共同帳戶</option>
-                                <option value="userA">大狗狗🐕</option>
-                                <option value="userB">阿陞🐶</option>
-                            </select>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                            <div style={{ flex: '2', minWidth: '120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>選擇月份</label>
+                                <input type="month" className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+                            </div>
+                            <div style={{ flex: '1', minWidth: '80px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>交易類型</label>
+                                <select className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+                                    <option value="all">全部類型</option>
+                                    <option value="expense">支出</option>
+                                    <option value="income">收入</option>
+                                    <option value="invest">投資、外幣與系統</option>
+                                </select>
+                            </div>
+                            <div style={{ flex: '1', minWidth: '80px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>記帳對象</label>
+                                <select className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
+                                    <option value="all">所有人</option>
+                                    <option value="joint">共同帳戶</option>
+                                    <option value="userA">大狗狗🐕</option>
+                                    <option value="userB">阿陞🐶</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+                            <div style={{ flex: '2', minWidth: '120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>關鍵字搜尋</label>
+                                <input type="text" placeholder="搜尋備註、分類、對象、代號..." className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                            </div>
+                            <div style={{ flex: '1', minWidth: '80px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額下限</label>
+                                <input type="number" placeholder="最小金額" className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+                            </div>
+                            <div style={{ flex: '1', minWidth: '80px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額上限</label>
+                                <input type="number" placeholder="最大金額" className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+                            </div>
                         </div>
                     </div>
 

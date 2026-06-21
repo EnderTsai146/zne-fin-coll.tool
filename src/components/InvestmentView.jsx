@@ -5,7 +5,7 @@ import { MY_GOOGLE_API_URL } from '../config';
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const formatUsd = (num) => `$${Number(num).toFixed(2)}`;
 
-const InvestmentView = ({ assets }) => {
+const InvestmentView = ({ assets, isFetchingArchive }) => {
   const [activeTab, setActiveTab] = useState('jointCash');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [expandedSymbol, setExpandedSymbol] = useState(null);
@@ -439,6 +439,22 @@ const InvestmentView = ({ assets }) => {
           </button>
         </div>
         {lastUpdated && <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', textAlign: 'right', marginBottom: '10px' }}>最後更新: {lastUpdated} (USD/TWD: {liveFx.toFixed(2)})</div>}
+
+        {isFetchingArchive && (
+          <div style={{
+            padding: '12px',
+            fontSize: '0.82rem',
+            color: 'var(--accent-blue)',
+            textAlign: 'center',
+            background: 'rgba(0,122,255,0.06)',
+            borderRadius: 'var(--radius-sm)',
+            marginBottom: '12px',
+            animation: 'pulseGlow 2s infinite',
+            border: '1px solid rgba(0,122,255,0.15)'
+          }}>
+            📡 正在從歷史資料庫同步歸檔數據，持倉成本估算中...
+          </div>
+        )}
 
         {holdingList.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '12px', fontSize: '0.9rem' }}>目前沒有持股</div>
