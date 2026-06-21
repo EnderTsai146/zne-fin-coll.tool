@@ -56,7 +56,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const getDebtList = (userKey) => history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false);
 
     const handleSettle = (targetUser) => {
-        const targetName = targetUser === 'userA' ? '用戶1' : '用戶2';
+        const targetName = targetUser === 'userA' ? '大狗狗🐕' : '阿陞🐶';
         const debtAmount = calculateDebt(targetUser);
         if (debtAmount === 0) return alert("目前沒有未結清的款項喔！");
         if (assets.jointCash < debtAmount) return alert(`❌ 共同現金餘額不足以結清 (需 $${debtAmount.toLocaleString()})！`);
@@ -114,12 +114,12 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
             // ★ 校正並不會被算入任何 income 或 expense
             if (r.type === 'income') {
                 stats.income.total += r.total;
-                if (r.payer.includes('用戶1')) stats.income.userA += r.total; else if (r.payer.includes('用戶2')) stats.income.userB += r.total;
+                if (r.payer.includes('大狗狗🐕') || r.payer.includes('用戶1')) stats.income.userA += r.total; else if (r.payer.includes('阿陞🐶') || r.payer.includes('用戶2')) stats.income.userB += r.total;
             } else if (r.type === 'expense' || r.type === 'spend') {
                 stats.expense.total += r.total; dailyData[day] = (dailyData[day] || 0) + r.total;
                 if (r.type === 'spend') stats.expense.joint += r.total;
                 else if (r.type === 'expense') {
-                    if (r.payer.includes('用戶1')) stats.expense.userA += r.total; else if (r.payer.includes('用戶2')) stats.expense.userB += r.total;
+                    if (r.payer.includes('大狗狗🐕') || r.payer.includes('用戶1')) stats.expense.userA += r.total; else if (r.payer.includes('阿陞🐶') || r.payer.includes('用戶2')) stats.expense.userB += r.total;
                 }
                 if (r.type === 'expense' && r.details) {
                     catStats['餐費'] += Number(r.details.food || 0); catStats['購物'] += Number(r.details.shopping || 0); catStats['固定費用'] += Number(r.details.fixed || 0); catStats['其他'] += Number(r.details.other || 0);
@@ -176,8 +176,8 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         if (filterUser !== 'all') {
             const payer = record.payer || '';
             if (filterUser === 'joint') { if (record.type !== 'spend' && record.category !== '共同支出' && !record.type.includes('joint_invest')) return false; }
-            else if (filterUser === 'userA') { if (!payer.includes('用戶1') && !payer.includes('userA')) return false; }
-            else if (filterUser === 'userB') { if (!payer.includes('用戶2') && !payer.includes('userB')) return false; }
+            else if (filterUser === 'userA') { if (!payer.includes('大狗狗🐕') && !payer.includes('用戶1') && !payer.includes('userA')) return false; }
+            else if (filterUser === 'userB') { if (!payer.includes('阿陞🐶') && !payer.includes('用戶2') && !payer.includes('userB')) return false; }
         }
         return true;
     });
@@ -251,7 +251,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(52,199,89,0.12), rgba(52,199,89,0.04))' }}>
                             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總收入</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-green)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.income.total)}</div>
-                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>用戶1: {formatMoney(dashboardData.stats.income.userA)} | 用戶2: {formatMoney(dashboardData.stats.income.userB)}</div>
+                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>大狗狗🐕: {formatMoney(dashboardData.stats.income.userA)} | 阿陞🐶: {formatMoney(dashboardData.stats.income.userB)}</div>
                         </div>
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(255,59,48,0.1), rgba(255,59,48,0.03))' }}>
                             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總支出</div>
@@ -312,7 +312,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         </h3>
                         {['userA', 'userB'].map(user => {
                             const debt = calculateDebt(user);
-                            const name = user === 'userA' ? '用戶1' : '用戶2';
+                            const name = user === 'userA' ? '大狗狗🐕' : '阿陞🐶';
                             return (
                                 <div key={user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                                     <div>
@@ -344,8 +344,8 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             <select className="glass-input" style={{ flex: '1', minWidth: '80px', margin: 0, padding: '8px' }} value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
                                 <option value="all">所有人</option>
                                 <option value="joint">共同帳戶</option>
-                                <option value="userA">用戶1</option>
-                                <option value="userB">用戶2</option>
+                                <option value="userA">大狗狗🐕</option>
+                                <option value="userB">阿陞🐶</option>
                             </select>
                         </div>
                     </div>
@@ -392,7 +392,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                                 <span style={{ fontSize: '0.8rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>{record.category}</span>
                                                 {record.advancedBy && (
                                                     <span style={{ fontSize: '0.73rem', border: record.isSettled ? '1px solid var(--accent-green)' : '1px solid var(--accent-orange)', color: record.isSettled ? 'var(--accent-green)' : 'var(--accent-orange)', padding: '1px 6px', borderRadius: 'var(--radius-pill)', background: 'rgba(255,255,255,0.06)', fontWeight: '600' }}>
-                                                        {record.advancedBy === 'userA' ? '用戶1' : '用戶2'}墊付 {record.isSettled ? ' (已結)' : ' (未結)'}
+                                                        {record.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊 {record.isSettled ? ' (已結)' : ' (未結)'}
                                                     </span>
                                                 )}
                                             </div>
@@ -426,22 +426,22 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
                                                         {record.auditTrail.after.userA !== record.auditTrail.before.userA && (() => {
                                                             const diff = (record.auditTrail.after.userA || 0) - (record.auditTrail.before.userA || 0);
-                                                            return <div>用戶1台幣: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userA || 0)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{formatMoney(record.auditTrail.after.userA || 0)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                                            return <div>大狗狗🐕台幣: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userA || 0)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{formatMoney(record.auditTrail.after.userA || 0)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
                                                         })()}
 
                                                         {(record.auditTrail.after.userA_usd || 0) !== (record.auditTrail.before.userA_usd || 0) && (() => {
                                                             const diff = (record.auditTrail.after.userA_usd || 0) - (record.auditTrail.before.userA_usd || 0);
-                                                            return <div>用戶1美金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>${(record.auditTrail.before.userA_usd || 0).toFixed(2)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>${(record.auditTrail.after.userA_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
+                                                            return <div>大狗狗🐕美金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>${(record.auditTrail.before.userA_usd || 0).toFixed(2)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>${(record.auditTrail.after.userA_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
                                                         })()}
 
                                                         {record.auditTrail.after.userB !== record.auditTrail.before.userB && (() => {
                                                             const diff = (record.auditTrail.after.userB || 0) - (record.auditTrail.before.userB || 0);
-                                                            return <div>用戶2台幣: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userB || 0)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{formatMoney(record.auditTrail.after.userB || 0)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
+                                                            return <div>阿陞🐶台幣: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userB || 0)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>{formatMoney(record.auditTrail.after.userB || 0)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
                                                         })()}
 
                                                         {(record.auditTrail.after.userB_usd || 0) !== (record.auditTrail.before.userB_usd || 0) && (() => {
                                                             const diff = (record.auditTrail.after.userB_usd || 0) - (record.auditTrail.before.userB_usd || 0);
-                                                            return <div>用戶2美金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>${(record.auditTrail.before.userB_usd || 0).toFixed(2)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>${(record.auditTrail.after.userB_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
+                                                            return <div>阿陞🐶美金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>${(record.auditTrail.before.userB_usd || 0).toFixed(2)}</span> ➡️ <span style={{ fontWeight: '600', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>${(record.auditTrail.after.userB_usd || 0).toFixed(2)}</span> <span style={{ fontSize: '0.73rem', color: diff > 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>({diff > 0 ? '+' : ''}${diff.toFixed(2)})</span></div>;
                                                         })()}
                                                     </div>
                                                 </div>
@@ -497,7 +497,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
             {showSettlementModal && settlementTarget && createPortal(
                 <div className="modal-backdrop" onClick={() => setShowSettlementModal(false)}>
                     <div className="modal-content glass-card" style={{ maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ marginTop: 0, borderBottom: '0.5px solid rgba(0,0,0,0.06)', paddingBottom: '10px', fontWeight: '700' }}>{settlementTarget === 'userA' ? '用戶1' : '用戶2'} 的代墊明細</h3>
+                        <h3 style={{ marginTop: 0, borderBottom: '0.5px solid rgba(0,0,0,0.06)', paddingBottom: '10px', fontWeight: '700' }}>{settlementTarget === 'userA' ? '大狗狗🐕' : '阿陞🐶'} 的代墊明細</h3>
                         <div style={{ marginBottom: '20px' }}>
                             {getDebtList(settlementTarget).map((r, idx) => (
                                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: '0.9rem' }}>

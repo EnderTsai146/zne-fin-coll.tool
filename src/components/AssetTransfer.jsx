@@ -95,7 +95,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     if (!incomeUser) return alert("請選擇戶頭！");
     const val = parseInt(incomeAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
-    const userName = incomeUser === 'userA' ? '用戶1' : '用戶2';
+    const userName = incomeUser === 'userA' ? '大狗狗🐕' : '阿陞🐶';
     if (!window.confirm(`確定要記錄 ${userName} 收入 ${formatMoney(val)} 嗎？`)) return;
     const newAssets = getDeepCopy(assets);
     newAssets[incomeUser] += val;
@@ -109,7 +109,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     const val = parseInt(transAmount);
     if (!val || val <= 0) return alert("請輸入有效金額");
     if (assets[transSource] < val) return alert("❌ 個人餘額不足！");
-    const userName = transSource === 'userA' ? '用戶1' : '用戶2';
+    const userName = transSource === 'userA' ? '大狗狗🐕' : '阿陞🐶';
     if (!window.confirm(`確定要從 ${userName} 上繳 ${formatMoney(val)} 至共同帳戶嗎？`)) return;
     const newAssets = getDeepCopy(assets);
     newAssets[transSource] -= val;
@@ -126,7 +126,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     const twd = parseInt(exchangeTwd);
     const usd = parseFloat(exchangeUsd);
     const newAssets = getDeepCopy(assets);
-    const accountName = exchangeSource === 'jointCash' ? '共同帳戶' : (exchangeSource === 'userA' ? '用戶1' : '用戶2');
+    const accountName = exchangeSource === 'jointCash' ? '共同帳戶' : (exchangeSource === 'userA' ? '大狗狗🐕' : '阿陞🐶');
 
     if (exchangeDir === 'TWD_TO_USD') {
       if ((newAssets[exchangeSource] || 0) < twd) return alert(`❌ ${accountName} 台幣餘額不足！`);
@@ -159,7 +159,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
     if (twdDiff === 0 && usdDiff === 0) return alert("輸入的餘額與目前帳面相同，無需校正");
 
-    const accountName = calibAccount === 'jointCash' ? '共同帳戶' : (calibAccount === 'userA' ? '用戶1' : '用戶2');
+    const accountName = calibAccount === 'jointCash' ? '共同帳戶' : (calibAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
 
     let diffNotes = [];
     if (twdDiff !== 0) diffNotes.push(`台幣 ${twdDiff > 0 ? '+' : ''}${twdDiff}`);
@@ -296,7 +296,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       const { investAccount, investAction, investType, stockMarket, settleCurrency, stockSymbol, stockShares, stockPrice, usTotalUsd, usFxRate, investAmount, investPrincipal, usInvestPrincipalUsd, dayTradeResult } = item;
 
       const isJoint = investAccount === 'jointCash';
-      const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '用戶1' : '用戶2');
+      const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
       const label = investType === 'stock' && stockSymbol ? stockSymbol : { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[investType];
 
       const val = parseInt(investAmount);
@@ -456,7 +456,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
           <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>操作帳戶</label>
-            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '用戶1', value: 'userA' }, { label: '用戶2', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
+            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '大狗狗🐕', value: 'userA' }, { label: '阿陞🐶', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
           </div>
 
           <div style={{ marginBottom: '15px' }}>
@@ -594,7 +594,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
                       {item.investAction === 'buy' ? '買入' : item.investAction === 'sell' ? '賣出' : '當沖'}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', marginRight: '5px', fontWeight: '600' }}>
-                      [{item.investAccount === 'jointCash' ? '🏫 共同' : (item.investAccount === 'userA' ? '用戶1' : '用戶2')}]
+                      [{item.investAccount === 'jointCash' ? '🏫 共同' : (item.investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶')}]
                     </span>
                     {item.stockSymbol || { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[item.investType]}
                   </span>
@@ -619,7 +619,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
           <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>操作帳戶</label>
-            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '用戶1', value: 'userA' }, { label: '用戶2', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
+            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '大狗狗🐕', value: 'userA' }, { label: '阿陞🐶', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
           </div>
 
           <div style={{ marginBottom: '15px' }}>
@@ -649,7 +649,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
           <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>校正帳戶</label>
-            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '用戶1', value: 'userA' }, { label: '用戶2', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
+            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '大狗狗🐕', value: 'userA' }, { label: '阿陞🐶', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
           </div>
 
           {calibAccount ? (
@@ -684,7 +684,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
       {activeTab === 'transfer' && (
         <div className="glass-card card-animate"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>💸 上繳公庫</h3>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>來源</label><SegmentedControl options={[{ label: `用戶1`, value: 'userA' }, { label: `用戶2`, value: 'userB' }]} value={transSource} onChange={setTransSource} /></div>
+          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>來源</label><SegmentedControl options={[{ label: `大狗狗🐕`, value: 'userA' }, { label: `阿陞🐶`, value: 'userB' }]} value={transSource} onChange={setTransSource} /></div>
           <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="number" className="glass-input" value={transAmount} onChange={(e) => setTransAmount(e.target.value)} placeholder="0" /></div>
           <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleTransfer}>確認上繳</button>
         </div>
@@ -692,7 +692,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
       {activeTab === 'income' && (
         <div className="glass-card card-animate"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>💰 一般收入</h3>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>戶頭</label><SegmentedControl options={[{ label: `用戶1`, value: 'userA' }, { label: `用戶2`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} /></div>
+          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>戶頭</label><SegmentedControl options={[{ label: `大狗狗🐕`, value: 'userA' }, { label: `阿陞🐶`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} /></div>
           <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="number" className="glass-input" value={incomeAmount} onChange={(e) => setIncomeAmount(e.target.value)} placeholder="輸入金額" /></div>
           <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>備註</label><input type="text" className="glass-input" value={incomeNote} onChange={(e) => setIncomeNote(e.target.value)} placeholder="例如：3月薪水" /></div>
           <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleIncomeSubmit}>確認收入入帳</button>

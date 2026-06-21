@@ -22,7 +22,7 @@ const InvestmentView = ({ assets }) => {
   const safeUserB = assets.userInvestments?.userB || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const currentData = activeTab === 'jointCash' ? safeJoint : (activeTab === 'userA' ? safeUserA : safeUserB);
-  const currentHistoryFilter = activeTab === 'jointCash' ? '共同帳戶' : (activeTab === 'userA' ? '用戶1' : '用戶2');
+  const currentHistoryFilter = activeTab === 'jointCash' ? '共同帳戶' : (activeTab === 'userA' ? '大狗狗🐕' : '阿陞🐶');
 
   // ★ 修正核心：使用 FIFO 計算正確的持倉成本（含歸檔基底支援）
   const stockHoldings = useMemo(() => {
@@ -409,8 +409,8 @@ const InvestmentView = ({ assets }) => {
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
         <button className={`glass-btn ${activeTab === 'jointCash' ? '' : 'inactive'}`} onClick={() => setActiveTab('jointCash')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>🏫 共同</button>
-        <button className={`glass-btn ${activeTab === 'userA' ? '' : 'inactive'}`} onClick={() => setActiveTab('userA')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>用戶1</button>
-        <button className={`glass-btn ${activeTab === 'userB' ? '' : 'inactive'}`} onClick={() => setActiveTab('userB')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>用戶2</button>
+        <button className={`glass-btn ${activeTab === 'userA' ? '' : 'inactive'}`} onClick={() => setActiveTab('userA')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>大狗狗🐕</button>
+        <button className={`glass-btn ${activeTab === 'userB' ? '' : 'inactive'}`} onClick={() => setActiveTab('userB')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>阿陞🐶</button>
       </div>
 
       <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(88,86,214,0.85), rgba(94,158,247,0.8))', color: 'white', padding: '24px 16px', border: 'none', boxShadow: '0 10px 36px rgba(88,86,214,0.2)' }}>

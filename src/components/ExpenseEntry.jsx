@@ -109,13 +109,13 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         if (newAssets.jointCash < total) return alert("❌ 共同現金不足以支付總額：" + formatMoney(total));
         newAssets.jointCash -= total;
       } else if (advancedBy === 'userA') {
-        if (newAssets.userA < total) return alert("❌ 用戶1的個人餘額不足以代墊：" + formatMoney(total));
+        if (newAssets.userA < total) return alert("❌ 大狗狗🐕的個人餘額不足以代墊：" + formatMoney(total));
         newAssets.userA -= total;
-        paymentMethodName = "用戶1先墊 (User A)";
+        paymentMethodName = "大狗狗🐕先墊 (User A)";
       } else if (advancedBy === 'userB') {
-        if (newAssets.userB < total) return alert("❌ 用戶2的個人餘額不足以代墊：" + formatMoney(total));
+        if (newAssets.userB < total) return alert("❌ 阿陞🐶的個人餘額不足以代墊：" + formatMoney(total));
         newAssets.userB -= total;
-        paymentMethodName = "用戶2先墊 (User B)";
+        paymentMethodName = "阿陞🐶先墊 (User B)";
       }
 
       records.push({
@@ -194,8 +194,8 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         expenseData[catMap[i.cat] || 'other'] += i.amount;
       });
 
-      const payerKey = user === 'heng' ? 'userA' : 'userB';
-      const payerName = user === 'heng' ? '用戶1' : '用戶2';
+      const payerKey = user === 'userA' ? 'userA' : 'userB';
+      const payerName = user === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
       if (newAssets[payerKey] < total) {
         alert(`⚠️ 取消送出：${payerName} 的個人餘額不足以支付 ${formatMoney(total)}！`);
@@ -286,7 +286,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     if (bill.scope === 'joint') {
       onAddJointExpense(todayStr, '固定費用', finalAmount, bill.payer, `[定期帳單] ${bill.name}`, updatedBills);
     } else {
-      const userKey = bill.payer === 'userA' ? 'heng' : 'de';
+      const userKey = bill.payer === 'userA' ? 'userA' : 'userB';
       onAddExpense(todayStr, { fixed: finalAmount }, finalAmount, userKey, `[定期帳單] ${bill.name}`, updatedBills);
     }
   };
@@ -328,7 +328,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
           <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>付款方式 (誰先付的？)</label>
-            <SegmentedControl options={[{ label: '🏫 共同直接付', value: 'jointCash' }, { label: '用戶1代墊', value: 'userA' }, { label: '用戶2代墊', value: 'userB' }]} value={jointAdvanced} onChange={setJointAdvanced} />
+            <SegmentedControl options={[{ label: '🏫 共同直接付', value: 'jointCash' }, { label: '大狗狗🐕代墊', value: 'userA' }, { label: '阿陞🐶代墊', value: 'userB' }]} value={jointAdvanced} onChange={setJointAdvanced} />
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
@@ -357,7 +357,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
                   <span style={{ color: 'var(--text-primary)' }}>
                     <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', marginRight: '5px', fontWeight: '500' }}>{item.cat}</span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', marginRight: '5px', fontWeight: '600' }}>
-                      [{item.advancedBy === 'jointCash' ? '🏫 共同' : (item.advancedBy === 'userA' ? '用戶1' : '用戶2')}]
+                      [{item.advancedBy === 'jointCash' ? '🏫 共同' : (item.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶')}]
                     </span>
                     {item.note}
                   </span>
@@ -383,7 +383,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
           <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>記誰的帳？</label>
-            <SegmentedControl options={[{ label: '用戶1', value: 'heng' }, { label: '用戶2', value: 'de' }]} value={persUser} onChange={setPersUser} />
+            <SegmentedControl options={[{ label: '大狗狗🐕', value: 'userA' }, { label: '阿陞🐶', value: 'userB' }]} value={persUser} onChange={setPersUser} />
           </div>
 
           <div style={{ marginBottom: '15px' }}>
@@ -417,7 +417,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
                   <span style={{ color: 'var(--text-primary)' }}>
                     <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', marginRight: '5px', fontWeight: '500' }}>{item.cat}</span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple)', marginRight: '5px', fontWeight: '600' }}>
-                      [{item.user === 'heng' ? '用戶1' : '用戶2'}]
+                      [{item.user === 'userA' ? '大狗狗🐕' : '阿陞🐶'}]
                     </span>
                     {item.note}
                   </span>
@@ -452,7 +452,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>帳單歸屬</label>
-                <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '用戶1個人', value: 'userA' }, { label: '用戶2個人', value: 'userB' }]} value={billPayer} onChange={(v) => { setBillPayer(v); setBillScope(v === 'jointCash' ? 'joint' : 'personal'); }} />
+                <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗🐕個人', value: 'userA' }, { label: '阿陞🐶個人', value: 'userB' }]} value={billPayer} onChange={(v) => { setBillPayer(v); setBillScope(v === 'jointCash' ? 'joint' : 'personal'); }} />
               </div>
 
               <div style={{ marginBottom: '10px' }}>
@@ -497,7 +497,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
                     <div>
                       <div style={{ fontWeight: '700', fontSize: '1.05rem', color: 'var(--text-primary)' }}>{bill.name}</div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        {bill.payer === 'jointCash' ? '🏫 共同扣款' : (bill.payer === 'userA' ? '用戶1付' : '用戶2付')} | {bill.cycle === 1 ? '每月' : bill.cycle === 2 ? '每兩月' : '每年'}
+                        {bill.payer === 'jointCash' ? '🏫 共同扣款' : (bill.payer === 'userA' ? '大狗狗🐕付' : '阿陞🐶付')} | {bill.cycle === 1 ? '每月' : bill.cycle === 2 ? '每兩月' : '每年'}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>

@@ -14,8 +14,8 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MAKE_WEBHOOK_URL } from './config';
 
 const USER_MAPPING = {
-  "ender.tsai@gmail.com": "大狗狗",
-  "r5213467254@icloud.com": "阿陞"
+  "ender.tsai@gmail.com": "大狗狗🐕",
+  "r5213467254@icloud.com": "阿陞🐶"
 };
 
 // ★ Module‑level — stable reference so React doesn't remount
@@ -543,8 +543,8 @@ function App() {
   };
 
   const handleAddExpense = (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
-    const payerKey = payer === 'heng' ? 'userA' : 'userB';
-    const payerName = payer === 'heng' ? '用戶1' : '用戶2';
+    const payerKey = payer === 'userA' ? 'userA' : 'userB';
+    const payerName = payer === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
     // Fix #2: 加入 return 攔截餘額不足的操作
     if (assets[payerKey] < totalAmount) return alert(`⚠️ ${payerName} 的個人餘額不足！`);
@@ -584,13 +584,13 @@ function App() {
       if (newAssets.jointCash < val) return alert("❌ 共同現金不足！");
       newAssets.jointCash -= val;
     } else if (advancedBy === 'userA') {
-      if (newAssets.userA < val) return alert("❌ 用戶1的個人餘額不足以代墊！");
+      if (newAssets.userA < val) return alert("❌ 大狗狗🐕的個人餘額不足以代墊！");
       newAssets.userA -= val;
-      paymentMethodName = "用戶1先墊 (User A)";
+      paymentMethodName = "大狗狗🐕先墊 (User A)";
     } else if (advancedBy === 'userB') {
-      if (newAssets.userB < val) return alert("❌ 用戶2的個人餘額不足以代墊！");
+      if (newAssets.userB < val) return alert("❌ 阿陞🐶的個人餘額不足以代墊！");
       newAssets.userB -= val;
-      paymentMethodName = "用戶2先墊 (User B)";
+      paymentMethodName = "阿陞🐶先墊 (User B)";
     }
 
     const safeNote = note ? String(note).trim() : '';
@@ -723,7 +723,9 @@ function App() {
         : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } }
     };
     const safePayer = record.payer || '';
-    const payerKey = safePayer.includes('用戶1') ? 'userA' : (safePayer.includes('用戶2') ? 'userB' : null);
+    const payerKey = (safePayer.includes('大狗狗🐕') || safePayer.includes('用戶1'))
+      ? 'userA'
+      : ((safePayer.includes('阿陞🐶') || safePayer.includes('用戶2')) ? 'userB' : null);
 
     let updatedExpenses = [...(assets.monthlyExpenses || [])];
 

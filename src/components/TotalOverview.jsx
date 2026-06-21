@@ -528,14 +528,14 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: activeHistory ? '10px' : '18px', flexWrap: 'wrap' }}>
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-pink)', background: activeHistory === 'userA' ? 'rgba(255,59,48,0.04)' : undefined }}>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600' }}>用戶1 <span style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依投入本金)</span></div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600' }}>大狗狗🐕 <span style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依投入本金)</span></div>
                     <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser1 + Math.round(usdUser1 * currentFxRate) + investUser1)}</div>
                     <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom: '10px', lineHeight: '1.4' }}>現 {formatMoney(twdUser1)}<br />美 ${usdUser1.toFixed(2)}<br />投 {formatMoney(investUser1)}</div>
                     <button onClick={() => setActiveHistory(activeHistory === 'userA' ? null : 'userA')} className={activeHistory === 'userA' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
                 </div>
 
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-green)', background: activeHistory === 'userB' ? 'rgba(52,199,89,0.04)' : undefined }}>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600' }}>用戶2 <span style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依投入本金)</span></div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600' }}>阿陞🐶 <span style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依投入本金)</span></div>
                     <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser2 + Math.round(usdUser2 * currentFxRate) + investUser2)}</div>
                     <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom: '10px', lineHeight: '1.4' }}>現 {formatMoney(twdUser2)}<br />美 ${usdUser2.toFixed(2)}<br />投 {formatMoney(investUser2)}</div>
                     <button onClick={() => setActiveHistory(activeHistory === 'userB' ? null : 'userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
@@ -552,7 +552,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {activeHistory && (
                 <div className="glass-card card-animate" style={{ marginBottom: '18px', borderLeft: `4px solid ${activeHistory === 'userA' ? 'var(--accent-pink)' : activeHistory === 'userB' ? 'var(--accent-green)' : 'var(--accent-orange)'}` }}>
                     <div style={{ fontWeight: '700', color: 'var(--text-primary)', marginBottom: '10px', fontSize: '1rem' }}>
-                        📝 {activeHistory === 'userA' ? '用戶1' : activeHistory === 'userB' ? '用戶2' : '共同'} 變動明細
+                        📝 {activeHistory === 'userA' ? '大狗狗🐕' : activeHistory === 'userB' ? '阿陞🐶' : '共同'} 變動明細
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
@@ -571,10 +571,10 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
                                 if (b && a) {
                                     if (activeHistory === 'userA') {
-                                        label = "用戶1"; bCash = b.userA || 0; aCash = a.userA || 0; bUsd = b.userA_usd || 0; aUsd = a.userA_usd || 0;
+                                        label = "大狗狗🐕"; bCash = b.userA || 0; aCash = a.userA || 0; bUsd = b.userA_usd || 0; aUsd = a.userA_usd || 0;
                                         bInv = sumInvestments(b.userInvestments?.userA); aInv = sumInvestments(a.userInvestments?.userA);
                                     } else if (activeHistory === 'userB') {
-                                        label = "用戶2"; bCash = b.userB || 0; aCash = a.userB || 0; bUsd = b.userB_usd || 0; aUsd = a.userB_usd || 0;
+                                        label = "阿陞🐶"; bCash = b.userB || 0; aCash = a.userB || 0; bUsd = b.userB_usd || 0; aUsd = a.userB_usd || 0;
                                         bInv = sumInvestments(b.userInvestments?.userB); aInv = sumInvestments(a.userInvestments?.userB);
                                     } else if (activeHistory === 'jointCash') {
                                         label = "共同"; bCash = b.jointCash || 0; aCash = a.jointCash || 0; bUsd = b.jointCash_usd || 0; aUsd = a.jointCash_usd || 0;
