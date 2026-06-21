@@ -414,11 +414,15 @@ const InvestmentView = ({ assets }) => {
       </div>
 
       <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(88,86,214,0.85), rgba(94,158,247,0.8))', color: 'white', padding: '24px 16px', border: 'none', boxShadow: '0 10px 36px rgba(88,86,214,0.2)' }}>
-        <div style={{ fontSize: '0.88rem', opacity: 0.9, marginBottom: '5px' }}>{currentHistoryFilter} - 投資總市值估算 <span style={{ fontSize: '0.7rem' }}>(已統一換算台幣)</span></div>
+        <div style={{ fontSize: '0.88rem', opacity: 0.9, marginBottom: '5px', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
+          <span className="nobrk">{currentHistoryFilter}</span>
+          <span className="nobrk">- 投資總市值估算</span>
+          <span className="nobrk" style={{ fontSize: '0.7rem' }}>(已統一換算台幣)</span>
+        </div>
         <div style={{ fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-0.02em', textShadow: '0 2px 10px rgba(0,0,0,0.15)' }}>{formatMoney(totalMarketValue)}</div>
-        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '12px' }}>
-          <div><div style={{ fontSize: '0.73rem', opacity: 0.8 }}>投入本金(台幣)</div><div style={{ fontWeight: '700', fontSize: '1rem' }}>{formatMoney(totalPrincipal)}</div></div>
-          <div><div style={{ fontSize: '0.73rem', opacity: 0.8 }}>未實現損益(台幣)</div><div style={{ fontWeight: '700', fontSize: '1rem', color: totalUnrealizedProfit >= 0 ? '#ffd60a' : '#ff9a9e' }}>{totalUnrealizedProfit >= 0 ? '+' : ''}{formatMoney(totalUnrealizedProfit)}</div></div>
+        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '12px', flexWrap: 'wrap', gap: '10px' }}>
+          <div className="nobrk" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><div style={{ fontSize: '0.73rem', opacity: 0.8 }}>投入本金(台幣)</div><div style={{ fontWeight: '700', fontSize: '1rem' }}>{formatMoney(totalPrincipal)}</div></div>
+          <div className="nobrk" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><div style={{ fontSize: '0.73rem', opacity: 0.8 }}>未實現損益(台幣)</div><div style={{ fontWeight: '700', fontSize: '1rem', color: totalUnrealizedProfit >= 0 ? '#ffd60a' : '#ff9a9e' }}>{totalUnrealizedProfit >= 0 ? '+' : ''}{formatMoney(totalUnrealizedProfit)}</div></div>
         </div>
       </div>
 

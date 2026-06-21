@@ -239,7 +239,11 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
               <div className="review-hero-value" style={{ color: 'var(--accent-green)' }}>
                 <AnimNum value={stats.totalIncome} />
               </div>
-              <div className="review-hero-sub">大狗狗🐕: {formatMoney(stats.incomeUserA)} ｜ 阿陞🐶: {formatMoney(stats.incomeUserB)}</div>
+              <div className="review-hero-sub" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                <span className="nobrk">大狗狗🐕: {formatMoney(stats.incomeUserA)}</span>
+                <span className="nobrk">｜</span>
+                <span className="nobrk">阿陞🐶: {formatMoney(stats.incomeUserB)}</span>
+              </div>
             </div>
             <div className="review-hero-item review-hero-expense">
               <div className="review-hero-label">總支出</div>

@@ -24,7 +24,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
       opacity: 1,
       width: child.offsetWidth,
       height: child.offsetHeight,
-      transform: `translateX(${child.offsetLeft}px)`,
+      transform: `translate(${child.offsetLeft}px, ${child.offsetTop}px)`,
     });
   }, [value, options]);
 
@@ -46,7 +46,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
       <div
         style={{
           position: 'absolute',
-          top: 3,
+          top: 0,
           left: 0,
           borderRadius: '11px',
           background: 'rgba(255, 255, 255, 0.14)',
@@ -95,6 +95,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
               WebkitUserSelect: 'none',
               userSelect: 'none',
               letterSpacing: '-0.01em',
+              whiteSpace: 'nowrap',
             }}
           >
             {opt.label}

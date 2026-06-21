@@ -249,23 +249,29 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
                     <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(52,199,89,0.12), rgba(52,199,89,0.04))' }}>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總收入</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-green)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.income.total)}</div>
-                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>大狗狗🐕: {formatMoney(dashboardData.stats.income.userA)} | 阿陞🐶: {formatMoney(dashboardData.stats.income.userB)}</div>
+                            <div className="nobrk" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總收入</div>
+                            <div className="nobrk" style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-green)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.income.total)}</div>
+                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                <span className="nobrk">大狗狗🐕: {formatMoney(dashboardData.stats.income.userA)}</span>
+                                <span className="nobrk">|</span>
+                                <span className="nobrk">阿陞🐶: {formatMoney(dashboardData.stats.income.userB)}</span>
+                            </div>
                         </div>
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(255,59,48,0.1), rgba(255,59,48,0.03))' }}>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總支出</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-red)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.expense.total)}</div>
+                            <div className="nobrk" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>總支出</div>
+                            <div className="nobrk" style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent-red)', marginBottom: '5px' }}>{formatMoney(dashboardData.stats.expense.total)}</div>
                             <div style={{ fontSize: '0.73rem', color: dashboardData.momColor, fontWeight: '600', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>
-                                {dashboardData.momText}
+                                <span className="nobrk">{dashboardData.momText}</span>
                             </div>
                         </div>
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '140px', padding: '15px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(88,86,214,0.1), rgba(0,122,255,0.06))' }}>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>淨現金流 (本月存下)</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: '700', color: dashboardData.netCashFlow >= 0 ? 'var(--accent-blue)' : 'var(--accent-red)', marginBottom: '5px' }}>
+                            <div className="nobrk" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>淨現金流 (本月存下)</div>
+                            <div className="nobrk" style={{ fontSize: '1.25rem', fontWeight: '700', color: dashboardData.netCashFlow >= 0 ? 'var(--accent-blue)' : 'var(--accent-red)', marginBottom: '5px' }}>
                                 {dashboardData.netCashFlow > 0 ? '+' : ''}{formatMoney(dashboardData.netCashFlow)}
                             </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>儲蓄率: <span style={{ fontWeight: '700', color: 'var(--accent-blue)' }}>{dashboardData.savingsRate}%</span></div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '5px' }}>
+                                <span className="nobrk">儲蓄率: <span style={{ fontWeight: '700', color: 'var(--accent-blue)' }}>{dashboardData.savingsRate}%</span></span>
+                            </div>
                         </div>
                     </div>
 

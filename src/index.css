@@ -2037,3 +2037,27 @@ body[data-page="review"] {
   font-weight: 700;
   margin-top: 6px;
 }
+
+/* ======================================================
+   === Responsive text wrapping helpers (Chinese wrap optimization) ===
+   ====================================================== */
+.nobrk {
+  display: inline-block !important;
+  white-space: nowrap !important;
+}
+
+/* Ensure common UI texts wrap at word/sentence boundary instead of mid-character */
+.glass-card,
+.glass-btn,
+.page-title,
+.login-title,
+.review-hero-title,
+.review-hero-sub,
+.review-invest-label,
+label,
+h1, h2, h3, h4,
+span,
+div {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
