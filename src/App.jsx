@@ -452,6 +452,9 @@ function App() {
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
 
   const sendLineNotification = async (data) => {
+    // 🚧 此功能暫停使用：暫時關閉發送 Line 通知以節省配額或暫停通知，但保留核心邏輯
+    return;
+
     try {
       const safeData = {
         title: String(data.title || "系統通知").replace(/"/g, '＂').replace(/\n/g, ' '),
@@ -1045,7 +1048,32 @@ function App() {
       {showLineSettings && (
         <div className="modal-backdrop" onClick={() => setShowLineSettings(false)}>
           <div className="modal-content glass-card" style={{ padding: '28px', position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowLineSettings(false)} style={{ position: 'absolute', right: '16px', top: '12px', background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--text-tertiary)', fontWeight: '300' }}>&times;</button>
+            <button onClick={() => setShowLineSettings(false)} style={{ position: 'absolute', right: '16px', top: '12px', background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--text-tertiary)', fontWeight: '300', zIndex: 11 }}>&times;</button>
+            
+            {/* 🚧 此功能暫停使用。遮罩色塊 */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(128, 128, 128, 0.65)',
+              backdropFilter: 'blur(2px)',
+              borderRadius: 'inherit',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 10,
+              color: '#ffffff',
+              fontSize: '1.25rem',
+              fontWeight: 'bold',
+              pointerEvents: 'auto'
+            }}>
+              <span style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🚧</span>
+              <span>此功能暫停使用。</span>
+            </div>
+
             <h3 style={{ marginTop: 0, marginBottom: '20px', fontWeight: '700', letterSpacing: '-0.01em' }}>💬 系統通知管理</h3>
             <div style={{ marginBottom: '18px' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>手動校正當月計數</label>
