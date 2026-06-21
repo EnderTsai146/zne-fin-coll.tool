@@ -6,14 +6,13 @@ import { getAuth } from "firebase/auth";
 
 // 您的 Firebase 設定 (這部分不用動，維持原本的即可)
 const firebaseConfig = {
-  apiKey: "AIzaSyBRtXnNk1dxLPRuJSRUboE5PdsB6rVS5Us",
-  authDomain: "zne-fin-d13e2.firebaseapp.com",
-  databaseURL: "https://zne-fin-d13e2-default-rtdb.firebaseio.com",
-  projectId: "zne-fin-d13e2",
-  storageBucket: "zne-fin-d13e2.firebasestorage.app",
-  messagingSenderId: "408036683766",
-  appId: "1:408036683766:web:17e054d1355a92a52261d7",
-  measurementId: "G-KJSGBV22BX"
+  apiKey: "AIzaSyBFIFjvfUmaqsz5NEyVvTU2wO6Wxb7ea3U",
+  authDomain: "jne-fin.firebaseapp.com",
+  projectId: "jne-fin",
+  storageBucket: "jne-fin.firebasestorage.app",
+  messagingSenderId: "955998999597",
+  appId: "1:955998999597:web:c412e44e18c53967f3d4a4",
+  measurementId: "G-NCV23PPSLN"
 };
 
 const app = initializeApp(firebaseConfig);

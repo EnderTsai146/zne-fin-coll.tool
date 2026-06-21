@@ -107,8 +107,8 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
     records.forEach(r => {
       if (r.type === 'income') {
         totalIncome += r.total;
-        if ((r.payer || '').includes('恆恆')) incomeUserA += r.total;
-        else if ((r.payer || '').includes('得得')) incomeUserB += r.total;
+        if ((r.payer || '').includes('用戶1')) incomeUserA += r.total;
+        else if ((r.payer || '').includes('用戶2')) incomeUserB += r.total;
       } else if (r.type === 'expense' || r.type === 'spend') {
         totalExpense += r.total;
 
@@ -120,8 +120,8 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
           expenseJoint += r.total;
           jointItems.push(r);
         } else if (r.type === 'expense') {
-          if ((r.payer || '').includes('恆恆')) { expenseUserA += r.total; userAItems.push(r); }
-          else if ((r.payer || '').includes('得得')) { expenseUserB += r.total; userBItems.push(r); }
+          if ((r.payer || '').includes('用戶1')) { expenseUserA += r.total; userAItems.push(r); }
+          else if ((r.payer || '').includes('用戶2')) { expenseUserB += r.total; userBItems.push(r); }
         }
 
         // Category classification
@@ -239,7 +239,7 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
               <div className="review-hero-value" style={{ color: 'var(--accent-green)' }}>
                 <AnimNum value={stats.totalIncome} />
               </div>
-              <div className="review-hero-sub">恆: {formatMoney(stats.incomeUserA)} ｜ 得: {formatMoney(stats.incomeUserB)}</div>
+              <div className="review-hero-sub">用戶1: {formatMoney(stats.incomeUserA)} ｜ 用戶2: {formatMoney(stats.incomeUserB)}</div>
             </div>
             <div className="review-hero-item review-hero-expense">
               <div className="review-hero-label">總支出</div>
@@ -331,8 +331,8 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
         <div className="glass-card">
           <h3 style={{ margin: '0 0 16px 0', fontWeight: 700, fontSize: '1.05rem' }}>👥 帳戶消費分析</h3>
           {[
-            { label: '🐕 得得', total: stats.expenseUserB, items: stats.topUserB, color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.25)' },
-            { label: '🐶 恆恆', total: stats.expenseUserA, items: stats.topUserA, color: 'var(--accent-pink)', borderColor: 'rgba(255,45,85,0.25)' },
+            { label: '用戶1', total: stats.expenseUserA, items: stats.topUserA, color: 'var(--accent-pink)', borderColor: 'rgba(255,45,85,0.25)' },
+            { label: '用戶2', total: stats.expenseUserB, items: stats.topUserB, color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.25)' },
             { label: '🏫 共同帳戶', total: stats.expenseJoint, items: stats.topJoint, color: 'var(--accent-orange)', borderColor: 'rgba(255,149,0,0.25)' },
           ].map((acc, idx) => (
             <div key={idx} className="review-account-block" style={{ borderColor: acc.borderColor }}>

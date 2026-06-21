@@ -225,8 +225,7 @@ body[data-page="expense"] {
   inset: 0;
   border-radius: inherit;
   padding: 1.5px;
-  background: linear-gradient(
-      135deg,
+  background: linear-gradient(135deg,
       var(--refract-1) 0%,
       var(--refract-2) 35%,
       transparent 50%,
@@ -437,17 +436,39 @@ h4 {
 
 /* ★ Floating geometric shape animations */
 @keyframes geoFloat1 {
-  0% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(15vw, 10vh) scale(1.1); }
-  66% { transform: translate(-10vw, 20vh) scale(0.9); }
-  100% { transform: translate(25vw, -5vh) scale(1.15); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(15vw, 10vh) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-10vw, 20vh) scale(0.9);
+  }
+
+  100% {
+    transform: translate(25vw, -5vh) scale(1.15);
+  }
 }
 
 @keyframes geoFloat2 {
-  0% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(-20vw, -15vh) scale(1.2); }
-  66% { transform: translate(10vw, -25vh) scale(0.85); }
-  100% { transform: translate(-15vw, 10vh) scale(1.1); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(-20vw, -15vh) scale(1.2);
+  }
+
+  66% {
+    transform: translate(10vw, -25vh) scale(0.85);
+  }
+
+  100% {
+    transform: translate(-15vw, 10vh) scale(1.1);
+  }
 }
 
 @keyframes fadeIn {
@@ -747,8 +768,13 @@ h4 {
 }
 
 @keyframes splashAuroraShift {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(5%, -3%) scale(1.05); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  100% {
+    transform: translate(5%, -3%) scale(1.05);
+  }
 }
 
 /* --- Orbital Rings --- */
@@ -761,19 +787,22 @@ h4 {
 }
 
 .splash-orbit-1 {
-  width: 200px; height: 200px;
+  width: 200px;
+  height: 200px;
   border-color: rgba(0, 122, 255, 0.12);
   animation: splashOrbitSpin 8s linear infinite;
 }
 
 .splash-orbit-2 {
-  width: 280px; height: 280px;
+  width: 280px;
+  height: 280px;
   border-color: rgba(88, 86, 214, 0.10);
   animation: splashOrbitSpin 14s linear infinite reverse;
 }
 
 .splash-orbit-3 {
-  width: 360px; height: 360px;
+  width: 360px;
+  height: 360px;
   border-color: rgba(90, 200, 250, 0.07);
   animation: splashOrbitSpin 20s linear infinite;
 }
@@ -784,18 +813,31 @@ h4 {
 .splash-orbit-3::after {
   content: '';
   position: absolute;
-  top: -1px; left: -1px; right: -1px; bottom: -1px;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
   border-radius: 50%;
   border: 2px solid transparent;
   border-top-color: rgba(0, 122, 255, 0.4);
 }
 
-.splash-orbit-2::after { border-top-color: rgba(175, 82, 222, 0.35); }
-.splash-orbit-3::after { border-top-color: rgba(90, 200, 250, 0.25); }
+.splash-orbit-2::after {
+  border-top-color: rgba(175, 82, 222, 0.35);
+}
+
+.splash-orbit-3::after {
+  border-top-color: rgba(90, 200, 250, 0.25);
+}
 
 @keyframes splashOrbitSpin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- Glowing Core --- */
@@ -809,7 +851,8 @@ h4 {
 
 .splash-core-glow {
   position: absolute;
-  width: 120px; height: 120px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(245, 197, 66, 0.2) 0%, rgba(0, 122, 255, 0.12) 40%, transparent 70%);
   animation: splashCoreBreath 3s ease-in-out infinite;
@@ -817,8 +860,17 @@ h4 {
 }
 
 @keyframes splashCoreBreath {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50%      { transform: scale(1.35); opacity: 1; }
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
 }
 
 .splash-emoji {
@@ -831,10 +883,23 @@ h4 {
 }
 
 @keyframes splashPotatoFloat {
-  0%, 100% { transform: translateY(0) scale(1) rotate(0deg); }
-  25%      { transform: translateY(-10px) scale(1.04) rotate(-3deg); }
-  50%      { transform: translateY(-6px) scale(1.08) rotate(0deg); }
-  75%      { transform: translateY(-12px) scale(1.03) rotate(3deg); }
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+
+  25% {
+    transform: translateY(-10px) scale(1.04) rotate(-3deg);
+  }
+
+  50% {
+    transform: translateY(-6px) scale(1.08) rotate(0deg);
+  }
+
+  75% {
+    transform: translateY(-12px) scale(1.03) rotate(3deg);
+  }
 }
 
 /* --- Particles (simplified: fewer layers, no box-shadow) --- */
@@ -845,7 +910,8 @@ h4 {
 
 .splash-particle {
   position: absolute;
-  width: 4px; height: 4px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: rgba(245, 197, 66, 0.6);
   animation: splashParticleOrbit 5s ease-in-out infinite;
@@ -855,18 +921,31 @@ h4 {
 
 .splash-particle:nth-child(odd) {
   background: rgba(175, 82, 222, 0.6);
-  width: 3px; height: 3px;
+  width: 3px;
+  height: 3px;
 }
 
 .splash-particle:nth-child(3n) {
   background: rgba(90, 200, 250, 0.6);
-  width: 5px; height: 5px;
+  width: 5px;
+  height: 5px;
 }
 
 @keyframes splashParticleOrbit {
-  0%   { transform: rotate(var(--angle)) translateX(var(--distance)) scale(0.4); opacity: 0.2; }
-  50%  { transform: rotate(calc(var(--angle) + 180deg)) translateX(calc(var(--distance) + 15px)) scale(1); opacity: 1; }
-  100% { transform: rotate(calc(var(--angle) + 360deg)) translateX(var(--distance)) scale(0.4); opacity: 0.2; }
+  0% {
+    transform: rotate(var(--angle)) translateX(var(--distance)) scale(0.4);
+    opacity: 0.2;
+  }
+
+  50% {
+    transform: rotate(calc(var(--angle) + 180deg)) translateX(calc(var(--distance) + 15px)) scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: rotate(calc(var(--angle) + 360deg)) translateX(var(--distance)) scale(0.4);
+    opacity: 0.2;
+  }
 }
 
 /* ===== Potato Progress Bar ===== */
@@ -897,15 +976,13 @@ h4 {
   bottom: 0;
   left: 0;
   width: 100%;
-  background: linear-gradient(
-    to top,
-    #8B6914 0%,
-    #c4986a 20%,
-    #d4a853 45%,
-    #f0c97d 70%,
-    #f5d89a 85%,
-    rgba(245, 220, 170, 0.7) 100%
-  );
+  background: linear-gradient(to top,
+      #8B6914 0%,
+      #c4986a 20%,
+      #d4a853 45%,
+      #f0c97d 70%,
+      #f5d89a 85%,
+      rgba(245, 220, 170, 0.7) 100%);
   transition: height 0.12s ease-out;
   will-change: height;
 }
@@ -918,12 +995,10 @@ h4 {
   left: 0;
   right: 0;
   height: 6px;
-  background: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.35),
-    rgba(255, 255, 255, 0.08),
-    transparent
-  );
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.08),
+      transparent);
   filter: blur(1px);
 }
 
@@ -951,9 +1026,20 @@ h4 {
 }
 
 @keyframes potatoBubbleRise {
-  0% { transform: translateY(0) scale(0.4); opacity: 0; }
-  20% { opacity: 0.8; transform: scale(1); }
-  100% { transform: translateY(-28px) scale(0); opacity: 0; }
+  0% {
+    transform: translateY(0) scale(0.4);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+
+  100% {
+    transform: translateY(-28px) scale(0);
+    opacity: 0;
+  }
 }
 
 /* Glass shine streak */
@@ -1013,8 +1099,17 @@ h4 {
 }
 
 @keyframes splashTextReveal {
-  from { opacity: 0; transform: translateY(16px); filter: blur(8px); }
-  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
 }
 
 .splash-title {
@@ -1022,7 +1117,7 @@ h4 {
   font-size: 1.15rem;
   font-weight: 600;
   letter-spacing: 0.12em;
-  background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245, 197, 66, 0.8), rgba(196, 152, 106, 0.7));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(245, 197, 66, 0.8), rgba(196, 152, 106, 0.7));
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -1032,8 +1127,15 @@ h4 {
 }
 
 @keyframes splashTitleShimmer {
-  0%, 100% { background-position: 0% center; }
-  50%      { background-position: 100% center; }
+
+  0%,
+  100% {
+    background-position: 0% center;
+  }
+
+  50% {
+    background-position: 100% center;
+  }
 }
 
 .splash-dots {
@@ -1045,7 +1147,7 @@ h4 {
   font-family: var(--font-family);
   font-size: 1.4rem;
   font-weight: 700;
-  background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(245, 197, 66, 0.8));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 197, 66, 0.8));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1053,8 +1155,18 @@ h4 {
 }
 
 @keyframes splashDotBounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
-  30%           { transform: translateY(-6px); opacity: 1; }
+
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
 }
 
 /* ===== Phase Transitions ===== */
@@ -1065,11 +1177,22 @@ h4 {
 }
 
 @keyframes potatoAwaken {
-  0%   { transform: translateY(-6px) scale(1.08); }
-  30%  { transform: translateY(-22px) scale(1.28) rotate(-8deg); }
-  60%  { transform: translateY(-14px) scale(1.22) rotate(5deg); }
-  100% { transform: translateY(-16px) scale(1.24) rotate(0deg);
-         filter: drop-shadow(0 0 30px rgba(245, 197, 66, 0.6)) drop-shadow(0 0 80px rgba(245, 197, 66, 0.25)); }
+  0% {
+    transform: translateY(-6px) scale(1.08);
+  }
+
+  30% {
+    transform: translateY(-22px) scale(1.28) rotate(-8deg);
+  }
+
+  60% {
+    transform: translateY(-14px) scale(1.22) rotate(5deg);
+  }
+
+  100% {
+    transform: translateY(-16px) scale(1.24) rotate(0deg);
+    filter: drop-shadow(0 0 30px rgba(245, 197, 66, 0.6)) drop-shadow(0 0 80px rgba(245, 197, 66, 0.25));
+  }
 }
 
 .splash-phase-filled .splash-core-glow {
@@ -1077,9 +1200,16 @@ h4 {
 }
 
 @keyframes filledGlowPulse {
-  0%   { transform: scale(1.35); opacity: 1; }
-  100% { transform: scale(2.2); opacity: 1;
-         background: radial-gradient(circle, rgba(245, 197, 66, 0.35) 0%, rgba(245, 197, 66, 0.12) 40%, transparent 70%); }
+  0% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(2.2);
+    opacity: 1;
+    background: radial-gradient(circle, rgba(245, 197, 66, 0.35) 0%, rgba(245, 197, 66, 0.12) 40%, transparent 70%);
+  }
 }
 
 .splash-phase-filled .potato-bar {
@@ -1091,7 +1221,7 @@ h4 {
 }
 
 .splash-phase-filled .splash-title {
-  background: linear-gradient(135deg, rgba(255,255,255,1), rgba(245, 215, 100, 0.95)) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(245, 215, 100, 0.95)) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
   animation: none !important;
@@ -1117,13 +1247,30 @@ h4 {
   box-shadow: 0 0 12px rgba(245, 197, 66, 0.3);
 }
 
-.splash-burst-ring-1 { animation: burstRingExpand 1.2s ease-out 0s forwards; }
-.splash-burst-ring-2 { animation: burstRingExpand 1.2s ease-out 0.12s forwards; }
-.splash-burst-ring-3 { animation: burstRingExpand 1.2s ease-out 0.24s forwards; }
+.splash-burst-ring-1 {
+  animation: burstRingExpand 1.2s ease-out 0s forwards;
+}
+
+.splash-burst-ring-2 {
+  animation: burstRingExpand 1.2s ease-out 0.12s forwards;
+}
+
+.splash-burst-ring-3 {
+  animation: burstRingExpand 1.2s ease-out 0.24s forwards;
+}
 
 @keyframes burstRingExpand {
-  0%   { transform: translate(-50%, -50%) scale(0); opacity: 0.8; border-width: 2px; }
-  100% { transform: translate(-50%, -50%) scale(18); opacity: 0; border-width: 0.5px; }
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.8;
+    border-width: 2px;
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(18);
+    opacity: 0;
+    border-width: 0.5px;
+  }
 }
 
 /* Exit: everything scales up and fades */
@@ -1132,9 +1279,23 @@ h4 {
 }
 
 @keyframes splashExitAnim {
-  0%   { opacity: 1; transform: scale(1); filter: brightness(1); }
-  35%  { opacity: 1; transform: scale(1.03); filter: brightness(1.6); }
-  100% { opacity: 0; transform: scale(1.5); filter: brightness(2.5); }
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+
+  35% {
+    opacity: 1;
+    transform: scale(1.03);
+    filter: brightness(1.6);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+    filter: brightness(2.5);
+  }
 }
 
 /* Flash overlay during exit */
@@ -1147,10 +1308,21 @@ h4 {
 }
 
 @keyframes splashFlash {
-  0%   { background: transparent; }
-  30%  { background: radial-gradient(circle at 50% 42%, rgba(245, 216, 154, 0.4), transparent 60%); }
-  60%  { background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.15), rgba(10, 10, 14, 0.5) 60%); }
-  100% { background: rgba(10, 10, 14, 1); }
+  0% {
+    background: transparent;
+  }
+
+  30% {
+    background: radial-gradient(circle at 50% 42%, rgba(245, 216, 154, 0.4), transparent 60%);
+  }
+
+  60% {
+    background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.15), rgba(10, 10, 14, 0.5) 60%);
+  }
+
+  100% {
+    background: rgba(10, 10, 14, 1);
+  }
 }
 
 
@@ -1226,8 +1398,7 @@ h4 {
   inset: 0;
   border-radius: inherit;
   padding: 0.5px;
-  background: linear-gradient(
-      135deg,
+  background: linear-gradient(135deg,
       var(--refract-1) 0%,
       transparent 40%,
       transparent 60%,
@@ -1484,6 +1655,7 @@ h4 {
 
 /* ★ Fix: 行動裝置效能優化 — 降低 GPU 消耗以減少發熱與延遲 */
 @media (hover: none) and (pointer: coarse) {
+
   body::before,
   body::after {
     filter: blur(40px);
@@ -1516,6 +1688,7 @@ h4 {
     animation-duration: 6s;
   }
 }
+
 /* Navigation Warning Dot */
 .nav-warning-dot {
   position: absolute;
@@ -1530,9 +1703,20 @@ h4 {
 }
 
 @keyframes pulseWarning {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
-  70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(255, 59, 48, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
+  }
+
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(255, 59, 48, 0);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
+  }
 }
 
 /* ======================================================
@@ -1806,8 +1990,17 @@ body[data-page="review"] {
 }
 
 @keyframes reviewGlowPulse {
-  0%, 100% { opacity: 0.6; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.2); }
+
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 .review-invest-result {
