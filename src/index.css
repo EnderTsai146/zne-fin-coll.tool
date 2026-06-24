@@ -1767,20 +1767,8 @@ body[data-page="review"] {
 
 /* ── Hero card ── */
 .review-hero {
-  background: linear-gradient(135deg, rgba(88, 86, 214, 0.85), rgba(94, 158, 247, 0.80)) !important;
-  color: white !important;
-  border: none !important;
-  box-shadow: 0 12px 40px rgba(88, 86, 214, 0.25) !important;
   text-align: center;
   padding: 28px 20px !important;
-}
-
-.review-hero::before {
-  background: linear-gradient(135deg,
-      rgba(255, 255, 255, 0.25) 0%,
-      transparent 40%,
-      transparent 60%,
-      rgba(255, 255, 255, 0.15) 100%) !important;
 }
 
 .review-hero-title {
@@ -1801,7 +1789,7 @@ body[data-page="review"] {
 .review-hero-item {
   flex: 1;
   min-width: 120px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(120, 120, 128, 0.12);
   border-radius: var(--radius-md);
   padding: 14px 10px;
   backdrop-filter: blur(6px);

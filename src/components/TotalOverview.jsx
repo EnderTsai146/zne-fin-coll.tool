@@ -520,23 +520,23 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             </h1>
 
             {/* 【第一層】雙人總資產大看板 */}
-            <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(88,86,214,0.9), rgba(94,158,247,0.85))', color: 'white', padding: '28px 18px', border: 'none', boxShadow: '0 12px 40px rgba(88,86,214,0.25)' }}>
-                <div style={{ fontSize: '0.88rem', opacity: 0.9, marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+            <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', padding: '28px 18px' }}>
+                <div style={{ fontSize: '0.88rem', opacity: 0.85, marginBottom: '5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
                     <span className="nobrk">雙人總資產</span> <span className="nobrk">(即時市值估算)</span>
-                    {isFetchingLive && <span className="nobrk" style={{ fontSize: '0.73rem', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', marginLeft: '5px' }}>🔄 更新報價中...</span>}
+                    {isFetchingLive && <span className="nobrk" style={{ fontSize: '0.73rem', background: 'rgba(120,120,128,0.12)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', marginLeft: '5px' }}>🔄 更新報價中...</span>}
                 </div>
-                <div style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing: '-0.02em', textShadow: '0 2px 12px rgba(0,0,0,0.15)' }}>
+                <div style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing: '-0.02em' }}>
                     {formatMoney(liveMarketNetWorth > 0 ? liveMarketNetWorth : totalAssets)}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '15px', fontSize: '0.82rem', flexWrap: 'wrap' }}>
-                    <div className="nobrk" style={{ background: 'rgba(255,255,255,0.18)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>💰 總現金 {formatMoney(totalCashConverted)}</div>
-                    <div className="nobrk" style={{ background: 'rgba(255,255,255,0.18)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>📥 總投入 {formatMoney(totalInvest)}</div>
+                    <div className="nobrk" style={{ background: 'rgba(120,120,128,0.12)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>💰 總現金 {formatMoney(totalCashConverted)}</div>
+                    <div className="nobrk" style={{ background: 'rgba(120,120,128,0.12)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>📥 總投入 {formatMoney(totalInvest)}</div>
                 </div>
 
                 {liveMarketNetWorth > 0 && liveMarketNetWorth !== totalAssets && (
-                    <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.2)', fontSize: '0.84rem', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                    <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px solid var(--glass-border)', fontSize: '0.84rem', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
                         <span className="nobrk">📊 包含股票未實現損益：</span>
-                        <span className="nobrk" style={{ fontWeight: '800', color: liveMarketNetWorth >= totalAssets ? '#ffd60a' : '#ff9a9e', fontSize: '1rem' }}>
+                        <span className="nobrk" style={{ fontWeight: '800', color: liveMarketNetWorth >= totalAssets ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '1rem' }}>
                             {liveMarketNetWorth >= totalAssets ? '+' : ''}{formatMoney(liveMarketNetWorth - totalAssets)}
                         </span>
                     </div>
