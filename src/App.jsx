@@ -262,7 +262,7 @@ function App() {
   // ★ 過場動畫時間軸
   useEffect(() => {
     if (splashPhase === 'filled') {
-      const t = setTimeout(() => setSplashPhase('exit'), 200);
+      const t = setTimeout(() => setSplashPhase('exit'), 800);
       return () => clearTimeout(t);
     }
     if (splashPhase === 'exit') {
@@ -1091,51 +1091,15 @@ function App() {
       {/* Background aurora */}
       <div className="splash-aurora" />
 
-      {/* Orbital rings */}
-      <div className="splash-orbit splash-orbit-1" />
-      <div className="splash-orbit splash-orbit-2" />
-      <div className="splash-orbit splash-orbit-3" />
-
       {/* Glowing core */}
       <div className="splash-core">
         <div className="splash-core-glow" />
-        <div className="splash-emoji">🥔</div>
-      </div>
-
-      {/* Particle dots */}
-      <div className="splash-particles">
-        {[...Array(8)].map((_, i) => (
-          <div key={i} className="splash-particle" style={{
-            '--angle': `${i * 45}deg`,
-            '--delay': `${i * 0.15}s`,
-            '--distance': `${80 + (i % 3) * 20}px`
-          }} />
-        ))}
-      </div>
-
-      {/* ★ Potato Progress Bar */}
-      <div className="potato-bar-container">
-        <div className="potato-bar">
-          <div className="potato-bar-fill" style={{ height: `${loadProgress}%` }}>
-            {loadProgress > 15 && (
-              <div className="potato-bar-bubbles">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="potato-bubble" style={{
-                    '--bubble-delay': `${i * 0.35}s`,
-                    '--bubble-x': `${15 + i * 16}%`,
-                    '--bubble-size': `${3 + (i % 3) * 2}px`
-                  }} />
-                ))}
-              </div>
-            )}
+        <div className="potato-fill-wrapper">
+          <div className="potato-fill-bg">🥔</div>
+          <div className="potato-fill-fg" style={{ height: `${loadProgress}%` }}>
+            <div className="potato-fill-inner">🥔</div>
           </div>
-          <div className="potato-bar-spots">
-            <div className="potato-spot" style={{ top: '18%', left: '15%' }} />
-            <div className="potato-spot" style={{ top: '55%', left: '78%' }} />
-            <div className="potato-spot" style={{ top: '72%', left: '30%' }} />
-          </div>
-          <div className="potato-bar-shine" />
-          <div className="potato-bar-text">{Math.round(loadProgress)}%</div>
+          <div className="potato-fill-text">{Math.round(loadProgress)}%</div>
         </div>
       </div>
 
@@ -1153,13 +1117,24 @@ function App() {
         )}
       </div>
 
-      {/* Golden burst rings (on fill complete) */}
+      {/* Golden burst rings & scatter particles (on fill complete) */}
       {(splashPhase === 'filled' || splashPhase === 'exit') && (
-        <div className="splash-golden-burst">
-          <div className="splash-burst-ring splash-burst-ring-1" />
-          <div className="splash-burst-ring splash-burst-ring-2" />
-          <div className="splash-burst-ring splash-burst-ring-3" />
-        </div>
+        <>
+          <div className="splash-golden-burst">
+            <div className="splash-burst-ring splash-burst-ring-1" />
+            <div className="splash-burst-ring splash-burst-ring-2" />
+            <div className="splash-burst-ring splash-burst-ring-3" />
+          </div>
+          <div className="splash-burst-particles">
+            {[...Array(20)].map((_, i) => (
+              <div key={i} className="splash-burst-particle" style={{
+                '--angle': `${i * 18}deg`,
+                '--delay': `${(i % 3) * 0.05}s`,
+                '--speed': `${0.6 + (i % 4) * 0.15}s`
+              }} />
+            ))}
+          </div>
+        </>
       )}
 
       {/* Flash overlay on exit */}

@@ -202,13 +202,13 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 if (data?.quoteResponse?.result) {
                     const quotes = data.quoteResponse.result;
                     const fxQuote = quotes.find(q => q.symbol === 'TWD=X');
-                    if (fxQuote) fxRate = fxQuote.regularMarketPreviousClose || fxQuote.regularMarketPrice || 31.5;
+                    if (fxQuote) fxRate = fxQuote.regularMarketPrice || fxQuote.regularMarketPreviousClose || 31.5;
                     setCurrentFxRate(fxRate);
 
                     symbols.forEach(sym => {
                         const q = quotes.find(q => q.symbol === sym);
                         if (q) {
-                            const price = q.regularMarketPreviousClose || q.regularMarketPrice || 0;
+                            const price = q.regularMarketPrice || q.regularMarketPreviousClose || 0;
                             const holding = stockHoldings[sym];
                             let val = price * holding.shares;
                             if (holding.market === 'TW') {

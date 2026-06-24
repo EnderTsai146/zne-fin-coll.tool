@@ -150,10 +150,10 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
 
           data.quoteResponse.result.forEach(q => {
             if (q.symbol === 'TWD=X') {
-              fxRate = q.regularMarketPreviousClose || q.regularMarketPrice || 31.5;
+              fxRate = q.regularMarketPrice || q.regularMarketPreviousClose || 31.5;
               if (isMounted) setLiveFx(fxRate);
             } else {
-              newPrices[q.symbol] = q.regularMarketPreviousClose || q.regularMarketPrice || 0;
+              newPrices[q.symbol] = q.regularMarketPrice || q.regularMarketPreviousClose || 0;
             }
           });
           if (isMounted) {

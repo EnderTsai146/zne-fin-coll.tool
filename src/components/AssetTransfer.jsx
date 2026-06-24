@@ -105,6 +105,128 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     }
   }, [stockPrice, stockShares, stockMarket, investAction, investType]);
 
+  // ★ 自動 FIFO 成本計算與預填引擎
+  useEffect(() => {
+    if (investAction !== 'sell' || investType !== 'stock' || !stockSymbol || !stockShares) {
+      return;
+    }
+    const sellSharesNum = Number(stockShares) || 0;
+    if (sellSharesNum <= 0) return;
+
+    let finalSymbol = stockSymbol.toUpperCase().trim();
+    if (stockMarket === 'TW' && finalSymbol && !finalSymbol.includes('.')) {
+      finalSymbol += '.TW';
+    }
+
+    const isJoint = investAccount === 'jointCash';
+    const currentHistoryFilter = isJoint ? '共同帳戶' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+    
+    // 1. 重建此帳戶的持股基準 lots (包含 currentStockHoldings 歸檔基底)
+    const holdings = {};
+    if (assets.currentStockHoldings) {
+      Object.entries(assets.currentStockHoldings).forEach(([key, data]) => {
+        let owner = '共同帳戶';
+        let actualSym = key;
+        if (key.includes('_')) {
+          const parts = key.split('_');
+          owner = parts[0];
+          actualSym = parts.slice(1).join('_');
+        }
+        const ownerMatch = owner.replace(/🐶|🐕/g, '');
+        if (data.market && currentHistoryFilter.includes(ownerMatch)) {
+          holdings[actualSym] = {
+            shares: data.shares || 0,
+            market: data.market,
+            lots: [{
+              shares: data.shares || 0,
+              costTwd: data.costTwd || 0,
+              costUsd: data.costUsd || 0,
+            }]
+          };
+        }
+      });
+    }
+
+    // 2. 疊加未歸檔的歷史 buy / sell 交易明細
+    const history = assets.monthlyExpenses || [];
+    const sorted = [...history]
+      .filter(r => !r.isDeleted && r.symbol && r.payer && r.payer.includes(currentHistoryFilter))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || '').localeCompare(b.timestamp || ''));
+
+    sorted.forEach(r => {
+      const sym = r.symbol;
+      if (!holdings[sym]) {
+        holdings[sym] = {
+          shares: 0,
+          market: r.market || 'TW',
+          lots: [],
+        };
+      }
+      const h = holdings[sym];
+      if (r.market) h.market = r.market;
+
+      if (r.type.includes('buy')) {
+        const shares = Number(r.shares) || 0;
+        const totalTwd = Number(r.total) || 0;
+        const totalUsd = Number(r.usdAmount) || 0;
+        h.lots.push({
+          shares,
+          costTwd: totalTwd,
+          costUsd: totalUsd,
+        });
+        h.shares += shares;
+      } else if (r.type.includes('sell')) {
+        const sellShares = Number(r.shares) || 0;
+        let remaining = sellShares;
+        while (remaining > 0 && h.lots.length > 0) {
+          const lot = h.lots[0];
+          if (lot.shares <= remaining) {
+            remaining -= lot.shares;
+            h.lots.shift();
+          } else {
+            const fraction = remaining / lot.shares;
+            lot.costTwd -= lot.costTwd * fraction;
+            lot.costUsd -= lot.costUsd * fraction;
+            lot.shares -= remaining;
+            remaining = 0;
+          }
+        }
+        h.shares -= sellShares;
+      }
+    });
+
+    // 3. 計算本次賣出股數的 FIFO 成本
+    const h = holdings[finalSymbol];
+    if (h && h.shares > 0 && h.lots.length > 0) {
+      let remainingToSell = sellSharesNum;
+      let totalCostTwd = 0;
+      let totalCostUsd = 0;
+      
+      const tempLots = h.lots.map(l => ({ ...l }));
+      for (let i = 0; i < tempLots.length && remainingToSell > 0; i++) {
+        const lot = tempLots[i];
+        if (lot.shares <= remainingToSell) {
+          totalCostTwd += lot.costTwd;
+          totalCostUsd += lot.costUsd;
+          remainingToSell -= lot.shares;
+        } else {
+          const fraction = remainingToSell / lot.shares;
+          totalCostTwd += lot.costTwd * fraction;
+          totalCostUsd += lot.costUsd * fraction;
+          remainingToSell = 0;
+        }
+      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInvestPrincipal(formatInputMoney(Math.round(totalCostTwd).toString()));
+      if (stockMarket === 'US') {
+        setUsInvestPrincipalUsd(formatInputMoney(Number(totalCostUsd.toFixed(2)).toString()));
+      }
+    } else {
+      setInvestPrincipal('');
+      setUsInvestPrincipalUsd('');
+    }
+  }, [stockSymbol, stockShares, investAccount, investAction, stockMarket, investType, assets.monthlyExpenses, assets.currentStockHoldings]);
+
   const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
 
   const handleIncomeSubmit = async () => {
@@ -613,7 +735,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
 
           {investAction === 'sell' && stockMarket === 'TW' && (
             <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(255,204,0,0.06)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--accent-yellow)' }}>
-              <label style={{ color: 'var(--accent-orange)', fontWeight: '700' }}>⚠️ 這批賣掉的資產，當初買入的「本金(台幣)」是多少？</label>
+              <label style={{ color: 'var(--accent-orange)', fontWeight: '700' }}>⚠️ 這批賣掉的資產，當初買入的「本金(台幣)」是多少？<br /><span style={{ fontSize: '0.73rem', fontWeight: '400', color: 'var(--text-secondary)' }}>(已依 FIFO 自動估算，亦可手動修改)</span></label>
               <input type="text" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', border: '1px solid var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="請輸入扣除本金" />
             </div>
           )}
@@ -622,12 +744,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
             <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(255,204,0,0.06)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--accent-yellow)' }}>
               <label style={{ color: 'var(--accent-orange)', fontWeight: '700', fontSize: '0.92rem' }}>⚠️ 賣出美股成本計算</label>
               <div style={{ marginTop: '8px' }}>
-                <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>元大顯示的「美金持有成本」<span style={{ color: 'var(--accent-red)' }}>(必填計算獲利)</span></label>
+                <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>元大/國泰顯示的「美金持有成本」<span style={{ color: 'var(--accent-red)' }}>(必填)</span> <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>(已依 FIFO 自動估算，亦可手動修改)</span></label>
                 <input type="text" inputMode="decimal" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(formatInputMoney(e.target.value))} placeholder="例: 800" />
               </div>
               {settleCurrency !== 'USD' ? (
                 <div style={{ marginTop: '8px' }}>
-                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>這批股票當初投入的「大約台幣本金」<br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
+                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>這批股票當初投入的「大約台幣本金」 <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>(已依 FIFO 自動估算，亦可手動修改)</span><br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
                   <input type="text" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="例: 25200" />
                 </div>
               ) : (
