@@ -146,7 +146,6 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         return s;
       }).join('，');
 
-      let paymentMethodName = "共同帳戶直接付";
       if (advancedBy === 'jointCash') {
         if (newAssets.jointCash < total) {
           await customAlert("❌ 共同現金不足以支付總額：" + formatMoney(total));
@@ -159,14 +158,12 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
           return;
         }
         newAssets.userA -= total;
-        paymentMethodName = "大狗狗🐕先墊 (User A)";
       } else if (advancedBy === 'userB') {
         if (newAssets.userB < total) {
           await customAlert("❌ 阿陞🐶的個人餘額不足以代墊：" + formatMoney(total));
           return;
         }
         newAssets.userB -= total;
-        paymentMethodName = "阿陞🐶先墊 (User B)";
       }
 
       records.push({
@@ -505,18 +502,18 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
             <div style={{ background: 'rgba(52,199,89,0.06)', padding: '12px', borderRadius: 'var(--radius-sm)', marginBottom: '15px', border: '1px solid rgba(52,199,89,0.15)', animation: 'slideDown 0.3s ease-out' }}>
               <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>🛒 本次合併明細：</div>
               {jointCart.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px' }}>
-                  <span style={{ color: 'var(--text-primary)' }}>
-                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', marginRight: '5px', fontWeight: '500' }}>{item.cat}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', marginRight: '5px', fontWeight: '600' }}>
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', gap: '8px' }}>
+                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{item.cat}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '600', whiteSpace: 'nowrap' }}>
                       [{item.advancedBy === 'jointCash' ? '🏫 共同' : (item.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶')}]
                     </span>
-                    {item.note}
-                  </span>
-                  <span style={{ fontWeight: '500' }}>
-                    {formatMoney(item.amount)}
-                    <button onClick={() => handleRemoveJointCart(item.id)} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', marginLeft: '5px', cursor: 'pointer', fontSize: '0.85rem' }}>✖</button>
-                  </span>
+                    <span style={{ minWidth: 0, wordBreak: 'break-all' }}>{item.note || item.cat}</span>
+                  </div>
+                  <div style={{ fontWeight: '500', flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{formatMoney(item.amount)}</span>
+                    <button onClick={() => handleRemoveJointCart(item.id)} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', padding: '2px 6px', cursor: 'pointer', fontSize: '0.85rem' }}>✖</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -565,18 +562,18 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
             <div style={{ background: 'rgba(175,82,222,0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', marginBottom: '15px', border: '1px solid rgba(175,82,222,0.12)', animation: 'slideDown 0.3s ease-out' }}>
               <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>🛒 本次合併明細：</div>
               {persCart.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px' }}>
-                  <span style={{ color: 'var(--text-primary)' }}>
-                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', marginRight: '5px', fontWeight: '500' }}>{item.cat}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple)', marginRight: '5px', fontWeight: '600' }}>
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', gap: '8px' }}>
+                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{item.cat}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple)', fontWeight: '600', whiteSpace: 'nowrap' }}>
                       [{item.user === 'userA' ? '大狗狗🐕' : '阿陞🐶'}]
                     </span>
-                    {item.note}
-                  </span>
-                  <span style={{ fontWeight: '500' }}>
-                    {formatMoney(item.amount)}
-                    <button onClick={() => handleRemovePersCart(item.id)} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', marginLeft: '5px', cursor: 'pointer', fontSize: '0.85rem' }}>✖</button>
-                  </span>
+                    <span style={{ minWidth: 0, wordBreak: 'break-all' }}>{item.note || item.cat}</span>
+                  </div>
+                  <div style={{ fontWeight: '500', flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{formatMoney(item.amount)}</span>
+                    <button onClick={() => handleRemovePersCart(item.id)} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', padding: '2px 6px', cursor: 'pointer', fontSize: '0.85rem' }}>✖</button>
+                  </div>
                 </div>
               ))}
             </div>

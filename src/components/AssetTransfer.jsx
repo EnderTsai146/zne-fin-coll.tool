@@ -67,6 +67,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
   // Sync usFxRate with currentFxRate when it changes from external background fetch
   useEffect(() => {
     if (currentFxRate) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUsFxRate(currentFxRate.toString());
     }
   }, [currentFxRate]);
@@ -84,7 +85,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           const data = await res.json();
           if (data && data.quotes) setSearchResults(data.quotes.filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF' || q.quoteType === 'MUTUALFUND'));
           else setSearchResults([]);
-        } catch (err) { setSearchResults([]); }
+        } catch { setSearchResults([]); }
         setIsSearching(false);
       } else { setSearchResults([]); }
     }, 600);
@@ -98,8 +99,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     if (p === 0 || s === 0) return;
     const baseAmount = p * s;
     const fee = Math.max(20, Math.floor(baseAmount * 0.001425 * 0.6));
-    if (investAction === 'buy') setInvestAmount(Math.round(baseAmount + fee).toString());
-    else if (investAction === 'sell') {
+    if (investAction === 'buy') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInvestAmount(Math.round(baseAmount + fee).toString());
+    } else if (investAction === 'sell') {
       const tax = Math.floor(baseAmount * 0.003);
       setInvestAmount(Math.round(baseAmount - fee - tax).toString());
     }
@@ -556,7 +559,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           setAssets(data);
           await customAlert("✅ 還原成功！");
         }
-      } catch (err) {
+      } catch {
         await customAlert("❌ 讀取失敗。");
       }
     };
@@ -580,7 +583,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
       const text = await res.text();
       if (text.includes('success')) await customAlert('✅ 成功備份至 Google 雲端硬碟！請至雲端硬碟確認檔案。');
       else throw new Error("API 錯誤");
-    } catch (e) {
+    } catch {
       await customAlert('❌ 備份失敗，請檢查網路');
     } finally {
       setIsManualBackingUp(false);
@@ -771,20 +774,22 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
             <div style={{ background: 'rgba(88,86,214,0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', marginBottom: '15px', border: '1px solid rgba(88,86,214,0.12)', animation: 'slideDown 0.3s ease-out' }}>
               <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>🛒 本次批次明細 ({investCart.length}筆)：</div>
               {investCart.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px' }}>
-                  <span style={{ color: 'var(--text-primary)' }}>
-                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', marginRight: '5px', fontWeight: '500' }}>
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', gap: '8px' }}>
+                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>
                       {item.investAction === 'buy' ? '買入' : item.investAction === 'sell' ? '賣出' : '當沖'}
                     </span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', marginRight: '5px', fontWeight: '600' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '600', whiteSpace: 'nowrap' }}>
                       [{item.investAccount === 'jointCash' ? '🏫 共同' : (item.investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶')}]
                     </span>
-                    {item.stockSymbol || { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[item.investType]}
-                  </span>
-                  <span style={{ fontWeight: '500' }}>
-                    {formatMoney(item.investAmount)} {item.investAction === 'sell' ? '(收回)' : '(支出)'}
-                    <button onClick={() => setInvestCart(investCart.filter(i => i.id !== item.id))} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', marginLeft: '5px', cursor: 'pointer', fontSize: '0.85rem' }}>✖</button>
-                  </span>
+                    <span style={{ minWidth: 0, wordBreak: 'break-all' }}>
+                      {item.stockSymbol || { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[item.investType]}
+                    </span>
+                  </div>
+                  <div style={{ fontWeight: '500', flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{formatMoney(item.investAmount)} {item.investAction === 'sell' ? '(收回)' : '(支出)'}</span>
+                    <button onClick={() => setInvestCart(investCart.filter(i => i.id !== item.id))} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', padding: '2px 6px', cursor: 'pointer', fontSize: '0.85rem' }}>✖</button>
+                  </div>
                 </div>
               ))}
             </div>
