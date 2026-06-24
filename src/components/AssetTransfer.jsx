@@ -473,9 +473,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
         style={{
           display: 'flex',
           gap: '8px',
-          marginBottom: '18px',
+          marginTop: '-8px',
+          paddingTop: '8px',
+          marginBottom: '14px',
           overflowX: 'auto',
-          paddingBottom: '4px',
+          paddingBottom: '8px',
           scrollbarWidth: 'none',
           WebkitOverflowScrolling: 'touch'
         }}
