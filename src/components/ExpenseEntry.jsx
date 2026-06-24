@@ -3,6 +3,25 @@ import React, { useState } from 'react';
 import SegmentedControl from './SegmentedControl';
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
+
+const formatInputMoney = (valStr) => {
+  if (valStr === '' || valStr === undefined || valStr === null) return '';
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  const parts = clean.split('.');
+  if (parts.length > 2) {
+    parts[1] = parts.slice(1).join('');
+  }
+  const integerPart = parts[0] ? Number(parts[0]).toLocaleString() : '';
+  const decimalPart = parts.length > 1 ? '.' + parts[1] : '';
+  return `$${integerPart}${decimalPart}`;
+};
+
+const parseMoney = (valStr) => {
+  if (!valStr) return 0;
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  return Number(clean) || 0;
+};
+
 const addMonthsSafe = (dateStr, months) => {
   let d = new Date(dateStr);
   let targetMonth = d.getMonth() + months;
@@ -18,7 +37,7 @@ const addMonthsSafe = (dateStr, months) => {
   return newD.toISOString().split('T')[0];
 };
 
-const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTransaction }) => {
+const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTransaction, customAlert, customConfirm, customPrompt }) => {
   const [activeTab, setActiveTab] = useState('joint');
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -56,11 +75,21 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
   };
 
   // --- 共同記帳邏輯 ---
-  const handleAddJointCart = () => {
-    if (!jointAdvanced) return alert("請選擇付款方式 (誰墊付/共同出)！");
-    if (!jointCat) return alert("請選擇分類！");
-    if (!jointAmount || isNaN(jointAmount) || Number(jointAmount) <= 0) return alert("請輸入有效金額！");
-    setJointCart([...jointCart, { id: Date.now(), advancedBy: jointAdvanced, cat: jointCat, amount: Number(jointAmount), note: jointNote }]);
+  const handleAddJointCart = async () => {
+    if (!jointAdvanced) {
+      await customAlert("請選擇付款方式 (誰墊付/共同出)！");
+      return;
+    }
+    if (!jointCat) {
+      await customAlert("請選擇分類！");
+      return;
+    }
+    const parsedAmount = parseMoney(jointAmount);
+    if (!jointAmount || parsedAmount <= 0) {
+      await customAlert("請輸入有效金額！");
+      return;
+    }
+    setJointCart([...jointCart, { id: Date.now(), advancedBy: jointAdvanced, cat: jointCat, amount: parsedAmount, note: jointNote }]);
     setJointAmount('');
     setJointNote('');
     setJointCat(null);
@@ -70,15 +99,28 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     setJointCart(jointCart.filter(i => i.id !== id));
   };
 
-  const handleJointSubmit = () => {
+  const handleJointSubmit = async () => {
     let finalItems = [...jointCart];
     if (jointAmount) {
-      if (!jointAdvanced) return alert("最後一筆(下方還未加入暫存)請選擇付款方式！");
-      if (isNaN(jointAmount) || Number(jointAmount) <= 0) return alert("請輸入有效金額！");
-      if (!jointCat) return alert("最後一筆輸入尚未選擇分類！");
-      finalItems.push({ advancedBy: jointAdvanced, cat: jointCat, amount: Number(jointAmount), note: jointNote });
+      const parsedAmount = parseMoney(jointAmount);
+      if (!jointAdvanced) {
+        await customAlert("最後一筆(下方還未加入暫存)請選擇付款方式！");
+        return;
+      }
+      if (parsedAmount <= 0) {
+        await customAlert("請輸入有效金額！");
+        return;
+      }
+      if (!jointCat) {
+        await customAlert("最後一筆輸入尚未選擇分類！");
+        return;
+      }
+      finalItems.push({ advancedBy: jointAdvanced, cat: jointCat, amount: parsedAmount, note: jointNote });
     }
-    if (finalItems.length === 0) return alert("請輸入花費金額或加入暫存！");
+    if (finalItems.length === 0) {
+      await customAlert("請輸入花費金額或加入暫存！");
+      return;
+    }
 
     const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
     let newAssets = getDeepCopy(assets);
@@ -91,7 +133,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       grouped[item.advancedBy].push(item);
     });
 
-    Object.keys(grouped).forEach(advancedBy => {
+    for (const advancedBy of Object.keys(grouped)) {
       let items = grouped[advancedBy];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
       const isMulti = items.length > 1;
@@ -106,14 +148,23 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
       let paymentMethodName = "共同帳戶直接付";
       if (advancedBy === 'jointCash') {
-        if (newAssets.jointCash < total) return alert("❌ 共同現金不足以支付總額：" + formatMoney(total));
+        if (newAssets.jointCash < total) {
+          await customAlert("❌ 共同現金不足以支付總額：" + formatMoney(total));
+          return;
+        }
         newAssets.jointCash -= total;
       } else if (advancedBy === 'userA') {
-        if (newAssets.userA < total) return alert("❌ 大狗狗🐕的個人餘額不足以代墊：" + formatMoney(total));
+        if (newAssets.userA < total) {
+          await customAlert("❌ 大狗狗🐕的個人餘額不足以代墊：" + formatMoney(total));
+          return;
+        }
         newAssets.userA -= total;
         paymentMethodName = "大狗狗🐕先墊 (User A)";
       } else if (advancedBy === 'userB') {
-        if (newAssets.userB < total) return alert("❌ 阿陞🐶的個人餘額不足以代墊：" + formatMoney(total));
+        if (newAssets.userB < total) {
+          await customAlert("❌ 阿陞🐶的個人餘額不足以代墊：" + formatMoney(total));
+          return;
+        }
         newAssets.userB -= total;
         paymentMethodName = "阿陞🐶先墊 (User B)";
       }
@@ -124,14 +175,14 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
         isSettled: false
       });
-    });
+    }
 
-    if (!window.confirm(`確定要送出這 ${finalItems.length} 筆共同記帳嗎？\n(包含 ${Object.keys(grouped).length} 種不同的扣款來源)`)) return;
+    if (!(await customConfirm(`確定要送出這 ${finalItems.length} 筆共同記帳嗎？\n(包含 ${Object.keys(grouped).length} 種不同的扣款來源)`))) return;
 
     if (onTransaction) {
       onTransaction(newAssets, records);
     } else {
-      alert("Error: onTransaction method is not provided");
+      await customAlert("Error: onTransaction method is not provided");
     }
 
     setJointCart([]);
@@ -141,11 +192,21 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
   };
 
   // --- 個人記帳邏輯 ---
-  const handleAddPersCart = () => {
-    if (!persUser) return alert("請選擇記誰的帳！");
-    if (!persCat) return alert("請選擇分類！");
-    if (!persAmount || isNaN(persAmount) || Number(persAmount) <= 0) return alert("請輸入有效金額！");
-    setPersCart([...persCart, { id: Date.now(), user: persUser, cat: persCat, amount: Number(persAmount), note: persNote }]);
+  const handleAddPersCart = async () => {
+    if (!persUser) {
+      await customAlert("請選擇記誰的帳！");
+      return;
+    }
+    if (!persCat) {
+      await customAlert("請選擇分類！");
+      return;
+    }
+    const parsedAmount = parseMoney(persAmount);
+    if (!persAmount || parsedAmount <= 0) {
+      await customAlert("請輸入有效金額！");
+      return;
+    }
+    setPersCart([...persCart, { id: Date.now(), user: persUser, cat: persCat, amount: parsedAmount, note: persNote }]);
     setPersAmount('');
     setPersNote('');
     setPersCat(null);
@@ -155,15 +216,28 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     setPersCart(persCart.filter(i => i.id !== id));
   };
 
-  const handlePersonalSubmit = () => {
+  const handlePersonalSubmit = async () => {
     let finalItems = [...persCart];
     if (persAmount) {
-      if (!persUser) return alert("最後一筆(下方還未加入暫存)請選擇記誰的帳！");
-      if (isNaN(persAmount) || Number(persAmount) <= 0) return alert("請輸入有效金額！");
-      if (!persCat) return alert("最後一筆輸入尚未選擇分類！");
-      finalItems.push({ user: persUser, cat: persCat, amount: Number(persAmount), note: persNote });
+      const parsedAmount = parseMoney(persAmount);
+      if (!persUser) {
+        await customAlert("最後一筆(下方還未加入暫存)請選擇記誰的帳！");
+        return;
+      }
+      if (parsedAmount <= 0) {
+        await customAlert("請輸入有效金額！");
+        return;
+      }
+      if (!persCat) {
+        await customAlert("最後一筆輸入尚未選擇分類！");
+        return;
+      }
+      finalItems.push({ user: persUser, cat: persCat, amount: parsedAmount, note: persNote });
     }
-    if (finalItems.length === 0) return alert("請輸入花費金額或加入暫存！");
+    if (finalItems.length === 0) {
+      await customAlert("請輸入花費金額或加入暫存！");
+      return;
+    }
 
     const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
     let newAssets = getDeepCopy(assets);
@@ -198,7 +272,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       const payerName = user === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
       if (newAssets[payerKey] < total) {
-        alert(`⚠️ 取消送出：${payerName} 的個人餘額不足以支付 ${formatMoney(total)}！`);
+        await customAlert(`⚠️ 取消送出：${payerName} 的個人餘額不足以支付 ${formatMoney(total)}！`);
         return;
       }
       newAssets[payerKey] -= total;
@@ -209,12 +283,12 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       });
     }
 
-    if (!window.confirm(`確定要送出這 ${finalItems.length} 筆個人記帳嗎？\n(包含來自 ${Object.keys(grouped).length} 個不同帳戶)`)) return;
+    if (!(await customConfirm(`確定要送出這 ${finalItems.length} 筆個人記帳嗎？\n(包含來自 ${Object.keys(grouped).length} 個不同帳戶)`))) return;
 
     if (onTransaction) {
       onTransaction(newAssets, records);
     } else {
-      alert("Error: onTransaction is undefined");
+      await customAlert("Error: onTransaction is undefined");
     }
 
     setPersCart([]);
@@ -223,18 +297,27 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     setPersCat(null);
   };
 
-  const handleSaveNewBill = () => {
-    if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限，請確認 App.jsx 是否已更新！");
-    if (!billName) return alert("請填寫帳單名稱！");
-    const amountVal = Number(billAmount);
-    if (billType === 'fixed' && (isNaN(amountVal) || amountVal <= 0)) return alert("請輸入有效的正數帳單金額！");
+  const handleSaveNewBill = async () => {
+    if (!setAssets) {
+      await customAlert("❌ 系統錯誤：未取得資料庫權限，請確認 App.jsx 是否已更新！");
+      return;
+    }
+    if (!billName) {
+      await customAlert("請填寫帳單名稱！");
+      return;
+    }
+    const amountVal = parseMoney(billAmount);
+    if (billType === 'fixed' && amountVal <= 0) {
+      await customAlert("請輸入有效的正數帳單金額！");
+      return;
+    }
 
     const updatedBillData = {
       name: billName,
       scope: billScope,
       payer: billPayer,
       type: billType,
-      amount: billType === 'fixed' ? Number(billAmount) : 0,
+      amount: billType === 'fixed' ? parseMoney(billAmount) : 0,
       cycle: Number(billCycle),
       nextDate: billNextDate
     };
@@ -242,11 +325,11 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     if (editingBillId) {
       const updatedBills = safeBills.map(b => b.id === editingBillId ? { ...b, ...updatedBillData } : b);
       setAssets({ ...assets, bills: updatedBills });
-      alert("✅ 帳單修改成功！");
+      await customAlert("✅ 帳單修改成功！");
     } else {
       const newBill = { id: Date.now().toString(), ...updatedBillData };
       setAssets({ ...assets, bills: [...safeBills, newBill] });
-      alert("✅ 帳單設定成功！");
+      await customAlert("✅ 帳單設定成功！");
     }
 
     setShowAddBill(false);
@@ -260,25 +343,56 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     setBillScope(bill.scope);
     setBillPayer(bill.payer);
     setBillType(bill.type);
-    setBillAmount(bill.amount > 0 ? bill.amount : '');
+    setBillAmount(bill.amount > 0 ? formatInputMoney(bill.amount) : '');
     setBillCycle(bill.cycle);
     setBillNextDate(bill.nextDate);
     setEditingBillId(bill.id);
     setShowAddBill(true);
   };
 
-  const handlePayBill = (bill) => {
-    if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限！");
+  const handlePayBill = async (bill) => {
+    if (!setAssets) {
+      await customAlert("❌ 系統錯誤：未取得資料庫權限！");
+      return;
+    }
 
     let finalAmount = bill.amount;
     if (bill.type === 'variable') {
-      const input = window.prompt(`請輸入【${bill.name}】本期的實際扣款金額：`);
-      if (!input || isNaN(input)) return alert("❌ 已取消或金額無效");
+      const input = await customPrompt(`請輸入【${bill.name}】本期的實際扣款金額：`, '', '輸入金額', 'decimal');
+      if (!input || isNaN(input)) {
+        await customAlert("❌ 已取消或金額無效");
+        return;
+      }
       finalAmount = Number(input);
     }
 
-    if (finalAmount <= 0) return alert("金額無效");
-    if (!window.confirm(`確定要認列【${bill.name}】扣款 ${formatMoney(finalAmount)} 嗎？`)) return;
+    if (finalAmount <= 0) {
+      await customAlert("金額無效");
+      return;
+    }
+
+    // Check balance before confirmation dialog
+    if (bill.scope === 'joint') {
+      if (bill.payer === 'jointCash' && (assets.jointCash || 0) < finalAmount) {
+        await customAlert("❌ 共同現金不足以支付此帳單！");
+        return;
+      } else if (bill.payer === 'userA' && (assets.userA || 0) < finalAmount) {
+        await customAlert("❌ 大狗狗🐕的個人餘額不足以代墊此帳單！");
+        return;
+      } else if (bill.payer === 'userB' && (assets.userB || 0) < finalAmount) {
+        await customAlert("❌ 阿陞🐶的個人餘額不足以代墊此帳單！");
+        return;
+      }
+    } else {
+      const userKey = bill.payer === 'userA' ? 'userA' : 'userB';
+      const payerName = bill.payer === 'userA' ? '大狗狗🐕' : '阿陞🐶';
+      if ((assets[userKey] || 0) < finalAmount) {
+        await customAlert(`❌ ${payerName} 的個人餘額不足以支付此帳單！`);
+        return;
+      }
+    }
+
+    if (!(await customConfirm(`確定要認列【${bill.name}】扣款 ${formatMoney(finalAmount)} 嗎？`))) return;
 
     // 🛡️ 修復 Race Condition：把更新後的 bills 陣列當作參數一起丟給 App.jsx
     const nextDateStr = addMonthsSafe(bill.nextDate, bill.cycle);
@@ -292,9 +406,12 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     }
   };
 
-  const handleDeleteBill = (id) => {
-    if (!setAssets) return alert("❌ 系統錯誤：未取得資料庫權限！");
-    if (!window.confirm("⚠️ 確定要刪除這個帳單提醒嗎？")) return;
+  const handleDeleteBill = async (id) => {
+    if (!setAssets) {
+      await customAlert("❌ 系統錯誤：未取得資料庫權限！");
+      return;
+    }
+    if (!(await customConfirm("⚠️ 確定要刪除這個帳單提醒嗎？"))) return;
     setAssets({ ...assets, bills: safeBills.filter(b => b.id !== id) });
   };
 
@@ -369,7 +486,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
             <div style={{ flex: 1, minWidth: '100px' }}>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label>
-              <input type="number" inputMode="numeric" className="glass-input" style={{ boxSizing: 'border-box' }} value={jointAmount} onChange={(e) => setJointAmount(e.target.value)} placeholder="0" />
+              <input type="text" inputMode="numeric" className="glass-input" style={{ boxSizing: 'border-box' }} value={jointAmount} onChange={(e) => setJointAmount(formatInputMoney(e.target.value))} placeholder="$0" />
             </div>
             <div style={{ flex: 2, minWidth: '150px' }}>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>備註 (選填)</label>
@@ -406,7 +523,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
           )}
 
           <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', fontSize: '1.05rem' }} onClick={handleJointSubmit}>
-            確認記帳 (總計: {formatMoney(jointCart.reduce((s, i) => s + i.amount, 0) + (Number(jointAmount) || 0))})
+            確認記帳 (總計: {formatMoney(jointCart.reduce((s, i) => s + i.amount, 0) + (parseMoney(jointAmount) || 0))})
           </button>
         </div>
       )}
@@ -429,7 +546,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
             <div style={{ flex: 1, minWidth: '100px' }}>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label>
-              <input type="number" inputMode="numeric" className="glass-input" style={{ boxSizing: 'border-box' }} value={persAmount} onChange={(e) => setPersAmount(e.target.value)} placeholder="0" />
+              <input type="text" inputMode="numeric" className="glass-input" style={{ boxSizing: 'border-box' }} value={persAmount} onChange={(e) => setPersAmount(formatInputMoney(e.target.value))} placeholder="$0" />
             </div>
             <div style={{ flex: 2, minWidth: '150px' }}>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>備註 (選填)</label>
@@ -466,7 +583,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
           )}
 
           <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', fontSize: '1.05rem' }} onClick={handlePersonalSubmit}>
-            確認記帳 (總計: {formatMoney(persCart.reduce((s, i) => s + i.amount, 0) + (Number(persAmount) || 0))})
+            確認記帳 (總計: {formatMoney(persCart.reduce((s, i) => s + i.amount, 0) + (parseMoney(persAmount) || 0))})
           </button>
         </div>
       )}
@@ -496,7 +613,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
               </div>
 
               {billType === 'fixed' && (
-                <input type="number" inputMode="numeric" className="glass-input" placeholder="請輸入每期固定金額" value={billAmount} onChange={e => setBillAmount(e.target.value)} />
+                <input type="text" inputMode="numeric" className="glass-input" placeholder="請輸入每期固定金額" value={billAmount} onChange={e => setBillAmount(formatInputMoney(e.target.value))} />
               )}
 
               <div style={{ marginBottom: '10px' }}>

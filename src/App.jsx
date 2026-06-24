@@ -13,6 +13,24 @@ import { doc, onSnapshot, setDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MAKE_WEBHOOK_URL } from './config';
 
+const formatInputMoney = (valStr) => {
+  if (valStr === '' || valStr === undefined || valStr === null) return '';
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  const parts = clean.split('.');
+  if (parts.length > 2) {
+    parts[1] = parts.slice(1).join('');
+  }
+  const integerPart = parts[0] ? Number(parts[0]).toLocaleString() : '';
+  const decimalPart = parts.length > 1 ? '.' + parts[1] : '';
+  return `$${integerPart}${decimalPart}`;
+};
+
+const parseMoney = (valStr) => {
+  if (!valStr) return 0;
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  return Number(clean) || 0;
+};
+
 const USER_MAPPING = {
   "ender.tsai@gmail.com": "大狗狗🐕",
   "r5213467254@icloud.com": "阿陞🐶"
@@ -87,6 +105,124 @@ function App() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [splashPhase, setSplashPhase] = useState('loading');
   const dataReadyForSplash = useRef(false);
+  const [modalConfig, setModalConfig] = useState(null);
+
+  const customAlert = (message, title = '提示') => {
+    return new Promise((resolve) => {
+      setModalConfig({
+        type: 'alert',
+        title,
+        message,
+        resolve
+      });
+    });
+  };
+
+  const customConfirm = (message, title = '確認') => {
+    return new Promise((resolve) => {
+      setModalConfig({
+        type: 'confirm',
+        title,
+        message,
+        resolve
+      });
+    });
+  };
+
+  const customPrompt = (message, defaultValue = '', title = '輸入', inputMode = 'text') => {
+    return new Promise((resolve) => {
+      setModalConfig({
+        type: 'prompt',
+        title,
+        message,
+        defaultValue,
+        inputMode,
+        resolve
+      });
+    });
+  };
+
+  const CustomModal = () => {
+    if (!modalConfig) return null;
+    const isNumericPrompt = modalConfig.type === 'prompt' && (modalConfig.inputMode === 'numeric' || modalConfig.inputMode === 'decimal');
+    const [inputValue, setInputValue] = useState(() => {
+      const def = modalConfig.defaultValue || '';
+      return isNumericPrompt ? formatInputMoney(def) : def;
+    });
+
+    const handleConfirm = () => {
+      const res = modalConfig.resolve;
+      setModalConfig(null);
+      if (modalConfig.type === 'prompt') {
+        if (isNumericPrompt) {
+          res(parseMoney(inputValue).toString());
+        } else {
+          res(inputValue);
+        }
+      } else if (modalConfig.type === 'confirm') {
+        res(true);
+      } else {
+        res(true);
+      }
+    };
+
+    const handleCancel = () => {
+      const res = modalConfig.resolve;
+      setModalConfig(null);
+      if (modalConfig.type === 'confirm') {
+        res(false);
+      } else {
+        res(null);
+      }
+    };
+
+    const isDanger = modalConfig.message?.includes('作廢') || modalConfig.message?.includes('刪除') || modalConfig.message?.includes('警告') || modalConfig.message?.includes('覆蓋') || modalConfig.message?.includes('登出');
+
+    return (
+      <div className="liquid-modal-overlay" onClick={handleCancel}>
+        <div className="liquid-modal-card" onClick={e => e.stopPropagation()}>
+          <h3 className="liquid-modal-title">{modalConfig.title}</h3>
+          <p className="liquid-modal-message">{modalConfig.message}</p>
+          {modalConfig.type === 'prompt' && (
+            <div className="liquid-modal-input-container">
+              <input
+                type="text"
+                inputMode={modalConfig.inputMode || 'text'}
+                className="liquid-modal-input"
+                value={inputValue}
+                onChange={(e) => {
+                  if (isNumericPrompt) {
+                    setInputValue(formatInputMoney(e.target.value));
+                  } else {
+                    setInputValue(e.target.value);
+                  }
+                }}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleConfirm();
+                  if (e.key === 'Escape') handleCancel();
+                }}
+              />
+            </div>
+          )}
+          <div className="liquid-modal-actions">
+            {modalConfig.type !== 'alert' && (
+              <button className="liquid-modal-btn liquid-btn-cancel" onClick={handleCancel}>
+                取消
+              </button>
+            )}
+            <button
+              className={`liquid-modal-btn ${isDanger ? 'liquid-btn-danger' : 'liquid-btn-confirm'}`}
+              onClick={handleConfirm}
+            >
+              確定
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const [currentPage, setCurrentPage] = useState('overview');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
 
@@ -101,7 +237,7 @@ function App() {
     const interval = setInterval(() => {
       setLoadProgress(prev => {
         if (prev >= 100) return 100;
-        if (dataReadyForSplash.current) return Math.min(100, prev + 2.5);
+        if (dataReadyForSplash.current) return Math.min(100, prev + 12);
         if (prev < 30) return prev + 0.8;
         if (prev < 55) return prev + 0.4;
         if (prev < 75) return prev + 0.12;
@@ -126,11 +262,11 @@ function App() {
   // ★ 過場動畫時間軸
   useEffect(() => {
     if (splashPhase === 'filled') {
-      const t = setTimeout(() => setSplashPhase('exit'), 800);
+      const t = setTimeout(() => setSplashPhase('exit'), 200);
       return () => clearTimeout(t);
     }
     if (splashPhase === 'exit') {
-      const t = setTimeout(() => setSplashPhase('done'), 700);
+      const t = setTimeout(() => setSplashPhase('done'), 400);
       return () => clearTimeout(t);
     }
   }, [splashPhase]);
@@ -478,8 +614,8 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
-    if (window.confirm("確定要登出嗎？")) signOut(auth);
+  const handleLogout = async () => {
+    if (await customConfirm("確定要登出嗎？")) signOut(auth);
   };
 
   const getSnapshot = (currentAssets) => ({
@@ -545,12 +681,15 @@ function App() {
     setCurrentPage('overview');
   };
 
-  const handleAddExpense = (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
+  const handleAddExpense = async (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
     const payerKey = payer === 'userA' ? 'userA' : 'userB';
     const payerName = payer === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
     // Fix #2: 加入 return 攔截餘額不足的操作
-    if (assets[payerKey] < totalAmount) return alert(`⚠️ ${payerName} 的個人餘額不足！`);
+    if (assets[payerKey] < totalAmount) {
+      await customAlert(`⚠️ ${payerName} 的個人餘額不足！`);
+      return;
+    }
 
     const finalNote = note || '日記帳';
     const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
@@ -573,25 +712,34 @@ function App() {
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
     saveToCloud(finalAssets);
-    alert("✅ 記帳完成！");
+    await customAlert("✅ 記帳完成！");
     setCurrentPage('overview');
     if (!isBatch) sendLineNotification(payload);
   };
 
-  const handleAddJointExpense = (date, category, amount, advancedBy, note, updatedBills = null) => {
+  const handleAddJointExpense = async (date, category, amount, advancedBy, note, updatedBills = null) => {
     const val = Number(amount) || 0;
     const newAssets = { ...assets };
 
     let paymentMethodName = "共同帳戶直接付";
     if (advancedBy === 'jointCash') {
-      if (newAssets.jointCash < val) return alert("❌ 共同現金不足！");
+      if (newAssets.jointCash < val) {
+        await customAlert("❌ 共同現金不足！");
+        return;
+      }
       newAssets.jointCash -= val;
     } else if (advancedBy === 'userA') {
-      if (newAssets.userA < val) return alert("❌ 大狗狗🐕的個人餘額不足以代墊！");
+      if (newAssets.userA < val) {
+        await customAlert("❌ 大狗狗🐕的個人餘額不足以代墊！");
+        return;
+      }
       newAssets.userA -= val;
       paymentMethodName = "大狗狗🐕先墊 (User A)";
     } else if (advancedBy === 'userB') {
-      if (newAssets.userB < val) return alert("❌ 阿陞🐶的個人餘額不足以代墊！");
+      if (newAssets.userB < val) {
+        await customAlert("❌ 阿陞🐶的個人餘額不足以代墊！");
+        return;
+      }
       newAssets.userB -= val;
       paymentMethodName = "阿陞🐶先墊 (User B)";
     }
@@ -617,7 +765,7 @@ function App() {
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
     saveToCloud(finalAssets);
-    alert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
+    await customAlert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
     setCurrentPage('overview');
     if (!isBatch) sendLineNotification(payload);
   };
@@ -697,7 +845,7 @@ function App() {
   };
 
   // ★ 完美還原的作廢功能
-  const handleDeleteTransaction = (context) => {
+  const handleDeleteTransaction = async (context) => {
     let list;
     let record;
     if (context.source === 'main') {
@@ -709,15 +857,19 @@ function App() {
     }
 
     if (!record) return;
-    if (record.isDeleted) return alert("❌ 這筆紀錄已經被作廢過了！");
-    if (record.category === '作廢退款') return alert("❌ 「作廢退款」紀錄不可再次作廢！");
-    if (record.isSettled && record.advancedBy) return alert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
+    if (record.isDeleted) {
+      await customAlert("❌ 這筆紀錄已經被作廢過了！");
+      return;
+    }
+    if (record.category === '作廢退款') {
+      await customAlert("❌ 「作廢退款」紀錄不可再次作廢！");
+      return;
+    }
+    if (record.isSettled && record.advancedBy) {
+      await customAlert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
+      return;
+    }
 
-    const reason = window.prompt("⚠️ 即將作廢此紀錄，系統將自動還原對應的金額。\n請輸入作廢原因（必填）：");
-    if (!reason || !reason.trim()) return alert("❌ 必須輸入作廢原因才能繼續。");
-
-    const snapshotBefore = getSnapshot(assets);
-    // Fix #7: 深拷貝巢狀物件，避免 state 汙染
     const newAssets = {
       ...assets,
       jointInvestments: { ...(assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 }) },
@@ -813,6 +965,63 @@ function App() {
       default: break;
     }
 
+    // Check if any balance went below 0
+    if (newAssets.jointCash < 0) {
+      await customAlert(`❌ 共同現金餘額不足以扣除此項目 (需額外 $${Math.abs(newAssets.jointCash).toLocaleString()})，無法作廢！`);
+      return;
+    }
+    if ((newAssets.jointCash_usd || 0) < 0) {
+      await customAlert(`❌ 共同帳戶美金餘額不足以扣除此項目 (需額外 $${Math.abs(newAssets.jointCash_usd).toFixed(2)} USD)，無法作廢！`);
+      return;
+    }
+    if (newAssets.userA < 0) {
+      await customAlert(`❌ 大狗狗🐕個人餘額不足以扣除此項目 (需額外 $${Math.abs(newAssets.userA).toLocaleString()})，無法作廢！`);
+      return;
+    }
+    if (newAssets.userB < 0) {
+      await customAlert(`❌ 阿陞🐶個人餘額不足以扣除此項目 (需額外 $${Math.abs(newAssets.userB).toLocaleString()})，無法作廢！`);
+      return;
+    }
+    if ((newAssets.userA_usd || 0) < 0) {
+      await customAlert(`❌ 大狗狗🐕美金餘額不足以扣除此項目 (需額外 $${Math.abs(newAssets.userA_usd).toFixed(2)} USD)，無法作廢！`);
+      return;
+    }
+    if ((newAssets.userB_usd || 0) < 0) {
+      await customAlert(`❌ 阿陞🐶美金餘額不足以扣除此項目 (需額外 $${Math.abs(newAssets.userB_usd).toFixed(2)} USD)，無法作廢！`);
+      return;
+    }
+
+    if (newAssets.jointInvestments) {
+      for (const k of Object.keys(newAssets.jointInvestments)) {
+        if (newAssets.jointInvestments[k] < 0) {
+          const typeName = k === 'stock' ? '股票' : k === 'fund' ? '基金' : k === 'deposit' ? '定存' : '其他';
+          await customAlert(`❌ 共同帳戶的 ${typeName} 投資本金不足，無法作廢！`);
+          return;
+        }
+      }
+    }
+    if (newAssets.userInvestments) {
+      for (const u of ['userA', 'userB']) {
+        const uName = u === 'userA' ? '大狗狗🐕' : '阿陞🐶';
+        if (newAssets.userInvestments[u]) {
+          for (const k of Object.keys(newAssets.userInvestments[u])) {
+            if (newAssets.userInvestments[u][k] < 0) {
+              const typeName = k === 'stock' ? '股票' : k === 'fund' ? '基金' : k === 'deposit' ? '定存' : '其他';
+              await customAlert(`❌ ${uName} 的 ${typeName} 投資本金不足，無法作廢！`);
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    const reason = await customPrompt("⚠️ 即將作廢此紀錄，系統將自動還原對應的金額。\n請輸入作廢原因（必填）：");
+    if (!reason || !reason.trim()) {
+      await customAlert("❌ 必須輸入作廢原因才能繼續。");
+      return;
+    }
+
+    const snapshotBefore = getSnapshot(assets);
     const snapshotAfter = getSnapshot(newAssets);
     const updatedRecord = {
       ...record,
@@ -849,7 +1058,7 @@ function App() {
         month: context.month,
         archivedAt: new Date().toISOString(),
         records: list
-      }).catch(e => alert("歸檔紀錄同步失敗：" + e.message));
+      }).catch(async (e) => await customAlert("歸檔紀錄同步失敗：" + e.message));
     }
 
     newAssets.monthlyExpenses = mainList;
@@ -862,7 +1071,7 @@ function App() {
 
     saveToCloud(finalAssets);
     if (!isBatch) sendLineNotification(payload);
-    alert("🗑️ 紀錄已作廢，相關金額與投資本金已完全復原。");
+    await customAlert("🗑️ 紀錄已作廢，相關金額與投資本金已完全復原。");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
@@ -1036,13 +1245,15 @@ function App() {
             sendLineNotification={sendLineNotification}
             currentUser={operatorName}
             getUpdatedAssetsWithLineCount={getUpdatedAssetsWithLineCount}
+            customAlert={customAlert}
+            customConfirm={customConfirm}
           />
         )}
 
         {currentPage === 'review' && <ReviewView key="review" assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} />}
         {currentPage === 'invest' && <InvestmentView key="invest" assets={assets} isFetchingArchive={isFetchingArchive} />}
-        {currentPage === 'transfer' && <AssetTransfer key="transfer" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} />}
-        {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} />}
+        {currentPage === 'transfer' && <AssetTransfer key="transfer" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} customAlert={customAlert} customConfirm={customConfirm} />}
+        {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} />}
       </div>
 
       {/* ★ LineSettingsModal — 內嵌 JSX，避免元件重建導致輸入框失焦 */}
@@ -1078,7 +1289,7 @@ function App() {
             <h3 style={{ marginTop: 0, marginBottom: '20px', fontWeight: '700', letterSpacing: '-0.01em' }}>💬 系統通知管理</h3>
             <div style={{ marginBottom: '18px' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>手動校正當月計數</label>
-              <input type="number" className="glass-input" value={tempLineCount} onChange={e => setTempLineCount(e.target.value)} placeholder="強制覆寫系統已發送數量" style={{ marginBottom: 0 }} />
+              <input type="number" inputMode="numeric" className="glass-input" value={tempLineCount} onChange={e => setTempLineCount(e.target.value)} placeholder="強制覆寫系統已發送數量" style={{ marginBottom: 0 }} />
             </div>
             <div style={{ marginBottom: '22px', padding: '16px', background: 'rgba(120,120,128,0.06)', borderRadius: 'var(--radius-md)', border: isBatch_ls ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition: 'all 0.3s ease' }}>
               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
@@ -1104,6 +1315,7 @@ function App() {
         </div>
       )}
       <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} assets={assets} />
+      <CustomModal />
     </div>
   );
 }

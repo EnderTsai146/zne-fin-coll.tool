@@ -41,6 +41,7 @@ const Login = () => {
             }}>Email</label>
             <input
               type="email"
+              inputMode="email"
               className="glass-input"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

@@ -8,7 +8,25 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 
 const formatMoney = (num) => "$" + Number(num).toLocaleString();
 
-const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, sendLineNotification, currentUser, getUpdatedAssetsWithLineCount }) => {
+const formatInputMoney = (valStr) => {
+  if (valStr === '' || valStr === undefined || valStr === null) return '';
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  const parts = clean.split('.');
+  if (parts.length > 2) {
+    parts[1] = parts.slice(1).join('');
+  }
+  const integerPart = parts[0] ? Number(parts[0]).toLocaleString() : '';
+  const decimalPart = parts.length > 1 ? '.' + parts[1] : '';
+  return `$${integerPart}${decimalPart}`;
+};
+
+const parseMoney = (valStr) => {
+  if (!valStr) return 0;
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  return Number(clean) || 0;
+};
+
+const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, sendLineNotification, currentUser, getUpdatedAssetsWithLineCount, customAlert, customConfirm }) => {
     const history = combinedHistory || [];
 
     const [viewMode, setViewMode] = useState('chart');
@@ -37,10 +55,10 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     }, [filterDate, loadArchiveMonth]);
 
     const [isEditingBudget, setIsEditingBudget] = useState(false);
-    const [tempBudget, setTempBudget] = useState(assets.monthlyBudget || 40000);
+    const [tempBudget, setTempBudget] = useState(() => formatInputMoney(assets.monthlyBudget || 40000));
     const currentBudget = assets.monthlyBudget || 40000;
 
-    const handleSaveBudget = () => { setAssets({ ...assets, monthlyBudget: Number(tempBudget) }); setIsEditingBudget(false); };
+    const handleSaveBudget = () => { setAssets({ ...assets, monthlyBudget: parseMoney(tempBudget) }); setIsEditingBudget(false); };
 
     // ★ 增加校正專屬顏色標籤
     const getTypeColor = (type) => {
@@ -60,12 +78,12 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const calculateDebt = (userKey) => history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false).reduce((sum, r) => sum + Number(r.total), 0);
     const getDebtList = (userKey) => history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false);
 
-    const handleSettle = (targetUser) => {
+    const handleSettle = async (targetUser) => {
         const targetName = targetUser === 'userA' ? '大狗狗🐕' : '阿陞🐶';
         const debtAmount = calculateDebt(targetUser);
-        if (debtAmount === 0) return alert("目前沒有未結清的款項喔！");
-        if (assets.jointCash < debtAmount) return alert(`❌ 共同現金餘額不足以結清 (需 $${debtAmount.toLocaleString()})！`);
-        if (!window.confirm(`【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這將會從「共同現金」扣除該金額，並加回「${targetName}」的個人帳戶)`)) return;
+        if (debtAmount === 0) return await customAlert("目前沒有未結清的款項喔！");
+        if (assets.jointCash < debtAmount) return await customAlert(`❌ 共同現金餘額不足以結清 (需 $${debtAmount.toLocaleString()})！`);
+        if (!await customConfirm(`【確認結清】\n\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n\n(這將會從「共同現金」扣除該金額，並加回「${targetName}」的個人帳戶)`)) return;
 
         const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
         const snapshotBefore = { userA: assets.userA || 0, userB: assets.userB || 0, userA_usd: assets.userA_usd || 0, userB_usd: assets.userB_usd || 0, jointCash_usd: assets.jointCash_usd || 0, jointCash: assets.jointCash || 0, jointInvestments: { ...safeInvestments } };
@@ -97,7 +115,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         }
 
         setAssets(newAssets);
-        alert("✅ 結清完成！資金已轉移，並已產生結清軌跡。"); setShowSettlementModal(false);
+        await customAlert("✅ 結清完成！資金已轉移，並已產生結清軌跡。"); setShowSettlementModal(false);
     };
 
     const dashboardData = useMemo(() => {
@@ -195,12 +213,12 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
             if (!noteMatch && !catMatch && !payerMatch && !symbolMatch) return false;
         }
         if (minAmount !== '') {
-            const minVal = Number(minAmount);
-            if (!isNaN(minVal) && record.total < minVal) return false;
+            const minVal = parseMoney(minAmount);
+            if (record.total < minVal) return false;
         }
         if (maxAmount !== '') {
-            const maxVal = Number(maxAmount);
-            if (!isNaN(maxVal) && record.total > maxVal) return false;
+            const maxVal = parseMoney(maxAmount);
+            if (record.total > maxVal) return false;
         }
         
         return true;
@@ -254,11 +272,11 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '700' }}>🎯 本月預算進度</h3>
                             {isEditingBudget ? (
                                 <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                                    <input type="number" className="glass-input" style={{ margin: 0, padding: '4px 8px', width: '100px' }} value={tempBudget} onChange={e => setTempBudget(e.target.value)} />
+                                    <input type="text" inputMode="numeric" className="glass-input" style={{ margin: 0, padding: '4px 8px', width: '100px' }} value={tempBudget} onChange={e => setTempBudget(formatInputMoney(e.target.value))} />
                                     <button className="glass-btn" style={{ padding: '4px 10px', fontSize: '0.8rem' }} onClick={handleSaveBudget}>儲存</button>
                                 </div>
                             ) : (
-                                <div style={{ fontSize: '0.88rem', color: 'var(--text-tertiary)', cursor: 'pointer', background: 'rgba(120,120,128,0.06)', padding: '4px 10px', borderRadius: 'var(--radius-xs)' }} onClick={() => setIsEditingBudget(true)}>
+                                <div style={{ fontSize: '0.88rem', color: 'var(--text-tertiary)', cursor: 'pointer', background: 'rgba(120,120,128,0.06)', padding: '4px 10px', borderRadius: 'var(--radius-xs)' }} onClick={() => { setTempBudget(formatInputMoney(assets.monthlyBudget || 40000)); setIsEditingBudget(true); }}>
                                     設定預算: {formatMoney(currentBudget)} ✏️
                                 </div>
                             )}
@@ -426,11 +444,11 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             </div>
                             <div style={{ flex: '1', minWidth: '80px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額下限</label>
-                                <input type="number" placeholder="最小金額" className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+                                <input type="text" inputMode="numeric" placeholder="最小金額" className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={minAmount} onChange={(e) => setMinAmount(formatInputMoney(e.target.value))} />
                             </div>
                             <div style={{ flex: '1', minWidth: '80px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額上限</label>
-                                <input type="number" placeholder="最大金額" className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+                                <input type="text" inputMode="numeric" placeholder="最大金額" className="glass-input" style={{ width: '100%', margin: 0, padding: '8px', boxSizing: 'border-box' }} value={maxAmount} onChange={(e) => setMaxAmount(formatInputMoney(e.target.value))} />
                             </div>
                         </div>
                     </div>

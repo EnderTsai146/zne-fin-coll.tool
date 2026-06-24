@@ -1275,26 +1275,19 @@ h4 {
 
 /* Exit: everything scales up and fades */
 .splash-phase-exit {
-  animation: splashExitAnim 0.8s ease-in forwards !important;
+  animation: splashExitAnim 0.4s cubic-bezier(0.3, 0.86, 0.36, 0.95) forwards !important;
 }
 
 @keyframes splashExitAnim {
   0% {
     opacity: 1;
     transform: scale(1);
-    filter: brightness(1);
+    filter: brightness(1) blur(0px);
   }
-
-  35% {
-    opacity: 1;
-    transform: scale(1.03);
-    filter: brightness(1.6);
-  }
-
   100% {
     opacity: 0;
-    transform: scale(1.5);
-    filter: brightness(2.5);
+    transform: scale(1.15);
+    filter: brightness(1.1) blur(10px);
   }
 }
 
@@ -2060,4 +2053,195 @@ span,
 div {
   word-break: keep-all;
   overflow-wrap: break-word;
+}
+
+/* ======================================================
+   === Apple Liquid Glass Modals & Dialogs ===
+   ====================================================== */
+.liquid-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  animation: liquid-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.liquid-modal-card {
+  width: 90%;
+  max-width: 420px;
+  background: rgba(25, 25, 27, 0.82);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 12px 24px rgba(255, 255, 255, 0.03);
+  padding: 24px 28px;
+  position: relative;
+  overflow: hidden;
+  animation: liquid-pop-in 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #ffffff;
+}
+
+.liquid-modal-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.15) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.liquid-modal-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, #ffffff, #dcdcdc);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.liquid-modal-message {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.liquid-modal-input-container {
+  width: 100%;
+}
+
+.liquid-modal-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.liquid-modal-input:focus {
+  border-color: var(--accent-blue);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 12px rgba(0, 122, 255, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.liquid-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.liquid-modal-btn {
+  padding: 10px 22px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all var(--duration-fast) cubic-bezier(0.16, 1, 0.3, 1);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.liquid-btn-cancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.liquid-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.liquid-btn-cancel:active {
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.liquid-btn-confirm {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-indigo));
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.22);
+}
+
+.liquid-btn-confirm:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 18px rgba(0, 122, 255, 0.35);
+}
+
+.liquid-btn-confirm:active {
+  transform: scale(0.96);
+  filter: brightness(0.95);
+}
+
+.liquid-btn-danger {
+  background: linear-gradient(135deg, var(--accent-red), #cf2a27);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.22);
+}
+
+.liquid-btn-danger:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 18px rgba(255, 59, 48, 0.35);
+}
+
+.liquid-btn-danger:active {
+  transform: scale(0.96);
+  filter: brightness(0.95);
+}
+
+@keyframes liquid-fade-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px) saturate(100%);
+    -webkit-backdrop-filter: blur(0px) saturate(100%);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+  }
+}
+
+@keyframes liquid-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  60% {
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

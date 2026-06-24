@@ -5,9 +5,25 @@ import { MY_GOOGLE_API_URL } from '../config';
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 
+const formatInputMoney = (valStr) => {
+  if (valStr === '' || valStr === undefined || valStr === null) return '';
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  const parts = clean.split('.');
+  if (parts.length > 2) {
+    parts[1] = parts.slice(1).join('');
+  }
+  const integerPart = parts[0] ? Number(parts[0]).toLocaleString() : '';
+  const decimalPart = parts.length > 1 ? '.' + parts[1] : '';
+  return `$${integerPart}${decimalPart}`;
+};
 
+const parseMoney = (valStr) => {
+  if (!valStr) return 0;
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  return Number(clean) || 0;
+};
 
-const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
+const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, customAlert, customConfirm }) => {
   const [activeTab, setActiveTab] = useState('invest');
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
   const fileInputRef = useRef(null);
@@ -77,7 +93,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
   useEffect(() => {
     if (investType !== 'stock' || investAction === 'day_trade' || stockMarket === 'US') return;
-    const p = Number(stockPrice) || 0;
+    const p = parseMoney(stockPrice);
     const s = Number(stockShares) || 0;
     if (p === 0 || s === 0) return;
     const baseAmount = p * s;
@@ -91,78 +107,82 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
   const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
 
-  const handleIncomeSubmit = () => {
-    if (!incomeUser) return alert("請選擇戶頭！");
-    const val = parseInt(incomeAmount);
-    if (isNaN(val) || val <= 0) return alert("請輸入有效的正數金額");
+  const handleIncomeSubmit = async () => {
+    if (!incomeUser) return await customAlert("請選擇戶頭！");
+    const val = parseMoney(incomeAmount);
+    if (val <= 0) return await customAlert("請輸入有效的正數金額");
     const userName = incomeUser === 'userA' ? '大狗狗🐕' : '阿陞🐶';
-    if (!window.confirm(`確定要記錄 ${userName} 收入 ${formatMoney(val)} 嗎？`)) return;
+    if (!await customConfirm(`確定要記錄 ${userName} 收入 ${formatMoney(val)} 嗎？`)) return;
     const newAssets = getDeepCopy(assets);
     newAssets[incomeUser] += val;
     onTransaction(newAssets, { type: 'income', category: '個人收入', payer: userName, total: val, note: incomeNote.trim() || '一般收入', month: txDate.slice(0, 7), date: txDate });
-    alert(`✅ 已記錄收入：${formatMoney(val)}`);
+    await customAlert(`✅ 已記錄收入：${formatMoney(val)}`);
     setIncomeAmount(''); setIncomeNote(''); setIncomeUser(null);
   };
 
-  const handleTransfer = () => {
-    if (!transSource) return alert("請選擇來源！");
-    const val = parseInt(transAmount);
-    if (isNaN(val) || val <= 0) return alert("請輸入有效的正數金額");
-    if (assets[transSource] < val) return alert("❌ 個人餘額不足！");
+  const handleTransfer = async () => {
+    if (!transSource) return await customAlert("請選擇來源！");
+    const val = parseMoney(transAmount);
+    if (val <= 0) return await customAlert("請輸入有效的正數金額");
+    if (assets[transSource] < val) return await customAlert("❌ 個人餘額不足！");
     const userName = transSource === 'userA' ? '大狗狗🐕' : '阿陞🐶';
-    if (!window.confirm(`確定要從 ${userName} 上繳 ${formatMoney(val)} 至共同帳戶嗎？`)) return;
+    if (!await customConfirm(`確定要從 ${userName} 上繳 ${formatMoney(val)} 至共同帳戶嗎？`)) return;
     const newAssets = getDeepCopy(assets);
     newAssets[transSource] -= val;
     newAssets.jointCash += val;
     onTransaction(newAssets, { type: 'transfer', category: '資產劃撥', payer: userName, total: val, note: `轉移至 共同現金`, month: txDate.slice(0, 7), date: txDate });
-    alert("✅ 劃撥成功！");
+    await customAlert("✅ 劃撥成功！");
     setTransAmount(''); setTransSource(null);
   };
 
-  const handleExchange = () => {
-    if (!exchangeSource) return alert("請選擇操作帳戶！");
-    if (!exchangeDir) return alert("請選擇換匯方向！");
-    if (!exchangeTwd || !exchangeUsd) return alert("請輸入台幣與美金金額");
-    const twd = parseInt(exchangeTwd);
-    const usd = parseFloat(exchangeUsd);
-    if (isNaN(twd) || twd <= 0 || isNaN(usd) || usd <= 0) return alert("請輸入有效的台幣與美金正數金額！");
+  const handleExchange = async () => {
+    if (!exchangeSource) return await customAlert("請選擇操作帳戶！");
+    if (!exchangeDir) return await customAlert("請選擇換匯方向！");
+    if (!exchangeTwd || !exchangeUsd) return await customAlert("請輸入台幣與美金金額");
+    const twd = parseMoney(exchangeTwd);
+    const usd = parseMoney(exchangeUsd);
+    if (twd <= 0 || usd <= 0) return await customAlert("請輸入有效的台幣與美金正數金額！");
     const newAssets = getDeepCopy(assets);
     const accountName = exchangeSource === 'jointCash' ? '共同帳戶' : (exchangeSource === 'userA' ? '大狗狗🐕' : '阿陞🐶');
 
     if (exchangeDir === 'TWD_TO_USD') {
-      if ((newAssets[exchangeSource] || 0) < twd) return alert(`❌ ${accountName} 台幣餘額不足！`);
+      if ((newAssets[exchangeSource] || 0) < twd) return await customAlert(`❌ ${accountName} 台幣餘額不足！`);
       newAssets[exchangeSource] -= twd;
       newAssets[`${exchangeSource}_usd`] = (newAssets[`${exchangeSource}_usd`] || 0) + usd;
       onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `台幣換美金 (買入 $${usd} USD)`, date: txDate });
     } else {
-      if ((newAssets[`${exchangeSource}_usd`] || 0) < usd) return alert(`❌ ${accountName} 美金餘額不足！`);
+      if ((newAssets[`${exchangeSource}_usd`] || 0) < usd) return await customAlert(`❌ ${accountName} 美金餘額不足！`);
       newAssets[`${exchangeSource}_usd`] -= usd;
       newAssets[exchangeSource] += twd;
       onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `美金換台幣 (賣出 $${usd} USD)`, date: txDate });
     }
-    alert("✅ 換匯成功！");
+    await customAlert("✅ 換匯成功！");
     setExchangeTwd(''); setExchangeUsd('');
     setExchangeSource(null); setExchangeDir(null);
   };
 
-  const handleCalibrate = () => {
-    if (!calibAccount) return alert("請選擇校正帳戶！");
-    if (calibTwd === '' && calibUsd === '') return alert("請至少輸入一項實際餘額");
+  const handleCalibrate = async () => {
+    if (!calibAccount) return await customAlert("請選擇校正帳戶！");
+    if (calibTwd === '' && calibUsd === '') return await customAlert("請至少輸入一項實際餘額");
 
-    if ((calibTwd !== '' && isNaN(parseInt(calibTwd))) || (calibUsd !== '' && isNaN(parseFloat(calibUsd)))) {
-      return alert("請輸入有效的校正餘額數字！");
+    const parsedTwdVal = calibTwd !== '' ? parseMoney(calibTwd) : null;
+    const parsedUsdVal = calibUsd !== '' ? parseMoney(calibUsd) : null;
+
+    if ((calibTwd !== '' && parsedTwdVal < 0) ||
+        (calibUsd !== '' && parsedUsdVal < 0)) {
+      return await customAlert("請輸入有效的非負校正餘額數字！");
     }
 
     const currentTwd = assets[calibAccount] || 0;
     const currentUsd = assets[`${calibAccount}_usd`] || 0;
 
-    const newTwd = calibTwd !== '' ? parseInt(calibTwd) : currentTwd;
-    const newUsd = calibUsd !== '' ? parseFloat(calibUsd) : currentUsd;
+    const newTwd = calibTwd !== '' ? parsedTwdVal : currentTwd;
+    const newUsd = calibUsd !== '' ? parsedUsdVal : currentUsd;
 
     const twdDiff = newTwd - currentTwd;
     const usdDiff = newUsd - currentUsd;
 
-    if (twdDiff === 0 && usdDiff === 0) return alert("輸入的餘額與目前帳面相同，無需校正");
+    if (twdDiff === 0 && usdDiff === 0) return await customAlert("輸入的餘額與目前帳面相同，無需校正");
 
     const accountName = calibAccount === 'jointCash' ? '共同帳戶' : (calibAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
 
@@ -170,7 +190,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     if (twdDiff !== 0) diffNotes.push(`台幣 ${twdDiff > 0 ? '+' : ''}${twdDiff}`);
     if (usdDiff !== 0) diffNotes.push(`美金 ${usdDiff > 0 ? '+' : ''}${usdDiff.toFixed(2)}`);
 
-    if (!window.confirm(`確定要將 ${accountName} 的餘額校正為：\n台幣: ${formatMoney(newTwd)}\n美金: $${newUsd.toFixed(2)} USD\n\n(系統將自動調整: ${diffNotes.join(' / ')})`)) return;
+    if (!await customConfirm(`確定要將 ${accountName} 的餘額校正為：\n台幣: ${formatMoney(newTwd)}\n美金: $${newUsd.toFixed(2)} USD\n\n(系統將自動調整: ${diffNotes.join(' / ')})`)) return;
 
     const newAssets = getDeepCopy(assets);
     newAssets[calibAccount] = newTwd;
@@ -188,19 +208,19 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       date: txDate
     });
 
-    alert("✅ 餘額校正完成！");
+    await customAlert("✅ 餘額校正完成！");
     setCalibTwd('');
     setCalibUsd('');
     setCalibAccount(null);
   };
 
-  const handleAddInvestCart = () => {
-    if (!investAccount) return alert("請選擇操作帳戶！");
-    if (!investAction) return alert("請選擇動作！");
-    if (!investType) return alert("請選擇標的類型！");
-    if (investType === 'stock' && !stockMarket) return alert("請選擇股票市場！");
-    if (investType === 'stock' && stockMarket === 'US' && !settleCurrency) return alert("請選擇交割帳戶！");
-    if (investAction === 'day_trade' && !dayTradeResult) return alert("請選擇當沖結果！");
+  const handleAddInvestCart = async () => {
+    if (!investAccount) return await customAlert("請選擇操作帳戶！");
+    if (!investAction) return await customAlert("請選擇動作！");
+    if (!investType) return await customAlert("請選擇標的類型！");
+    if (investType === 'stock' && !stockMarket) return await customAlert("請選擇股票市場！");
+    if (investType === 'stock' && stockMarket === 'US' && !settleCurrency) return await customAlert("請選擇交割帳戶！");
+    if (investAction === 'day_trade' && !dayTradeResult) return await customAlert("請選擇當沖結果！");
 
     // ★ Context-aware validation: only require fields relevant to the current path
     const isUsStock = investType === 'stock' && stockMarket === 'US';
@@ -209,48 +229,48 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
 
     if (isUsStock) {
       // US stock always needs USD total
-      const usdVal = parseFloat(usTotalUsd);
-      if (isNaN(usdVal) || usdVal <= 0) return alert("請確認並輸入有效的正數美金總額 (USD)！");
+      const usdVal = parseMoney(usTotalUsd);
+      if (usdVal <= 0) return await customAlert("請確認並輸入有效的正數美金總額 (USD)！");
 
-      const fxRateVal = parseFloat(usFxRate);
-      if (settleCurrency === 'TWD' && (isNaN(fxRateVal) || fxRateVal <= 0)) {
-        return alert("請輸入有效的正數成交匯率！");
+      const fxRateVal = parseMoney(usFxRate);
+      if (settleCurrency === 'TWD' && fxRateVal <= 0) {
+        return await customAlert("請輸入有效的正數成交匯率！");
       }
 
       if (isUsdSettle && investAction === 'buy') {
         // USD settlement buy: only needs usTotalUsd — no investAmount, no FX rate needed
         // Auto-compute investAmount (台幣本金) for bookkeeping using current FX rate
         const autoTwd = Math.round(usdVal * Number(usFxRate || currentFxRate || 31.5));
-        const currentAmount = parseInt(investAmount);
-        if (isNaN(currentAmount) || currentAmount <= 0) {
+        const currentAmount = parseMoney(investAmount);
+        if (currentAmount <= 0) {
           setInvestAmount(autoTwd.toString());
         }
       } else if (isTwdSettle && investAction === 'buy') {
         // TWD settlement buy: needs investAmount (台幣交割額) + usFxRate
-        const val = parseInt(investAmount);
-        if (isNaN(val) || val <= 0) return alert("請確認並輸入有效的台幣交割總額！");
+        const val = parseMoney(investAmount);
+        if (val <= 0) return await customAlert("請確認並輸入有效的台幣交割總額！");
       } else if (investAction === 'sell') {
         // US stock sell: needs usInvestPrincipalUsd. investPrincipal is only required for TWD settle
-        const principalUsdVal = parseFloat(usInvestPrincipalUsd);
-        if (isNaN(principalUsdVal) || principalUsdVal <= 0) return alert("請輸入有效的正數美金成本！");
+        const principalUsdVal = parseMoney(usInvestPrincipalUsd);
+        if (principalUsdVal <= 0) return await customAlert("請輸入有效的正數美金成本！");
         if (isTwdSettle) {
-          const principalVal = parseInt(investPrincipal);
-          if (isNaN(principalVal) || principalVal <= 0) return alert("請輸入有效的正數扣除台幣本金！");
-          const val = parseInt(investAmount);
-          if (isNaN(val) || val <= 0) return alert("請確認並輸入有效的台幣收回總額！");
+          const principalVal = parseMoney(investPrincipal);
+          if (principalVal <= 0) return await customAlert("請輸入有效的正數扣除台幣本金！");
+          const val = parseMoney(investAmount);
+          if (val <= 0) return await customAlert("請確認並輸入有效的台幣收回總額！");
         }
       }
     } else if (investAction === 'day_trade') {
-      const val = parseInt(investAmount);
-      if (isNaN(val) || val <= 0) return alert("請輸入有效的正數當沖淨差額！");
+      const val = parseMoney(investAmount);
+      if (val <= 0) return await customAlert("請輸入有效的正數當沖淨差額！");
     } else {
       // TW stock or non-stock (fund/deposit/other)
-      const val = parseInt(investAmount);
-      if (isNaN(val) || val <= 0) return alert("請確認並輸入有效的正數收支總額！");
+      const val = parseMoney(investAmount);
+      if (val <= 0) return await customAlert("請確認並輸入有效的正數收支總額！");
       // TW stock sell needs principal
       if (investType === 'stock' && stockMarket === 'TW' && investAction === 'sell') {
-        const principalVal = parseInt(investPrincipal);
-        if (isNaN(principalVal) || principalVal <= 0) return alert("請輸入有效的正數扣除台幣本金！");
+        const principalVal = parseMoney(investPrincipal);
+        if (principalVal <= 0) return await customAlert("請輸入有效的正數扣除台幣本金！");
       }
     }
 
@@ -260,13 +280,13 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     }
 
     let finalInvestAmount = investAmount;
-    if (isUsdSettle && investAction === 'buy' && (!finalInvestAmount || parseInt(finalInvestAmount) <= 0)) {
-      finalInvestAmount = Math.round(parseFloat(usTotalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
+    if (isUsdSettle && investAction === 'buy' && (!finalInvestAmount || parseMoney(finalInvestAmount) <= 0)) {
+      finalInvestAmount = Math.round(parseMoney(usTotalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
     }
 
     let finalInvestPrincipal = investPrincipal;
-    if (isUsdSettle && investAction === 'sell' && (!finalInvestPrincipal || parseInt(finalInvestPrincipal) <= 0)) {
-      finalInvestPrincipal = Math.round(parseFloat(usInvestPrincipalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
+    if (isUsdSettle && investAction === 'sell' && (!finalInvestPrincipal || parseMoney(finalInvestPrincipal) <= 0)) {
+      finalInvestPrincipal = Math.round(parseMoney(usInvestPrincipalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
     }
 
     setInvestCart([...investCart, {
@@ -291,13 +311,13 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     // 依要求：保留 investType, stockMarket, settleCurrency, investAction, investAccount, dayTradeResult 的選項進度
   };
 
-  const handleInvestSubmit = () => {
+  const handleInvestSubmit = async () => {
     const items = [...investCart];
     // Check if there's unsaved data in the form (either investAmount or usTotalUsd has value)
-    if ((investAmount && parseInt(investAmount) > 0) || (usTotalUsd && parseFloat(usTotalUsd) > 0)) {
-      return alert("請先點擊「➕ 暫存此筆」，將資料加入清單後再送出喔！");
+    if ((investAmount && parseMoney(investAmount) > 0) || (usTotalUsd && parseMoney(usTotalUsd) > 0)) {
+      return await customAlert("請先點擊「➕ 暫存此筆」，將資料加入清單後再送出喔！");
     }
-    if (items.length === 0) return alert("暫存清單沒有任何項目！");
+    if (items.length === 0) return await customAlert("暫存清單沒有任何項目！");
 
     const newAssets = getDeepCopy(assets);
     if (!newAssets.userInvestments) newAssets.userInvestments = { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } };
@@ -313,11 +333,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
       const label = investType === 'stock' && stockSymbol ? stockSymbol : { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[investType];
 
-      const val = parseInt(investAmount);
+      const val = parseMoney(investAmount);
 
       if (investAction === 'day_trade') {
         const isProfit = dayTradeResult === 'profit';
-        if (!isProfit && newAssets[investAccount] < val) return alert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 現金不足以支付當沖虧損！`);
+        if (!isProfit && newAssets[investAccount] < val) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 現金不足以支付當沖虧損！`);
 
         if (isProfit) newAssets[investAccount] += val; else newAssets[investAccount] -= val;
         transactionRecords.push({ type: isProfit ? 'personal_invest_profit' : 'personal_invest_loss', category: '當沖結算', payer: accountName, accountKey: investAccount, investType, total: val, note: `當沖${isProfit ? '賺' : '賠'} - ${label}`, date: txDate, symbol: stockSymbol });
@@ -326,28 +346,28 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       }
 
       if (investType === 'stock' && stockMarket === 'US') {
-        const costUsd = parseFloat(usTotalUsd) || 0;
+        const costUsd = parseMoney(usTotalUsd);
         const equivalentTwd = Math.round(costUsd * Number(usFxRate || 31.5));
 
         if (investAction === 'buy') {
           if (settleCurrency === 'USD') {
-            if ((newAssets[`${investAccount}_usd`] || 0) < costUsd) return alert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 美金餘額不足！`);
+            if ((newAssets[`${investAccount}_usd`] || 0) < costUsd) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 美金餘額不足！`);
             newAssets[`${investAccount}_usd`] -= costUsd;
             if (isJoint) newAssets.jointInvestments[investType] += equivalentTwd; else newAssets.userInvestments[investAccount][investType] += equivalentTwd;
-            transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, usdAmount: costUsd, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice) });
+            transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, usdAmount: costUsd, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
           } else {
-            if (newAssets[investAccount] < val) return alert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！`);
+            if (newAssets[investAccount] < val) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！`);
             newAssets[investAccount] -= val;
             if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
-            transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, usdAmount: costUsd, note: `買入 ${label} (台幣交割)`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice) });
+            transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, usdAmount: costUsd, note: `買入 ${label} (台幣交割)`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
           }
           summaryNotes.push(`買入 ${label}`);
         } else if (investAction === 'sell') {
-          const principalTwd = parseInt(investPrincipal);
+          const principalTwd = parseMoney(investPrincipal);
           const currentPrincipal = isJoint ? newAssets.jointInvestments[investType] : newAssets.userInvestments[investAccount][investType];
-          if (currentPrincipal < principalTwd) return alert(`❌ 第 ${i + 1} 筆錯誤：帳面本金僅剩 ${formatMoney(currentPrincipal)}，無法扣除 ${formatMoney(principalTwd)}！`);
+          if (currentPrincipal < principalTwd) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：帳面本金僅剩 ${formatMoney(currentPrincipal)}，無法扣除 ${formatMoney(principalTwd)}！`);
 
-          const principalUsd = parseFloat(usInvestPrincipalUsd);
+          const principalUsd = parseMoney(usInvestPrincipalUsd);
           const profitUsd = costUsd - principalUsd;
           const profitNote = profitUsd >= 0 ? `(賺 $${profitUsd.toFixed(2)} USD)` : `(賠 $${Math.abs(profitUsd).toFixed(2)} USD)`;
 
@@ -366,16 +386,16 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       }
 
       if (investAction === 'buy') {
-        if (newAssets[investAccount] < val) return alert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！`);
+        if (newAssets[investAccount] < val) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！`);
         newAssets[investAccount] -= val;
         if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
-        transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: Number(stockPrice) });
+        transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
         summaryNotes.push(`買入 ${label}`);
 
       } else if (investAction === 'sell') {
-        const principalVal = parseInt(investPrincipal);
+        const principalVal = parseMoney(investPrincipal);
         const currentPrincipal = isJoint ? newAssets.jointInvestments[investType] : newAssets.userInvestments[investAccount][investType];
-        if (currentPrincipal < principalVal) return alert(`❌ 第 ${i + 1} 筆錯誤：帳面本金僅剩 ${formatMoney(currentPrincipal)}，無法扣除 ${formatMoney(principalVal)}！`);
+        if (currentPrincipal < principalVal) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：帳面本金僅剩 ${formatMoney(currentPrincipal)}，無法扣除 ${formatMoney(principalVal)}！`);
 
         const profit = val - principalVal;
         const profitNote = profit >= 0 ? `(賺 ${formatMoney(profit)})` : `(賠 ${formatMoney(Math.abs(profit))})`;
@@ -386,10 +406,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       }
     }
 
-    if (!window.confirm(`確定將這 ${items.length} 筆一起送出嗎？\n\n預計的動作有：\n${summaryNotes.join('\n')}`)) return;
+    if (!await customConfirm(`確定將這 ${items.length} 筆一起送出嗎？\n\n預計的動作有：\n${summaryNotes.join('\n')}`)) return;
 
     onTransaction(newAssets, transactionRecords);
-    alert(`✅ 已成功批次處理 ${items.length} 筆投資操作！`);
+    await customAlert(`✅ 已成功批次處理 ${items.length} 筆投資操作！`);
     setInvestCart([]);
   };
 
@@ -406,12 +426,17 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const data = JSON.parse(event.target.result);
-        if (data.userA === undefined) return alert("❌ 格式錯誤！");
-        if (window.confirm("⚠️ 警告：這將會「覆蓋」所有資料！確定還原嗎？")) { setAssets(data); alert("✅ 還原成功！"); }
-      } catch (err) { alert("❌ 讀取失敗。"); }
+        if (data.userA === undefined) return await customAlert("❌ 格式錯誤！");
+        if (await customConfirm("⚠️ 警告：這將會「覆蓋」所有資料！確定還原嗎？")) {
+          setAssets(data);
+          await customAlert("✅ 還原成功！");
+        }
+      } catch (err) {
+        await customAlert("❌ 讀取失敗。");
+      }
     };
     reader.readAsText(file); e.target.value = '';
   };
@@ -431,10 +456,13 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
         redirect: 'follow'
       });
       const text = await res.text();
-      if (text.includes('success')) alert('✅ 成功備份至 Google 雲端硬碟！請至雲端硬碟確認檔案。');
+      if (text.includes('success')) await customAlert('✅ 成功備份至 Google 雲端硬碟！請至雲端硬碟確認檔案。');
       else throw new Error("API 錯誤");
-    } catch (e) { alert('❌ 備份失敗，請檢查網路'); }
-    finally { setIsManualBackingUp(false); }
+    } catch (e) {
+      await customAlert('❌ 備份失敗，請檢查網路');
+    } finally {
+      setIsManualBackingUp(false);
+    }
   };
 
   return (
@@ -525,7 +553,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>交易股數</label>
-                  <input type="number" className="glass-input" value={stockShares} onChange={e => setStockShares(e.target.value)} placeholder="例: 10" />
+                  <input type="text" inputMode="numeric" className="glass-input" value={stockShares} onChange={e => setStockShares(e.target.value.replace(/[^\d]/g, ''))} placeholder="例: 10" />
                 </div>
               </div>
 
@@ -533,22 +561,22 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                   <div style={{ flex: 1, minWidth: '100px' }}>
                     <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>單價 (USD)</label>
-                    <input type="number" className="glass-input" value={stockPrice} onChange={e => setStockPrice(e.target.value)} placeholder="170" />
+                    <input type="text" inputMode="decimal" className="glass-input" value={stockPrice} onChange={e => setStockPrice(formatInputMoney(e.target.value))} placeholder="$170" />
                   </div>
                   <div style={{ flex: 1, minWidth: '120px' }}>
                     <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>{investAction === 'buy' ? '總額含息費(USD)' : '賣出總得(USD)'}</label>
-                    <input type="number" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usTotalUsd} onChange={e => {
-                      setUsTotalUsd(e.target.value);
-                      if (settleCurrency === 'TWD') setInvestAmount(Math.round(Number(e.target.value) * Number(usFxRate)).toString());
+                    <input type="text" inputMode="decimal" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usTotalUsd} onChange={e => {
+                      setUsTotalUsd(formatInputMoney(e.target.value));
+                      if (settleCurrency === 'TWD') setInvestAmount(formatInputMoney(Math.round(parseMoney(e.target.value) * Number(usFxRate || 0)).toString()));
                     }} placeholder="依元大輸入" />
                   </div>
                   {/* ★ Only show exchange rate when TWD settlement is selected (USD settlement doesn't need it) */}
                   {settleCurrency === 'TWD' && (
                     <div style={{ flex: 1, minWidth: '80px' }}>
                       <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>成交匯率</label>
-                      <input type="number" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usFxRate} onChange={e => {
-                        setUsFxRate(e.target.value);
-                        setInvestAmount(Math.round(Number(usTotalUsd) * Number(e.target.value)).toString());
+                      <input type="text" inputMode="decimal" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usFxRate} onChange={e => {
+                        setUsFxRate(e.target.value.replace(/[^\d.]/g, ''));
+                        setInvestAmount(formatInputMoney(Math.round(parseMoney(usTotalUsd) * Number(e.target.value || 0)).toString()));
                       }} placeholder="31.5" />
                     </div>
                   )}
@@ -557,7 +585,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>成交單價 (TWD)</label>
-                    <input type="number" className="glass-input" value={stockPrice} onChange={e => setStockPrice(e.target.value)} placeholder="輸入單價" />
+                    <input type="text" inputMode="decimal" className="glass-input" value={stockPrice} onChange={e => setStockPrice(formatInputMoney(e.target.value))} placeholder="輸入單價" />
                   </div>
                 </div>
               )}
@@ -577,14 +605,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <span>{investAction === 'buy' ? '最終交割總額 (台幣)' : investAction === 'sell' ? '最終拿回現金 (台幣)' : '結算淨差額 (台幣)'}</span>
               </label>
-              <input type="number" inputMode="numeric" className="glass-input" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)' }} value={investAmount} onChange={(e) => setInvestAmount(e.target.value)} placeholder="0" />
+              <input type="text" inputMode="decimal" className="glass-input" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)' }} value={investAmount} onChange={(e) => setInvestAmount(formatInputMoney(e.target.value))} placeholder="$0" />
             </div>
           )}
 
           {investAction === 'sell' && stockMarket === 'TW' && (
             <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(255,204,0,0.06)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--accent-yellow)' }}>
               <label style={{ color: 'var(--accent-orange)', fontWeight: '700' }}>⚠️ 這批賣掉的資產，當初買入的「本金(台幣)」是多少？</label>
-              <input type="number" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', border: '1px solid var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="請輸入扣除本金" />
+              <input type="text" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', border: '1px solid var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="請輸入扣除本金" />
             </div>
           )}
 
@@ -593,12 +621,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
               <label style={{ color: 'var(--accent-orange)', fontWeight: '700', fontSize: '0.92rem' }}>⚠️ 賣出美股成本計算</label>
               <div style={{ marginTop: '8px' }}>
                 <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>元大顯示的「美金持有成本」<span style={{ color: 'var(--accent-red)' }}>(必填計算獲利)</span></label>
-                <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(e.target.value)} placeholder="例: 800" />
+                <input type="text" inputMode="decimal" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(formatInputMoney(e.target.value))} placeholder="例: 800" />
               </div>
               {settleCurrency !== 'USD' ? (
                 <div style={{ marginTop: '8px' }}>
                   <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>這批股票當初投入的「大約台幣本金」<br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
-                  <input type="number" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(e.target.value)} placeholder="例: 25200" />
+                  <input type="text" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="例: 25200" />
                 </div>
               ) : (
                 <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.4)', padding: '6px', borderRadius: '4px' }}>
@@ -661,11 +689,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>台幣總額</label>
-              <input type="number" className="glass-input" value={exchangeTwd} onChange={e => setExchangeTwd(e.target.value)} placeholder="例: 31500" />
+              <input type="text" inputMode="numeric" className="glass-input" value={exchangeTwd} onChange={e => setExchangeTwd(formatInputMoney(e.target.value))} placeholder="例: 31500" />
             </div>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>美金總額 (USD)</label>
-              <input type="number" className="glass-input" value={exchangeUsd} onChange={e => setExchangeUsd(e.target.value)} placeholder="例: 1000" />
+              <input type="text" inputMode="decimal" className="glass-input" value={exchangeUsd} onChange={e => setExchangeUsd(formatInputMoney(e.target.value))} placeholder="例: 1000" />
             </div>
           </div>
 
@@ -701,11 +729,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>輸入實際台幣餘額<br /><span style={{ fontSize: '0.7rem', fontWeight: '400' }}>(留空代表不修改)</span></label>
-              <input type="number" className="glass-input" style={{ marginTop: '4px' }} value={calibTwd} onChange={e => setCalibTwd(e.target.value)} placeholder={`例: ${assets[calibAccount] || 0}`} />
+              <input type="text" inputMode="numeric" className="glass-input" style={{ marginTop: '4px' }} value={calibTwd} onChange={e => setCalibTwd(formatInputMoney(e.target.value))} placeholder={`例: ${assets[calibAccount] || 0}`} />
             </div>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>輸入實際美金餘額<br /><span style={{ fontSize: '0.7rem', fontWeight: '400' }}>(留空代表不修改)</span></label>
-              <input type="number" className="glass-input" style={{ marginTop: '4px' }} value={calibUsd} onChange={e => setCalibUsd(e.target.value)} placeholder={`例: ${(assets[`${calibAccount}_usd`] || 0).toFixed(2)}`} />
+              <input type="text" inputMode="decimal" className="glass-input" style={{ marginTop: '4px' }} value={calibUsd} onChange={e => setCalibUsd(formatInputMoney(e.target.value))} placeholder={`例: ${(assets[`${calibAccount}_usd`] || 0).toFixed(2)}`} />
             </div>
           </div>
 
@@ -716,7 +744,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       {activeTab === 'transfer' && (
         <div key="transfer-panel" className="glass-card card-animate page-transition-enter"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>💸 上繳公庫</h3>
           <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>來源</label><SegmentedControl options={[{ label: `大狗狗🐕`, value: 'userA' }, { label: `阿陞🐶`, value: 'userB' }]} value={transSource} onChange={setTransSource} /></div>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="number" className="glass-input" value={transAmount} onChange={(e) => setTransAmount(e.target.value)} placeholder="0" /></div>
+          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="text" inputMode="numeric" className="glass-input" value={transAmount} onChange={(e) => setTransAmount(formatInputMoney(e.target.value))} placeholder="$0" /></div>
           <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleTransfer}>確認上繳</button>
         </div>
       )}
@@ -724,7 +752,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate }) => {
       {activeTab === 'income' && (
         <div key="income-panel" className="glass-card card-animate page-transition-enter"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>💰 一般收入</h3>
           <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>戶頭</label><SegmentedControl options={[{ label: `大狗狗🐕`, value: 'userA' }, { label: `阿陞🐶`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} /></div>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="number" className="glass-input" value={incomeAmount} onChange={(e) => setIncomeAmount(e.target.value)} placeholder="輸入金額" /></div>
+          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="text" inputMode="numeric" className="glass-input" value={incomeAmount} onChange={(e) => setIncomeAmount(formatInputMoney(e.target.value))} placeholder="輸入金額" /></div>
           <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>備註</label><input type="text" className="glass-input" value={incomeNote} onChange={(e) => setIncomeNote(e.target.value)} placeholder="例如：3月薪水" /></div>
           <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleIncomeSubmit}>確認收入入帳</button>
         </div>
