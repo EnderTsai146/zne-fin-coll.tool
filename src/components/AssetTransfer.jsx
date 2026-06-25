@@ -444,8 +444,104 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     }
     if (items.length === 0) return await customAlert("暫存清單沒有任何項目！");
 
+    // 1. 模擬與餘額校驗階段 (Validation & Simulation Phase)
+    const simAssets = getDeepCopy(assets);
+    if (!simAssets.userInvestments) simAssets.userInvestments = { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } };
+    if (!simAssets.jointInvestments) simAssets.jointInvestments = { stock: 0, fund: 0, deposit: 0, other: 0 };
+    
+    let errors = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const { investAccount, investAction, investType, stockMarket, settleCurrency, usTotalUsd, usFxRate, investAmount, investPrincipal, dayTradeResult } = item;
+
+      const isJoint = investAccount === 'jointCash';
+      const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+
+      const val = parseMoney(investAmount);
+
+      if (investAction === 'day_trade') {
+        const isProfit = dayTradeResult === 'profit';
+        if (!isProfit && (simAssets[investAccount] || 0) < val) {
+          errors.push(`第 ${i + 1} 筆錯誤：${accountName} 現金不足以支付當沖虧損！(需要 ${formatMoney(val)}，剩餘 ${formatMoney(simAssets[investAccount] || 0)})`);
+        } else {
+          if (isProfit) simAssets[investAccount] = (simAssets[investAccount] || 0) + val;
+          else simAssets[investAccount] = (simAssets[investAccount] || 0) - val;
+        }
+        continue;
+      }
+
+      if (investType === 'stock' && stockMarket === 'US') {
+        const costUsd = parseMoney(usTotalUsd);
+        const equivalentTwd = Math.round(costUsd * Number(usFxRate || 31.5));
+
+        if (investAction === 'buy') {
+          if (settleCurrency === 'USD') {
+            if ((simAssets[`${investAccount}_usd`] || 0) < costUsd) {
+              errors.push(`第 ${i + 1} 筆錯誤：${accountName} 美金餘額不足！(需要 $${costUsd.toFixed(2)} USD，剩餘 $${(simAssets[`${investAccount}_usd`] || 0).toFixed(2)} USD)`);
+            } else {
+              simAssets[`${investAccount}_usd`] = (simAssets[`${investAccount}_usd`] || 0) - costUsd;
+              if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) + equivalentTwd;
+              else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) + equivalentTwd;
+            }
+          } else {
+            if ((simAssets[investAccount] || 0) < val) {
+              errors.push(`第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！(需要 ${formatMoney(val)}，剩餘 ${formatMoney(simAssets[investAccount] || 0)})`);
+            } else {
+              simAssets[investAccount] = (simAssets[investAccount] || 0) - val;
+              if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) + val;
+              else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) + val;
+            }
+          }
+        } else if (investAction === 'sell') {
+          const principalTwd = parseMoney(investPrincipal);
+          const currentPrincipal = isJoint ? (simAssets.jointInvestments[investType] || 0) : (simAssets.userInvestments[investAccount][investType] || 0);
+          if (currentPrincipal < principalTwd) {
+            errors.push(`第 ${i + 1} 筆錯誤：${accountName} 帳面本金不足！(需要扣除 ${formatMoney(principalTwd)}，但目前本金僅剩 ${formatMoney(currentPrincipal)})`);
+          } else {
+            if (settleCurrency === 'USD') {
+              simAssets[`${investAccount}_usd`] = (simAssets[`${investAccount}_usd`] || 0) + costUsd;
+            } else {
+              simAssets[investAccount] = (simAssets[investAccount] || 0) + val;
+            }
+            if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) - principalTwd;
+            else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) - principalTwd;
+          }
+        }
+        continue;
+      }
+
+      if (investAction === 'buy') {
+        if ((simAssets[investAccount] || 0) < val) {
+          errors.push(`第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！(需要 ${formatMoney(val)}，剩餘 ${formatMoney(simAssets[investAccount] || 0)})`);
+        } else {
+          simAssets[investAccount] = (simAssets[investAccount] || 0) - val;
+          if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) + val;
+          else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) + val;
+        }
+      } else if (investAction === 'sell') {
+        const principalVal = parseMoney(investPrincipal);
+        const currentPrincipal = isJoint ? (simAssets.jointInvestments[investType] || 0) : (simAssets.userInvestments[investAccount][investType] || 0);
+        if (currentPrincipal < principalVal) {
+          errors.push(`第 ${i + 1} 筆錯誤：${accountName} 帳面本金不足！(需要扣除 ${formatMoney(principalVal)}，但目前本金僅剩 ${formatMoney(currentPrincipal)})`);
+        } else {
+          simAssets[investAccount] = (simAssets[investAccount] || 0) + val;
+          if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) - principalVal;
+          else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) - principalVal;
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      const errorMsg = `❌ 批次交易無法送出，原因如下：\n\n` + errors.map((err, idx) => `${idx + 1}. ${err}`).join('\n\n');
+      await customAlert(errorMsg);
+      return;
+    }
+
+    // 2. 實際資料扣減與紀錄寫入階段 (Execution Phase)
     const newAssets = getDeepCopy(assets);
     if (!newAssets.userInvestments) newAssets.userInvestments = { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } };
+    if (!newAssets.jointInvestments) newAssets.jointInvestments = { stock: 0, fund: 0, deposit: 0, other: 0 };
 
     const transactionRecords = [];
     let summaryNotes = [];
@@ -462,8 +558,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
 
       if (investAction === 'day_trade') {
         const isProfit = dayTradeResult === 'profit';
-        if (!isProfit && newAssets[investAccount] < val) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 現金不足以支付當沖虧損！`);
-
         if (isProfit) newAssets[investAccount] += val; else newAssets[investAccount] -= val;
         transactionRecords.push({ type: isProfit ? 'personal_invest_profit' : 'personal_invest_loss', category: '當沖結算', payer: accountName, accountKey: investAccount, investType, total: val, note: `當沖${isProfit ? '賺' : '賠'} - ${label}`, date: txDate, symbol: stockSymbol });
         summaryNotes.push(`當沖 ${label} ${isProfit ? '賺' : '賠'} ${formatMoney(val)}`);
@@ -476,12 +570,10 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
 
         if (investAction === 'buy') {
           if (settleCurrency === 'USD') {
-            if ((newAssets[`${investAccount}_usd`] || 0) < costUsd) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 美金餘額不足！`);
             newAssets[`${investAccount}_usd`] -= costUsd;
             if (isJoint) newAssets.jointInvestments[investType] += equivalentTwd; else newAssets.userInvestments[investAccount][investType] += equivalentTwd;
             transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, usdAmount: costUsd, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
           } else {
-            if (newAssets[investAccount] < val) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！`);
             newAssets[investAccount] -= val;
             if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
             transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, usdAmount: costUsd, note: `買入 ${label} (台幣交割)`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
@@ -489,9 +581,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           summaryNotes.push(`買入 ${label}`);
         } else if (investAction === 'sell') {
           const principalTwd = parseMoney(investPrincipal);
-          const currentPrincipal = isJoint ? newAssets.jointInvestments[investType] : newAssets.userInvestments[investAccount][investType];
-          if (currentPrincipal < principalTwd) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：帳面本金僅剩 ${formatMoney(currentPrincipal)}，無法扣除 ${formatMoney(principalTwd)}！`);
-
           const principalUsd = parseMoney(usInvestPrincipalUsd);
           const profitUsd = costUsd - principalUsd;
           const profitNote = profitUsd >= 0 ? `(賺 $${profitUsd.toFixed(2)} USD)` : `(賠 $${Math.abs(profitUsd).toFixed(2)} USD)`;
@@ -511,7 +600,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
       }
 
       if (investAction === 'buy') {
-        if (newAssets[investAccount] < val) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！`);
         newAssets[investAccount] -= val;
         if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
         transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
@@ -519,9 +607,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
 
       } else if (investAction === 'sell') {
         const principalVal = parseMoney(investPrincipal);
-        const currentPrincipal = isJoint ? newAssets.jointInvestments[investType] : newAssets.userInvestments[investAccount][investType];
-        if (currentPrincipal < principalVal) return await customAlert(`❌ 第 ${i + 1} 筆錯誤：帳面本金僅剩 ${formatMoney(currentPrincipal)}，無法扣除 ${formatMoney(principalVal)}！`);
-
         const profit = val - principalVal;
         const profitNote = profit >= 0 ? `(賺 ${formatMoney(profit)})` : `(賠 ${formatMoney(Math.abs(profit))})`;
         newAssets[investAccount] += val;
@@ -775,12 +860,28 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
               <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>🛒 本次批次明細 ({investCart.length}筆)：</div>
               {investCart.map(item => (
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', gap: '8px' }}>
-                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ 
+                      padding: '3px 8px', 
+                      borderRadius: '6px', 
+                      fontSize: '0.73rem', 
+                      fontWeight: '600', 
+                      whiteSpace: 'nowrap',
+                      background: item.investAction === 'buy' ? 'rgba(0, 122, 255, 0.12)' : (item.investAction === 'sell' ? 'rgba(255, 149, 0, 0.12)' : 'rgba(175, 82, 222, 0.12)'),
+                      color: item.investAction === 'buy' ? '#7fc0ff' : (item.investAction === 'sell' ? '#ffb94f' : '#dcb2ff')
+                    }}>
                       {item.investAction === 'buy' ? '買入' : item.investAction === 'sell' ? '賣出' : '當沖'}
                     </span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                      [{item.investAccount === 'jointCash' ? '🏫 共同' : (item.investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶')}]
+                    <span style={{ 
+                      fontSize: '0.73rem', 
+                      fontWeight: '600', 
+                      whiteSpace: 'nowrap',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      background: item.investAccount === 'jointCash' ? 'rgba(255, 149, 0, 0.12)' : (item.investAccount === 'userA' ? 'rgba(255, 45, 87, 0.12)' : 'rgba(52, 199, 89, 0.15)'),
+                      color: item.investAccount === 'jointCash' ? '#ffb94f' : (item.investAccount === 'userA' ? '#ff8da1' : '#8effa2')
+                    }}>
+                      {item.investAccount === 'jointCash' ? '🏫 共同' : (item.investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶')}
                     </span>
                     <span style={{ minWidth: 0, wordBreak: 'break-all' }}>
                       {item.stockSymbol || { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[item.investType]}

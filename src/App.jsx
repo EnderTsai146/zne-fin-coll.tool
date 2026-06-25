@@ -882,17 +882,12 @@ function App() {
       ? 'userA'
       : ((safePayer.includes('阿陞🐶') || safePayer.includes('用戶2')) ? 'userB' : null);
 
-    let updatedExpenses = [...(assets.monthlyExpenses || [])];
-
     // 依據交易類型，進行精準的反向加減 (包含美金與台幣)
     switch (record.type) {
       case 'settle':
         if (record.settledUser) {
           newAssets.jointCash += record.total;
           newAssets[record.settledUser] -= record.total;
-        }
-        if (record.settleId) {
-          updatedExpenses = updatedExpenses.map(r => r.settleId === record.settleId ? { ...r, isSettled: false, settleId: null } : r);
         }
         break;
       case 'income':
@@ -943,7 +938,7 @@ function App() {
         }
         break;
       case 'joint_invest_sell':
-      case 'liquidate':
+      case 'liquidate': {
         if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
         else newAssets.jointCash -= record.total;
 
@@ -952,6 +947,7 @@ function App() {
           newAssets.jointInvestments[sellType] += (record.principal || record.total);
         }
         break;
+      }
       case 'personal_invest_sell':
         if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
           if (record.usdAmount) {
@@ -1050,9 +1046,16 @@ function App() {
 
     if (context.source === 'main') {
       mainList = list;
-      mainList.push(calibrateRecord);
-    } else {
-      mainList.push(calibrateRecord);
+    }
+
+    // ★ 如果是「系統結算」類型的紀錄被作廢，必須把 mainList 中對應 settleId 的消費明細還原為未結清
+    if (record.type === 'settle' && record.settleId) {
+      mainList = mainList.map(r => (r.type === 'spend' && r.settleId === record.settleId) ? { ...r, isSettled: false, settleId: null } : r);
+    }
+
+    mainList.push(calibrateRecord);
+
+    if (context.source === 'archive') {
       setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
       setDoc(doc(db, "finance", `arc_${context.month}`), {
         month: context.month,

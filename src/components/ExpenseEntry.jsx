@@ -133,6 +133,34 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       grouped[item.advancedBy].push(item);
     });
 
+    // 1. 餘額分段校驗 (Validation Phase)
+    let errors = [];
+    for (const advancedBy of Object.keys(grouped)) {
+      let items = grouped[advancedBy];
+      const total = items.reduce((sum, item) => sum + item.amount, 0);
+
+      if (advancedBy === 'jointCash') {
+        if (newAssets.jointCash < total) {
+          errors.push(`🏫 共同現金餘額不足！當前餘額 ${formatMoney(newAssets.jointCash)}，購物車總支出為 ${formatMoney(total)}（尚缺 ${formatMoney(total - newAssets.jointCash)}）`);
+        }
+      } else if (advancedBy === 'userA') {
+        if (newAssets.userA < total) {
+          errors.push(`🐕 大狗狗的個人餘額不足以代墊！當前餘額 ${formatMoney(newAssets.userA)}，購物車總支出為 ${formatMoney(total)}（尚缺 ${formatMoney(total - newAssets.userA)}）`);
+        }
+      } else if (advancedBy === 'userB') {
+        if (newAssets.userB < total) {
+          errors.push(`🐶 阿陞的個人餘額不足以代墊！當前餘額 ${formatMoney(newAssets.userB)}，購物車總支出為 ${formatMoney(total)}（尚缺 ${formatMoney(total - newAssets.userB)}）`);
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      const errorMsg = `❌ 無法送出記帳，原因如下：\n\n` + errors.map((err, idx) => `${idx + 1}. ${err}`).join('\n\n');
+      await customAlert(errorMsg);
+      return;
+    }
+
+    // 2. 實際資料扣減與紀錄寫入 (Execution Phase)
     for (const advancedBy of Object.keys(grouped)) {
       let items = grouped[advancedBy];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
@@ -147,22 +175,10 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       }).join('，');
 
       if (advancedBy === 'jointCash') {
-        if (newAssets.jointCash < total) {
-          await customAlert("❌ 共同現金不足以支付總額：" + formatMoney(total));
-          return;
-        }
         newAssets.jointCash -= total;
       } else if (advancedBy === 'userA') {
-        if (newAssets.userA < total) {
-          await customAlert("❌ 大狗狗🐕的個人餘額不足以代墊：" + formatMoney(total));
-          return;
-        }
         newAssets.userA -= total;
       } else if (advancedBy === 'userB') {
-        if (newAssets.userB < total) {
-          await customAlert("❌ 阿陞🐶的個人餘額不足以代墊：" + formatMoney(total));
-          return;
-        }
         newAssets.userB -= total;
       }
 
@@ -246,7 +262,26 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       grouped[item.user].push(item);
     });
 
-    // ★ Fix: 使用 for...of 取代 forEach + throw，確保餘額不足時能正確中斷
+    // 1. 餘額分段校驗 (Validation Phase)
+    let errors = [];
+    for (const user of Object.keys(grouped)) {
+      let items = grouped[user];
+      const total = items.reduce((sum, item) => sum + item.amount, 0);
+      const payerKey = user === 'userA' ? 'userA' : 'userB';
+      const payerName = user === 'userA' ? '大狗狗🐕' : '阿陞🐶';
+
+      if (newAssets[payerKey] < total) {
+        errors.push(`👤 ${payerName} 的個人餘額不足！當前餘額 ${formatMoney(newAssets[payerKey])}，購物車總支出為 ${formatMoney(total)}（尚缺 ${formatMoney(total - newAssets[payerKey])}）`);
+      }
+    }
+
+    if (errors.length > 0) {
+      const errorMsg = `❌ 無法送出記帳，原因如下：\n\n` + errors.map((err, idx) => `${idx + 1}. ${err}`).join('\n\n');
+      await customAlert(errorMsg);
+      return;
+    }
+
+    // 2. 實際資料扣減與紀錄寫入 (Execution Phase)
     for (const user of Object.keys(grouped)) {
       let items = grouped[user];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
@@ -268,10 +303,6 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       const payerKey = user === 'userA' ? 'userA' : 'userB';
       const payerName = user === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
-      if (newAssets[payerKey] < total) {
-        await customAlert(`⚠️ 取消送出：${payerName} 的個人餘額不足以支付 ${formatMoney(total)}！`);
-        return;
-      }
       newAssets[payerKey] -= total;
 
       records.push({
@@ -503,10 +534,18 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
               <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>🛒 本次合併明細：</div>
               {jointCart.map(item => (
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', gap: '8px' }}>
-                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{item.cat}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                      [{item.advancedBy === 'jointCash' ? '🏫 共同' : (item.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶')}]
+                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ background: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-primary)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{item.cat}</span>
+                    <span style={{ 
+                      fontSize: '0.73rem', 
+                      fontWeight: '600', 
+                      whiteSpace: 'nowrap',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      background: item.advancedBy === 'jointCash' ? 'rgba(255, 149, 0, 0.12)' : (item.advancedBy === 'userA' ? 'rgba(255, 45, 87, 0.12)' : 'rgba(52, 199, 89, 0.15)'),
+                      color: item.advancedBy === 'jointCash' ? '#ffb94f' : (item.advancedBy === 'userA' ? '#ff8da1' : '#8effa2')
+                    }}>
+                      {item.advancedBy === 'jointCash' ? '🏫 共同' : (item.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶')}
                     </span>
                     <span style={{ minWidth: 0, wordBreak: 'break-all' }}>{item.note || item.cat}</span>
                   </div>
@@ -563,10 +602,18 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
               <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>🛒 本次合併明細：</div>
               {persCart.map(item => (
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', gap: '8px' }}>
-                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                    <span style={{ background: 'rgba(120,120,128,0.08)', padding: '2px 6px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{item.cat}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple)', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                      [{item.user === 'userA' ? '大狗狗🐕' : '阿陞🐶'}]
+                  <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ background: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-primary)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{item.cat}</span>
+                    <span style={{ 
+                      fontSize: '0.73rem', 
+                      fontWeight: '600', 
+                      whiteSpace: 'nowrap',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      background: item.user === 'userA' ? 'rgba(255, 45, 87, 0.12)' : 'rgba(52, 199, 89, 0.15)',
+                      color: item.user === 'userA' ? '#ff8da1' : '#8effa2'
+                    }}>
+                      {item.user === 'userA' ? '大狗狗🐕' : '阿陞🐶'}
                     </span>
                     <span style={{ minWidth: 0, wordBreak: 'break-all' }}>{item.note || item.cat}</span>
                   </div>
