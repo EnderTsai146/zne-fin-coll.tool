@@ -11,6 +11,34 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointE
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const formatDate = (date) => date.toISOString().split('T')[0];
+const CHANGELOG_DATA = [
+    {
+        version: 'v1.3.0',
+        date: '2026-06-25',
+        highlights: [
+            '🔢 金額輸入千分位與貨幣符號自動套用：輸入時畫面自動即時顯示 $ 與逗號，後台無感轉換為數值儲存，輸入更直覺。',
+            '🛒 暫存明細（購物車）手機版排版優化：針對各暫存購物車，改進窄螢幕下的標籤與備註折行機制，避免金額與刪除按鈕跑版。',
+            '📈 證券交易 FIFO (先進先出) 成本回推：賣出股票時自動依據買入紀錄回估本金預填；修正即時報價引擎，開盤時優先使用最新市價而非昨收價。',
+            '🥔 載入動畫升級：馬鈴薯 🥔 直接填滿，具備彈性 Q 彈抖動特效與完成時的粒子放射效果，並確保數字載入完畢才進入主頁。',
+            '🔮 全面磨砂玻璃化 (Liquid Glass)：去除總覽、回顧、投資三個分頁中的實色方框，提升介面整體高質感度。',
+            '📱 操作子分頁懸停效果溢出修正：修復了操作分頁按鈕懸浮時，頂部被隱藏邊界切掉的問題。'
+        ],
+        tutorials: [
+            {
+                title: '暫存記帳與防呆機制',
+                content: '在輸入金額後點擊「➕ 暫存此筆」可連續記帳。若暫存區的總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截並提示，防止餘額透支。'
+            },
+            {
+                title: '投資賣出的 FIFO 估算',
+                content: '進行股票賣出時，輸入股票代號與賣出股數，系統會自動在背景搜尋最早買入的價格（先進先出），自動計算並預填「投入本金」欄位，方便計算精確損益。'
+            },
+            {
+                title: '自動備份引擎',
+                content: '系統會在您每日首次打開網頁時，自動於背景進行 Google 雲端備份，不影響操作，保護資料永不丟失。'
+            }
+        ]
+    }
+];
 
 const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingArchive, setAssets, currentFxRate, setCurrentFxRate }) => {
     // ★ Fix: 將日期移入元件內，避免模組級別變數在跨日後過期
@@ -21,6 +49,12 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
     const [backupWarning, setBackupWarning] = useState(false);
     const [selectedChartDate, setSelectedChartDate] = useState(null);
+
+    const [showChangelog, setShowChangelog] = useState(false);
+    const [hasNewUpdate, setHasNewUpdate] = useState(() => {
+        const lastSeen = localStorage.getItem('potato_last_seen_version');
+        return CHANGELOG_DATA.length > 0 && lastSeen !== CHANGELOG_DATA[0].version;
+    });
 
     // ★ 當用戶點擊折線圖的某一天時，系統自動背景調取那一個月的歸檔紀錄
     useEffect(() => {
@@ -515,8 +549,51 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 </div>
             )}
 
-            <h1 className="page-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                總資產概況
+            <h1 className="page-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <span>總資產概況</span>
+                <button
+                    className="glass-btn"
+                    style={{
+                        fontSize: '0.8rem',
+                        padding: '6px 12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        borderRadius: 'var(--radius-pill, 99px)',
+                        border: '1px solid var(--glass-border)',
+                        background: 'var(--glass-bg)',
+                        color: 'var(--text-primary)',
+                        position: 'relative',
+                        transition: 'all 0.2s ease'
+                    }}
+                    onClick={() => {
+                        setShowChangelog(true);
+                        if (CHANGELOG_DATA.length > 0) {
+                            localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
+                        }
+                        setHasNewUpdate(false);
+                    }}
+                >
+                    📢 更新日誌
+                    {hasNewUpdate && (
+                        <span style={{
+                            background: 'var(--accent-red, #ff3b30)',
+                            color: 'white',
+                            fontSize: '0.62rem',
+                            fontWeight: '800',
+                            padding: '2px 6px',
+                            borderRadius: '10px',
+                            lineHeight: '1',
+                            animation: 'pulseRed 2s infinite',
+                            boxShadow: '0 0 8px rgba(255, 59, 48, 0.6)',
+                            display: 'inline-block'
+                        }}>
+                            New
+                        </span>
+                    )}
+                </button>
             </h1>
 
             {/* 【第一層】雙人總資產大看板 */}
@@ -735,6 +812,78 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
                 {renderChartDetails()}
             </div>
+
+            {/* 📋 更新日誌與使用教學彈窗 */}
+            {showChangelog && (
+                <div className="liquid-modal-overlay" onClick={() => setShowChangelog(false)}>
+                    <div className="liquid-modal-card" style={{ maxWidth: '520px', width: '92%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px', flexShrink: 0 }}>
+                            <h3 className="liquid-modal-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>📢 馬鈴薯管家更新日誌</h3>
+                            <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 'var(--radius-pill, 99px)' }}>
+                                {CHANGELOG_DATA[0]?.version || 'v1.0.0'}
+                            </span>
+                        </div>
+                        
+                        <div style={{ 
+                            flex: 1,
+                            overflowY: 'auto', 
+                            paddingRight: '6px', 
+                            fontSize: '0.88rem', 
+                            lineHeight: '1.6',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '20px',
+                            margin: '12px 0'
+                        }}>
+                            {CHANGELOG_DATA.map((log, index) => (
+                                <div key={log.version} style={{ 
+                                    borderBottom: index < CHANGELOG_DATA.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                                    paddingBottom: index < CHANGELOG_DATA.length - 1 ? '18px' : '0'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '10px' }}>
+                                        <span style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--accent-pink)' }}>{log.version}</span>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>({log.date})</span>
+                                    </div>
+                                    
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <h4 style={{ margin: '0 0 8px 0', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem', fontWeight: '700' }}>🚀 更新亮點：</h4>
+                                        <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', color: 'rgba(255,255,255,0.78)' }}>
+                                            {log.highlights.map((h, i) => (
+                                                <li key={i}>{h}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                    
+                                    {log.tutorials && log.tutorials.length > 0 && (
+                                        <div>
+                                            <h4 style={{ margin: '0 0 8px 0', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem', fontWeight: '700' }}>💡 簡易使用指南：</h4>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {log.tutorials.map((t, i) => (
+                                                    <div key={i} style={{ 
+                                                        background: 'rgba(255,255,255,0.03)', 
+                                                        padding: '10px 12px', 
+                                                        borderRadius: '10px', 
+                                                        border: '1px solid rgba(255,255,255,0.06)' 
+                                                    }}>
+                                                        <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--accent-blue)', fontSize: '0.82rem' }}>{t.title}</strong>
+                                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)' }}>{t.content}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="liquid-modal-actions" style={{ flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px', display: 'flex', justifyContent: 'center' }}>
+                            <button className="liquid-modal-btn liquid-btn-cancel" style={{ width: '100%', maxWidth: 'none', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: '0.9rem' }} onClick={() => setShowChangelog(false)}>
+                                我知道了
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );
