@@ -134,14 +134,14 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             try {
                 fetch(MY_GOOGLE_API_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify({
                         action: 'backup',
                         date: todayStr,
                         fileName: `自動備份_${todayStr}.json`,
                         assets: assets
-                    })
+                    }),
+                    redirect: 'follow'
                 }).catch(e => console.log('Background backup error (usually cors/redirect thrown by browser):', e));
 
                 setBackupWarning(false);
@@ -153,9 +153,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
         }, 3000);
 
         return () => clearTimeout(timer);
-        // ★ Fix: 移除 assets 依賴，避免 setAssets 後立即重新觸發備份
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [todayStr, setAssets]);
+    }, [todayStr, setAssets, assets.monthlyExpenses?.length, assets.lastBackupDate]);
 
     // ----------------------------------------------------
     // 1. 雙幣別資產計算 (直覺相加邏輯)
