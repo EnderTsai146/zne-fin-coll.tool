@@ -51,6 +51,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const [selectedChartDate, setSelectedChartDate] = useState(null);
 
     const [showChangelog, setShowChangelog] = useState(false);
+    const [changelogTab, setChangelogTab] = useState('whatsnew');
     const [hasNewUpdate, setHasNewUpdate] = useState(() => {
         const lastSeen = localStorage.getItem('potato_last_seen_version');
         return CHANGELOG_DATA.length > 0 && lastSeen !== CHANGELOG_DATA[0].version;
@@ -549,8 +550,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 </div>
             )}
 
-            <h1 className="page-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                <span>總資產概況</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '10px' }}>
+                <h1 className="page-title" style={{ margin: 0 }}>總資產概況</h1>
                 <button
                     className="glass-btn"
                     style={{
@@ -565,11 +566,13 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         border: '1px solid var(--glass-border)',
                         background: 'var(--glass-bg)',
                         color: 'var(--text-primary)',
+                        WebkitTextFillColor: 'var(--text-primary)',
                         position: 'relative',
                         transition: 'all 0.2s ease'
                     }}
                     onClick={() => {
                         setShowChangelog(true);
+                        setChangelogTab('whatsnew');
                         if (CHANGELOG_DATA.length > 0) {
                             localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
                         }
@@ -581,6 +584,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         <span style={{
                             background: 'var(--accent-red, #ff3b30)',
                             color: 'white',
+                            WebkitTextFillColor: 'white',
                             fontSize: '0.62rem',
                             fontWeight: '800',
                             padding: '2px 6px',
@@ -594,7 +598,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         </span>
                     )}
                 </button>
-            </h1>
+            </div>
 
             {/* 【第一層】雙人總資產大看板 */}
             <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', padding: '28px 18px' }}>
@@ -816,71 +820,323 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {/* 📋 更新日誌與使用教學彈窗 */}
             {showChangelog && (
                 <div className="liquid-modal-overlay" onClick={() => setShowChangelog(false)}>
-                    <div className="liquid-modal-card" style={{ maxWidth: '520px', width: '92%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px', flexShrink: 0 }}>
-                            <h3 className="liquid-modal-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>📢 馬鈴薯管家更新日誌</h3>
-                            <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 'var(--radius-pill, 99px)' }}>
-                                {CHANGELOG_DATA[0]?.version || 'v1.0.0'}
-                            </span>
-                        </div>
+                    <div className="liquid-modal-card" style={{ maxWidth: '480px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column', padding: '24px' }} onClick={e => e.stopPropagation()}>
                         
-                        <div style={{ 
-                            flex: 1,
-                            overflowY: 'auto', 
-                            paddingRight: '6px', 
-                            fontSize: '0.88rem', 
-                            lineHeight: '1.6',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '20px',
-                            margin: '12px 0'
-                        }}>
-                            {CHANGELOG_DATA.map((log, index) => (
-                                <div key={log.version} style={{ 
-                                    borderBottom: index < CHANGELOG_DATA.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
-                                    paddingBottom: index < CHANGELOG_DATA.length - 1 ? '18px' : '0'
-                                }}>
-                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '10px' }}>
-                                        <span style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--accent-pink)' }}>{log.version}</span>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>({log.date})</span>
-                                    </div>
-                                    
-                                    <div style={{ marginBottom: '16px' }}>
-                                        <h4 style={{ margin: '0 0 8px 0', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem', fontWeight: '700' }}>🚀 更新亮點：</h4>
-                                        <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', color: 'rgba(255,255,255,0.78)' }}>
-                                            {log.highlights.map((h, i) => (
-                                                <li key={i}>{h}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                    
-                                    {log.tutorials && log.tutorials.length > 0 && (
-                                        <div>
-                                            <h4 style={{ margin: '0 0 8px 0', color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem', fontWeight: '700' }}>💡 簡易使用指南：</h4>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {log.tutorials.map((t, i) => (
-                                                    <div key={i} style={{ 
-                                                        background: 'rgba(255,255,255,0.03)', 
-                                                        padding: '10px 12px', 
-                                                        borderRadius: '10px', 
-                                                        border: '1px solid rgba(255,255,255,0.06)' 
-                                                    }}>
-                                                        <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--accent-blue)', fontSize: '0.82rem' }}>{t.title}</strong>
-                                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)' }}>{t.content}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                        {/* Tab 1: Whats New */}
+                        {changelogTab === 'whatsnew' && (
+                            <>
+                                <div style={{ textAlign: 'center', marginTop: '10px', marginBottom: '24px', flexShrink: 0 }}>
+                                    <h2 style={{ 
+                                        fontSize: '1.75rem', 
+                                        fontWeight: '800', 
+                                        margin: '0 0 6px 0',
+                                        background: 'linear-gradient(135deg, #ffffff 0%, #dcdcdc 100%)',
+                                        WebkitBackgroundClip: 'text',
+                                        backgroundClip: 'text',
+                                        WebkitTextFillColor: 'transparent',
+                                        letterSpacing: '-0.02em'
+                                    }}>
+                                        馬鈴薯管家 新功能
+                                    </h2>
+                                    <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0 }}>
+                                        為您打造更流暢、直覺且美觀的記帳與投資體驗
+                                    </p>
                                 </div>
-                            ))}
-                        </div>
+                                
+                                <div style={{ 
+                                    flex: 1,
+                                    overflowY: 'auto', 
+                                    paddingRight: '6px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '20px'
+                                }}>
+                                    {/* Feature 1 */}
+                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                                        <div style={{
+                                            width: '42px',
+                                            height: '42px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(0, 122, 255, 0.15)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.4rem',
+                                            flexShrink: 0
+                                        }}>
+                                            🔢
+                                        </div>
+                                        <div>
+                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
+                                                金額輸入千分位與貨幣符號
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
+                                                金額欄位輸入時即時自動套用 $ 和千分位逗號。後台無感轉換為數值，輸入更直覺。
+                                            </p>
+                                        </div>
+                                    </div>
 
-                        <div className="liquid-modal-actions" style={{ flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px', display: 'flex', justifyContent: 'center' }}>
-                            <button className="liquid-modal-btn liquid-btn-cancel" style={{ width: '100%', maxWidth: 'none', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: '0.9rem' }} onClick={() => setShowChangelog(false)}>
-                                我知道了
-                            </button>
-                        </div>
+                                    {/* Feature 2 */}
+                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                                        <div style={{
+                                            width: '42px',
+                                            height: '42px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(52, 199, 89, 0.15)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.4rem',
+                                            flexShrink: 0
+                                        }}>
+                                            🛒
+                                        </div>
+                                        <div>
+                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
+                                                暫存購物車排版防護與響應式
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
+                                                優化手機寬度下的備註與標籤折行，金額與刪除按鈕始終完美對齊，再窄的螢幕都不跑版。
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Feature 3 */}
+                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                                        <div style={{
+                                            width: '42px',
+                                            height: '42px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255, 149, 0, 0.15)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.4rem',
+                                            flexShrink: 0
+                                        }}>
+                                            📈
+                                        </div>
+                                        <div>
+                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
+                                                先進先出 (FIFO) 成本回推與行情
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
+                                                賣出股票時自動依據買入紀錄回估並預填投入本金；即時報價在開盤時優先使用最新市價。
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Feature 4 */}
+                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                                        <div style={{
+                                            width: '42px',
+                                            height: '42px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255, 204, 0, 0.15)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.4rem',
+                                            flexShrink: 0
+                                        }}>
+                                            🥔
+                                        </div>
+                                        <div>
+                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
+                                                全新馬鈴薯 Q 彈載入動畫與防呆
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
+                                                載入進度直接在馬鈴薯上著色填滿，配合粒子噴發特效。確實等待數據載入完畢才進入主頁。
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Feature 5 */}
+                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                                        <div style={{
+                                            width: '42px',
+                                            height: '42px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(175, 82, 222, 0.15)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.4rem',
+                                            flexShrink: 0
+                                        }}>
+                                            🔮
+                                        </div>
+                                        <div>
+                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
+                                                全磨砂玻璃化 (Liquid Glass) 升級
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
+                                                移除總覽、回顧、投資三個分頁中的實色方塊，全面升級為透亮半透明玻璃質感，美感大幅提升。
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Feature 6 */}
+                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                                        <div style={{
+                                            width: '42px',
+                                            height: '42px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255, 45, 85, 0.15)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.4rem',
+                                            flexShrink: 0
+                                        }}>
+                                            📱
+                                        </div>
+                                        <div>
+                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
+                                                操作子分頁懸停溢出修正
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
+                                                修復操作頁面切換分頁按鈕在游標移入浮起時，頂部陰影與邊緣被切掉的問題。
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0 }}>
+                                    您的資產數據與隱私皆安全儲存於私有 Firebase 中。<br />
+                                    <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('tutorial')}>
+                                        查看簡易使用指南...
+                                    </span>
+                                </div>
+
+                                <div style={{ flexShrink: 0, width: '100%' }}>
+                                    <button 
+                                        className="glass-btn-cta" 
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '13px', 
+                                            borderRadius: '14px', 
+                                            fontSize: '0.95rem', 
+                                            fontWeight: '700', 
+                                            background: '#007aff', 
+                                            color: '#ffffff', 
+                                            WebkitTextFillColor: '#ffffff',
+                                            border: 'none', 
+                                            cursor: 'pointer',
+                                            boxShadow: '0 4px 15px rgba(0, 122, 255, 0.3)',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                        onClick={() => setShowChangelog(false)}
+                                    >
+                                        繼續
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Tab 2: Tutorial */}
+                        {changelogTab === 'tutorial' && (
+                            <>
+                                <div style={{ textAlign: 'center', marginTop: '10px', marginBottom: '24px', flexShrink: 0 }}>
+                                    <h2 style={{ 
+                                        fontSize: '1.75rem', 
+                                        fontWeight: '800', 
+                                        margin: '0 0 6px 0',
+                                        background: 'linear-gradient(135deg, #ffffff 0%, #dcdcdc 100%)',
+                                        WebkitBackgroundClip: 'text',
+                                        backgroundClip: 'text',
+                                        WebkitTextFillColor: 'transparent',
+                                        letterSpacing: '-0.02em'
+                                    }}>
+                                        簡易使用指南
+                                    </h2>
+                                    <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0 }}>
+                                        幫助您更高效地掌握管家核心操作
+                                    </p>
+                                </div>
+                                
+                                <div style={{ 
+                                    flex: 1,
+                                    overflowY: 'auto', 
+                                    paddingRight: '6px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '16px'
+                                }}>
+                                    <div style={{ 
+                                        background: 'rgba(255,255,255,0.03)', 
+                                        padding: '12px 14px', 
+                                        borderRadius: '12px', 
+                                        border: '1px solid rgba(255,255,255,0.06)' 
+                                    }}>
+                                        <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
+                                            1. 暫存記帳與防呆機制
+                                        </h4>
+                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
+                                            輸入金額與備註後，點擊「➕ 暫存此筆」可連續將多筆消費暫存。若暫存區的總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截並提示，防止餘額透支。
+                                        </span>
+                                    </div>
+
+                                    <div style={{ 
+                                        background: 'rgba(255,255,255,0.03)', 
+                                        padding: '12px 14px', 
+                                        borderRadius: '12px', 
+                                        border: '1px solid rgba(255,255,255,0.06)' 
+                                    }}>
+                                        <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
+                                            2. 投資賣出的 FIFO 估算
+                                        </h4>
+                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
+                                            進行股票賣出時，輸入股票代號與賣出股數，系統會自動在背景搜尋最早買入的價格（先進先出），自動計算並預填「投入本金」欄位，方便計算精確損益。
+                                        </span>
+                                    </div>
+
+                                    <div style={{ 
+                                        background: 'rgba(255,255,255,0.03)', 
+                                        padding: '12px 14px', 
+                                        borderRadius: '12px', 
+                                        border: '1px solid rgba(255,255,255,0.06)' 
+                                    }}>
+                                        <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
+                                            3. 自動雲端備份
+                                        </h4>
+                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
+                                            系統會在您每日首次打開網頁的 3 秒後，自動於背景將資料備份到您的 Google 雲端硬碟試算表（不影響當下任何操作），保護歷史記帳數據永不丟失。
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0 }}>
+                                    想重新查看新功能介紹？<br />
+                                    <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('whatsnew')}>
+                                        返回新功能上線...
+                                    </span>
+                                </div>
+
+                                <div style={{ flexShrink: 0, width: '100%' }}>
+                                    <button 
+                                        className="glass-btn" 
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '13px', 
+                                            borderRadius: '14px', 
+                                            fontSize: '0.95rem', 
+                                            fontWeight: '700', 
+                                            background: 'rgba(255,255,255,0.08)', 
+                                            color: '#ffffff', 
+                                            WebkitTextFillColor: '#ffffff',
+                                            border: 'none', 
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                        onClick={() => setChangelogTab('whatsnew')}
+                                    >
+                                        返回
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                        
                     </div>
                 </div>
             )}
