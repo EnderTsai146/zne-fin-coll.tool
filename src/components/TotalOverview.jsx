@@ -16,25 +16,49 @@ const CHANGELOG_DATA = [
         version: 'v1.3.0',
         date: '2026-06-25',
         highlights: [
-            '🔢 金額輸入千分位與貨幣符號自動套用：輸入時畫面自動即時顯示 $ 與逗號，後台無感轉換為數值儲存，輸入更直覺。',
-            '🛒 暫存明細（購物車）手機版排版優化：針對各暫存購物車，改進窄螢幕下的標籤與備註折行機制，避免金額與刪除按鈕跑版。',
-            '📈 證券交易 FIFO (先進先出) 成本回推：賣出股票時自動依據買入紀錄回估本金預填；修正即時報價引擎，開盤時優先使用最新市價而非昨收價。',
-            '🥔 載入動畫升級：馬鈴薯 🥔 直接填滿，具備彈性 Q 彈抖動特效與完成時的粒子放射效果，並確保數字載入完畢才進入主頁。',
-            '🔮 全面磨砂玻璃化 (Liquid Glass)：去除總覽、回顧、投資三個分頁中的實色方框，提升介面整體高質感度。',
-            '📱 操作子分頁懸停效果溢出修正：修復了操作分頁按鈕懸浮時，頂部被隱藏邊界切掉的問題。'
+            {
+                emoji: '🔢',
+                color: 'rgba(0, 122, 255, 0.15)',
+                title: '金額輸入千分位與貨幣符號',
+                desc: '金額欄位輸入時即時自動套用 $ 和千分位逗號。後台無感轉換為數值，輸入更直覺。'
+            },
+            {
+                emoji: '🛒',
+                color: 'rgba(52, 199, 89, 0.15)',
+                title: '暫存購物車排版防護與響應式',
+                desc: '優化手機寬度下的備註與標籤折行，金額與刪除按鈕始終完美對齊，再窄的螢幕都不跑版。'
+            },
+            {
+                emoji: '📈',
+                color: 'rgba(255, 149, 0, 0.15)',
+                title: '先進先出 (FIFO) 成本估算',
+                desc: '賣出股票時自動依據買入紀錄回估並預填投入本金，極大簡化損益紀錄程序。'
+            },
+            {
+                emoji: '☁️',
+                color: 'rgba(48, 209, 88, 0.15)',
+                title: '全自動雲端試算表備份',
+                desc: '每日首次打開網頁時自動於背景將資料備份到 Google 雲端，守護您的資產數據。'
+            },
+            {
+                emoji: '🔮',
+                color: 'rgba(175, 82, 222, 0.15)',
+                title: '全磨砂玻璃化 (Liquid Glass) 升級',
+                desc: '移除總覽、回顧、投資分頁中的實色方塊，全面升級為透亮半透明玻璃質感。'
+            }
         ],
         tutorials: [
             {
-                title: '暫存記帳與防呆機制',
-                content: '在輸入金額後點擊「➕ 暫存此筆」可連續記帳。若暫存區的總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截並提示，防止餘額透支。'
+                title: '暫存此筆與批次合併記帳',
+                content: '在輸入金額後點擊「➕ 暫存此筆」可連續記帳。若暫存區總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截提示，防止餘額透支。'
             },
             {
-                title: '投資賣出的 FIFO 估算',
-                content: '進行股票賣出時，輸入股票代號與賣出股數，系統會自動在背景搜尋最早買入的價格（先進先出），自動計算並預填「投入本金」欄位，方便計算精確損益。'
+                title: '即時台美股報價更新',
+                content: '在「投資」頁面中點選「更新報價」按鈕即可主動更新價格。在台美股交易時段內，系統優先採用最新市價計算市值，而非昨收價。'
             },
             {
-                title: '自動備份引擎',
-                content: '系統會在您每日首次打開網頁時，自動於背景進行 Google 雲端備份，不影響操作，保護資料永不丟失。'
+                title: '調整自動成本估算',
+                content: 'FIFO 成本為系統後台自動預估，您仍可在買賣面板上自由修改以符合您的實際券商成本。'
             }
         ]
     }
@@ -851,155 +875,31 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                                     flexDirection: 'column',
                                     gap: '20px'
                                 }}>
-                                    {/* Feature 1 */}
-                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                                        <div style={{
-                                            width: '42px',
-                                            height: '42px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(0, 122, 255, 0.15)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '1.4rem',
-                                            flexShrink: 0
-                                        }}>
-                                            🔢
+                                    {CHANGELOG_DATA[0]?.highlights.map((h, i) => (
+                                        <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                                            <div style={{
+                                                width: '42px',
+                                                height: '42px',
+                                                borderRadius: '10px',
+                                                background: h.color,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: '1.4rem',
+                                                flexShrink: 0
+                                            }}>
+                                                {h.emoji}
+                                            </div>
+                                            <div>
+                                                <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
+                                                    {h.title}
+                                                </h4>
+                                                <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
+                                                    {h.desc}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
-                                                金額輸入千分位與貨幣符號
-                                            </h4>
-                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
-                                                金額欄位輸入時即時自動套用 $ 和千分位逗號。後台無感轉換為數值，輸入更直覺。
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Feature 2 */}
-                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                                        <div style={{
-                                            width: '42px',
-                                            height: '42px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(52, 199, 89, 0.15)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '1.4rem',
-                                            flexShrink: 0
-                                        }}>
-                                            🛒
-                                        </div>
-                                        <div>
-                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
-                                                暫存購物車排版防護與響應式
-                                            </h4>
-                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
-                                                優化手機寬度下的備註與標籤折行，金額與刪除按鈕始終完美對齊，再窄的螢幕都不跑版。
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Feature 3 */}
-                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                                        <div style={{
-                                            width: '42px',
-                                            height: '42px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(255, 149, 0, 0.15)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '1.4rem',
-                                            flexShrink: 0
-                                        }}>
-                                            📈
-                                        </div>
-                                        <div>
-                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
-                                                先進先出 (FIFO) 成本回推與行情
-                                            </h4>
-                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
-                                                賣出股票時自動依據買入紀錄回估並預填投入本金；即時報價在開盤時優先使用最新市價。
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Feature 4 */}
-                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                                        <div style={{
-                                            width: '42px',
-                                            height: '42px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(255, 204, 0, 0.15)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '1.4rem',
-                                            flexShrink: 0
-                                        }}>
-                                            🥔
-                                        </div>
-                                        <div>
-                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
-                                                全新馬鈴薯 Q 彈載入動畫與防呆
-                                            </h4>
-                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
-                                                載入進度直接在馬鈴薯上著色填滿，配合粒子噴發特效。確實等待數據載入完畢才進入主頁。
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Feature 5 */}
-                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                                        <div style={{
-                                            width: '42px',
-                                            height: '42px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(175, 82, 222, 0.15)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '1.4rem',
-                                            flexShrink: 0
-                                        }}>
-                                            🔮
-                                        </div>
-                                        <div>
-                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
-                                                全磨砂玻璃化 (Liquid Glass) 升級
-                                            </h4>
-                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
-                                                移除總覽、回顧、投資三個分頁中的實色方塊，全面升級為透亮半透明玻璃質感，美感大幅提升。
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Feature 6 */}
-                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                                        <div style={{
-                                            width: '42px',
-                                            height: '42px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(255, 45, 85, 0.15)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '1.4rem',
-                                            flexShrink: 0
-                                        }}>
-                                            📱
-                                        </div>
-                                        <div>
-                                            <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
-                                                操作子分頁懸停溢出修正
-                                            </h4>
-                                            <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
-                                                修復操作頁面切換分頁按鈕在游標移入浮起時，頂部陰影與邊緣被切掉的問題。
-                                            </p>
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
                                 
                                 <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0 }}>
@@ -1063,47 +963,21 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                                     flexDirection: 'column',
                                     gap: '16px'
                                 }}>
-                                    <div style={{ 
-                                        background: 'rgba(255,255,255,0.03)', 
-                                        padding: '12px 14px', 
-                                        borderRadius: '12px', 
-                                        border: '1px solid rgba(255,255,255,0.06)' 
-                                    }}>
-                                        <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
-                                            1. 暫存記帳與防呆機制
-                                        </h4>
-                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
-                                            輸入金額與備註後，點擊「➕ 暫存此筆」可連續將多筆消費暫存。若暫存區的總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截並提示，防止餘額透支。
-                                        </span>
-                                    </div>
-
-                                    <div style={{ 
-                                        background: 'rgba(255,255,255,0.03)', 
-                                        padding: '12px 14px', 
-                                        borderRadius: '12px', 
-                                        border: '1px solid rgba(255,255,255,0.06)' 
-                                    }}>
-                                        <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
-                                            2. 投資賣出的 FIFO 估算
-                                        </h4>
-                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
-                                            進行股票賣出時，輸入股票代號與賣出股數，系統會自動在背景搜尋最早買入的價格（先進先出），自動計算並預填「投入本金」欄位，方便計算精確損益。
-                                        </span>
-                                    </div>
-
-                                    <div style={{ 
-                                        background: 'rgba(255,255,255,0.03)', 
-                                        padding: '12px 14px', 
-                                        borderRadius: '12px', 
-                                        border: '1px solid rgba(255,255,255,0.06)' 
-                                    }}>
-                                        <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
-                                            3. 自動雲端備份
-                                        </h4>
-                                        <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
-                                            系統會在您每日首次打開網頁的 3 秒後，自動於背景將資料備份到您的 Google 雲端硬碟試算表（不影響當下任何操作），保護歷史記帳數據永不丟失。
-                                        </span>
-                                    </div>
+                                    {CHANGELOG_DATA[0]?.tutorials.map((t, i) => (
+                                        <div key={i} style={{ 
+                                            background: 'rgba(255,255,255,0.03)', 
+                                            padding: '12px 14px', 
+                                            borderRadius: '12px', 
+                                            border: '1px solid rgba(255,255,255,0.06)' 
+                                        }}>
+                                            <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
+                                                {i + 1}. {t.title}
+                                            </h4>
+                                            <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
+                                                {t.content}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
                                 
                                 <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0 }}>
