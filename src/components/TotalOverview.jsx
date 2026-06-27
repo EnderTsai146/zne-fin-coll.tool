@@ -11,60 +11,7 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointE
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const formatDate = (date) => date.toISOString().split('T')[0];
-const CHANGELOG_DATA = [
-    {
-        version: 'v1.3.0',
-        date: '2026-06-25',
-        highlights: [
-            {
-                emoji: '🔢',
-                color: 'rgba(0, 122, 255, 0.15)',
-                title: '金額輸入千分位與貨幣符號',
-                desc: '金額欄位輸入時即時自動套用 $ 和千分位逗號。後台無感轉換為數值，輸入更直覺。'
-            },
-            {
-                emoji: '🛒',
-                color: 'rgba(52, 199, 89, 0.15)',
-                title: '暫存購物車排版防護與響應式',
-                desc: '優化手機寬度下的備註與標籤折行，金額與刪除按鈕始終完美對齊，再窄的螢幕都不跑版。'
-            },
-            {
-                emoji: '📈',
-                color: 'rgba(255, 149, 0, 0.15)',
-                title: '先進先出 (FIFO) 成本估算',
-                desc: '賣出股票時自動依據買入紀錄回估並預填投入本金，極大簡化損益紀錄程序。'
-            },
-            {
-                emoji: '☁️',
-                color: 'rgba(48, 209, 88, 0.15)',
-                title: '全自動雲端試算表備份',
-                desc: '每日首次打開網頁時自動於背景將資料備份到 Google 雲端，守護您的資產數據。'
-            },
-            {
-                emoji: '🔮',
-                color: 'rgba(175, 82, 222, 0.15)',
-                title: '全磨砂玻璃化 (Liquid Glass) 升級',
-                desc: '移除總覽、回顧、投資分頁中的實色方塊，全面升級為透亮半透明玻璃質感。'
-            }
-        ],
-        tutorials: [
-            {
-                title: '暫存此筆與批次合併記帳',
-                content: '在輸入金額後點擊「➕ 暫存此筆」可連續記帳。若暫存區總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截提示，防止餘額透支。'
-            },
-            {
-                title: '即時台美股報價更新',
-                content: '在「投資」頁面中點選「更新報價」按鈕即可主動更新價格。在台美股交易時段內，系統優先採用最新市價計算市值，而非昨收價。'
-            },
-            {
-                title: '調整自動成本估算',
-                content: 'FIFO 成本為系統後台自動預估，您仍可在買賣面板上自由修改以符合您的實際券商成本。'
-            }
-        ]
-    }
-];
-
-const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingArchive, setAssets, currentFxRate, setCurrentFxRate }) => {
+const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingArchive, setAssets, currentFxRate, setCurrentFxRate, hasNewUpdate, onOpenChangelog }) => {
     // ★ Fix: 將日期移入元件內，避免模組級別變數在跨日後過期
     const today = useMemo(() => new Date(), []);
     const lastYear = useMemo(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d; }, []);
@@ -73,13 +20,6 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
     const [backupWarning, setBackupWarning] = useState(false);
     const [selectedChartDate, setSelectedChartDate] = useState(null);
-
-    const [showChangelog, setShowChangelog] = useState(false);
-    const [changelogTab, setChangelogTab] = useState('whatsnew');
-    const [hasNewUpdate, setHasNewUpdate] = useState(() => {
-        const lastSeen = localStorage.getItem('potato_last_seen_version');
-        return CHANGELOG_DATA.length > 0 && lastSeen !== CHANGELOG_DATA[0].version;
-    });
 
     // ★ 當用戶點擊折線圖的某一天時，系統自動背景調取那一個月的歸檔紀錄
     useEffect(() => {
@@ -592,14 +532,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         position: 'relative',
                         transition: 'all 0.2s ease'
                     }}
-                    onClick={() => {
-                        setShowChangelog(true);
-                        setChangelogTab('whatsnew');
-                        if (CHANGELOG_DATA.length > 0) {
-                            localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
-                        }
-                        setHasNewUpdate(false);
-                    }}
+                    onClick={onOpenChangelog}
                 >
                     📢 更新日誌
                     {hasNewUpdate && (
@@ -840,178 +773,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             </div>
 
             {/* 📋 更新日誌與使用教學彈窗 */}
-            {showChangelog && (
-                <div className="liquid-modal-overlay" onClick={() => setShowChangelog(false)}>
-                    <div className="liquid-modal-card" style={{ maxWidth: '480px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column', padding: '24px' }} onClick={e => e.stopPropagation()}>
-                        
-                        {/* Tab 1: Whats New */}
-                        {changelogTab === 'whatsnew' && (
-                            <>
-                                <div style={{ textAlign: 'center', marginTop: '10px', marginBottom: '24px', flexShrink: 0 }}>
-                                    <h2 style={{ 
-                                        fontSize: '1.75rem', 
-                                        fontWeight: '800', 
-                                        margin: '0 0 6px 0',
-                                        background: 'linear-gradient(135deg, #ffffff 0%, #dcdcdc 100%)',
-                                        WebkitBackgroundClip: 'text',
-                                        backgroundClip: 'text',
-                                        WebkitTextFillColor: 'transparent',
-                                        letterSpacing: '-0.02em'
-                                    }}>
-                                        馬鈴薯管家 新功能
-                                    </h2>
-                                    <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0 }}>
-                                        為您打造更流暢、直覺且美觀的記帳與投資體驗
-                                    </p>
-                                </div>
-                                
-                                <div style={{ 
-                                    flex: 1,
-                                    overflowY: 'auto', 
-                                    paddingRight: '6px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '20px'
-                                }}>
-                                    {CHANGELOG_DATA[0]?.highlights.map((h, i) => (
-                                        <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                                            <div style={{
-                                                width: '42px',
-                                                height: '42px',
-                                                borderRadius: '10px',
-                                                background: h.color,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: '1.4rem',
-                                                flexShrink: 0
-                                            }}>
-                                                {h.emoji}
-                                            </div>
-                                            <div>
-                                                <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff' }}>
-                                                    {h.title}
-                                                </h4>
-                                                <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45' }}>
-                                                    {h.desc}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                
-                                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0 }}>
-                                    您的資產數據與隱私皆安全儲存於私有 Firebase 中。<br />
-                                    <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('tutorial')}>
-                                        查看簡易使用指南...
-                                    </span>
-                                </div>
-
-                                <div style={{ flexShrink: 0, width: '100%' }}>
-                                    <button 
-                                        className="glass-btn-cta" 
-                                        style={{ 
-                                            width: '100%', 
-                                            padding: '13px', 
-                                            borderRadius: '14px', 
-                                            fontSize: '0.95rem', 
-                                            fontWeight: '700', 
-                                            background: '#007aff', 
-                                            color: '#ffffff', 
-                                            WebkitTextFillColor: '#ffffff',
-                                            border: 'none', 
-                                            cursor: 'pointer',
-                                            boxShadow: '0 4px 15px rgba(0, 122, 255, 0.3)',
-                                            transition: 'all 0.2s ease'
-                                        }}
-                                        onClick={() => setShowChangelog(false)}
-                                    >
-                                        繼續
-                                    </button>
-                                </div>
-                            </>
-                        )}
-
-                        {/* Tab 2: Tutorial */}
-                        {changelogTab === 'tutorial' && (
-                            <>
-                                <div style={{ textAlign: 'center', marginTop: '10px', marginBottom: '24px', flexShrink: 0 }}>
-                                    <h2 style={{ 
-                                        fontSize: '1.75rem', 
-                                        fontWeight: '800', 
-                                        margin: '0 0 6px 0',
-                                        background: 'linear-gradient(135deg, #ffffff 0%, #dcdcdc 100%)',
-                                        WebkitBackgroundClip: 'text',
-                                        backgroundClip: 'text',
-                                        WebkitTextFillColor: 'transparent',
-                                        letterSpacing: '-0.02em'
-                                    }}>
-                                        簡易使用指南
-                                    </h2>
-                                    <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0 }}>
-                                        幫助您更高效地掌握管家核心操作
-                                    </p>
-                                </div>
-                                
-                                <div style={{ 
-                                    flex: 1,
-                                    overflowY: 'auto', 
-                                    paddingRight: '6px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '16px'
-                                }}>
-                                    {CHANGELOG_DATA[0]?.tutorials.map((t, i) => (
-                                        <div key={i} style={{ 
-                                            background: 'rgba(255,255,255,0.03)', 
-                                            padding: '12px 14px', 
-                                            borderRadius: '12px', 
-                                            border: '1px solid rgba(255,255,255,0.06)' 
-                                        }}>
-                                            <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700' }}>
-                                                {i + 1}. {t.title}
-                                            </h4>
-                                            <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45' }}>
-                                                {t.content}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                                
-                                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0 }}>
-                                    想重新查看新功能介紹？<br />
-                                    <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('whatsnew')}>
-                                        返回新功能上線...
-                                    </span>
-                                </div>
-
-                                <div style={{ flexShrink: 0, width: '100%' }}>
-                                    <button 
-                                        className="glass-btn" 
-                                        style={{ 
-                                            width: '100%', 
-                                            padding: '13px', 
-                                            borderRadius: '14px', 
-                                            fontSize: '0.95rem', 
-                                            fontWeight: '700', 
-                                            background: 'rgba(255,255,255,0.08)', 
-                                            color: '#ffffff', 
-                                            WebkitTextFillColor: '#ffffff',
-                                            border: 'none', 
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s ease'
-                                        }}
-                                        onClick={() => setChangelogTab('whatsnew')}
-                                    >
-                                        返回
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                        
-                    </div>
-                </div>
-            )}
+            
 
         </div>
     );
