@@ -567,10 +567,10 @@ function App() {
           data.pendingLineNotifications = [];
           needsUpdate = true;
         }
-        if (!data.config || !data.config.categories) {
+        if (!data.config || !data.config.categories || JSON.stringify(data.config.categories) !== JSON.stringify(["餐費", "購物", "娛樂", "其他"])) {
           data.config = {
             ...(data.config || {}),
-            categories: ["餐飲食品", "生活用品", "固定費用", "投資理財", "育兒", "寵物", "其他"]
+            categories: ["餐費", "購物", "娛樂", "其他"]
           };
           needsUpdate = true;
         }
@@ -956,7 +956,8 @@ function App() {
         {
           date, month: date.slice(0, 7), type: 'expense', category: '個人支出', details: expenseData,
           total: totalAmount, payer: payerName, operator: operatorName, note: finalNote,
-          timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) }
+          timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) },
+          necessity: 'need'
         }
       ]
     }, isBatch ? 0 : 1);
@@ -1012,7 +1013,8 @@ function App() {
           date, month: date.slice(0, 7), type: 'spend', category: '共同支出', payer: '共同帳戶',
           total: val, note: safeNote ? `${category} - ${safeNote}` : category,
           operator: operatorName, advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
-          isSettled: false, timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
+          isSettled: false, timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) },
+          necessity: 'need', subCategory: category
         }
       ]
     }, isBatch ? 0 : 1);
@@ -1052,7 +1054,7 @@ function App() {
       const oldNote = targetRecord.note || '';
       if (oldNote.includes('餐費')) subCategory = '餐費';
       else if (oldNote.includes('購物')) subCategory = '購物';
-      else if (oldNote.includes('固定')) subCategory = '固定費用';
+      else if (oldNote.includes('娛樂')) subCategory = '娛樂';
       else subCategory = '其他';
     }
 
@@ -1301,7 +1303,8 @@ function App() {
       payer: record.payer || '系統',
       operator: operatorName,
       timestamp: new Date().toISOString(),
-      auditTrail: { before: snapshotBefore, after: snapshotAfter }
+      auditTrail: { before: snapshotBefore, after: snapshotAfter },
+      necessity: record.necessity || 'need'
     };
 
     let mainList = [...(assets.monthlyExpenses || [])];

@@ -35,6 +35,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 7));
     const [filterType, setFilterType] = useState('all');
     const [filterUser, setFilterUser] = useState('all');
+    const [filterNecessity, setFilterNecessity] = useState('all');
 
     // Advanced search & filter states
     const [searchTerm, setSearchTerm] = useState('');
@@ -156,7 +157,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         let dailyData = {};
 
         // Task 1: Dynamic Categories alignment
-        const dynamicCategories = assets?.config?.categories || ["餐飲食品", "生活用品", "固定費用", "投資理財", "其他"];
+        const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
         const catStats = {};
         dynamicCategories.forEach(cat => {
             catStats[cat] = 0;
@@ -180,24 +181,27 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
                 if (r.type === 'expense' && r.details) {
                     dynamicCategories.forEach(cat => {
-                        if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) {
+                        if (cat === '餐費') {
                             catStats[cat] += Number(r.details.food || 0);
-                        } else if (cat.includes('購') || cat.includes('用') || cat.includes('玩') || cat.includes('樂')) {
+                        } else if (cat === '購物') {
                             catStats[cat] += Number(r.details.shopping || 0);
-                        } else if (cat.includes('固定') || cat.includes('租') || cat.includes('費') || cat.includes('水') || cat.includes('電') || cat.includes('稅')) {
-                            catStats[cat] += Number(r.details.fixed || 0);
-                        } else if (cat.includes('其他')) {
-                            catStats[cat] += Number(r.details.other || 0);
+                        } else if (cat === '娛樂') {
+                            catStats[cat] += Number(r.details.entertainment || 0);
+                        } else if (cat === '其他') {
+                            catStats[cat] += Number((r.details.other || 0) + (r.details.fixed || 0));
                         }
                     });
                 } else if (r.type === 'spend') {
-                    const cat = r.subCategory || '其他';
+                    let cat = r.subCategory || '其他';
+                    if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) cat = '餐費';
+                    else if (cat.includes('購') || cat.includes('用') || cat.includes('生')) cat = '購物';
+                    else if (cat.includes('玩') || cat.includes('樂') || cat.includes('娛')) cat = '娛樂';
+                    else cat = '其他';
+
                     if (catStats[cat] !== undefined) {
                         catStats[cat] += r.total;
                     } else {
-                        const match = dynamicCategories.find(c => cat.includes(c) || c.includes(cat));
-                        if (match) catStats[match] += r.total;
-                        else catStats["其他"] += r.total;
+                        catStats["其他"] += r.total;
                     }
                 }
             }
@@ -208,31 +212,34 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         dynamicCategories.forEach(cat => {
             prevCatStats[cat] = 0;
         });
-        if (!prevCatStats["其他"]) prevCatStats["Other"] = 0;
+        if (!prevCatStats["其他"]) prevCatStats["其他"] = 0;
 
         prevMonthRecords.forEach(r => {
             if (r.type === 'expense' || r.type === 'spend') {
-                if (r.type === 'spend') {
-                    const cat = r.subCategory || '其他';
+                if (r.type === 'expense' && r.details) {
+                    dynamicCategories.forEach(cat => {
+                        if (cat === '餐費') {
+                            prevCatStats[cat] += Number(r.details.food || 0);
+                        } else if (cat === '購物') {
+                            prevCatStats[cat] += Number(r.details.shopping || 0);
+                        } else if (cat === '娛樂') {
+                            prevCatStats[cat] += Number(r.details.entertainment || 0);
+                        } else if (cat === '其他') {
+                            prevCatStats[cat] += Number((r.details.other || 0) + (r.details.fixed || 0));
+                        }
+                    });
+                } else if (r.type === 'spend') {
+                    let cat = r.subCategory || '其他';
+                    if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) cat = '餐費';
+                    else if (cat.includes('購') || cat.includes('用') || cat.includes('生')) cat = '購物';
+                    else if (cat.includes('玩') || cat.includes('樂') || cat.includes('娛')) cat = '娛樂';
+                    else cat = '其他';
+
                     if (prevCatStats[cat] !== undefined) {
                         prevCatStats[cat] += r.total;
                     } else {
-                        const match = dynamicCategories.find(c => cat.includes(c) || c.includes(cat));
-                        if (match) prevCatStats[match] += r.total;
-                        else prevCatStats["其他"] += r.total;
+                        prevCatStats["其他"] += r.total;
                     }
-                } else if (r.type === 'expense' && r.details) {
-                    dynamicCategories.forEach(cat => {
-                        if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) {
-                            prevCatStats[cat] += Number(r.details.food || 0);
-                        } else if (cat.includes('購') || cat.includes('用') || cat.includes('玩') || cat.includes('樂')) {
-                            prevCatStats[cat] += Number(r.details.shopping || 0);
-                        } else if (cat.includes('固定') || cat.includes('租') || cat.includes('費') || cat.includes('水') || cat.includes('電') || cat.includes('稅')) {
-                            prevCatStats[cat] += Number(r.details.fixed || 0);
-                        } else if (cat.includes('其他')) {
-                            prevCatStats[cat] += Number(r.details.other || 0);
-                        }
-                    });
                 }
             }
         });
@@ -306,6 +313,10 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
             if (filterUser === 'joint') { if (record.type !== 'spend' && record.category !== '共同支出' && !record.type.includes('joint_invest')) return false; }
             else if (filterUser === 'userA') { if (!payer.includes('大狗狗') && !payer.includes('用戶1') && !payer.includes('userA')) return false; }
             else if (filterUser === 'userB') { if (!payer.includes('阿陞') && !payer.includes('用戶2') && !payer.includes('userB')) return false; }
+        }
+        if (filterNecessity !== 'all') {
+            const recNecessity = record.necessity || 'need';
+            if (recNecessity !== filterNecessity) return false;
         }
         
         // Search & amount filters
@@ -589,6 +600,16 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                     <option value="joint">共同帳戶 🏫</option>
                                     <option value="userA">大狗狗 🐕</option>
                                     <option value="userB">阿陞 🐶</option>
+                                </select>
+                            </span>
+                        </div>
+                        <div className="inset-group-row">
+                            <span className="inset-group-label">支出性質</span>
+                            <span className="inset-group-value">
+                                <select style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.88rem', fontFamily: 'var(--font-family)', direction: 'rtl' }} value={filterNecessity} onChange={(e) => setFilterNecessity(e.target.value)}>
+                                    <option value="all">全部性質</option>
+                                    <option value="need">必要支出 🍲</option>
+                                    <option value="want">選擇性消費 ✨</option>
                                 </select>
                             </span>
                         </div>

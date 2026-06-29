@@ -40,6 +40,17 @@ const addMonthsSafe = (dateStr, months) => {
 // SF Symbols style line SVGs (HIG 3)
 const getCategoryIcon = (catName) => {
   const strokeColor = "currentColor";
+  if (catName.includes('娛') || catName.includes('樂') || catName.includes('玩')) {
+    return (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: '5px' }}>
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <path d="M6 12h4" />
+        <path d="M8 10v4" />
+        <line x1="15" y1="13" x2="15.01" y2="13" />
+        <line x1="18" y1="11" x2="18.01" y2="11" />
+      </svg>
+    );
+  }
   if (catName.includes('餐') || catName.includes('食') || catName.includes('喝')) {
     return (
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: '5px' }}>
@@ -138,7 +149,9 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
   };
 
   // Dynamic Categories Config (Task 1)
-  const dynamicCategories = assets?.config?.categories || ["餐飲食品", "生活用品", "固定費用", "投資理財", "其他"];
+  const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
+  const [jointNecessity, setJointNecessity] = useState('need'); // 'need' or 'want'
+  const [persNecessity, setPersNecessity] = useState('need'); // 'need' or 'want'
   const categoryOptions = dynamicCategories.map(cat => ({
     label: (
       <span>
@@ -199,10 +212,11 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       return;
     }
 
-    setJointCart([...jointCart, { id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, advancedBy: jointAdvanced, cat: jointCat, amount: parsedAmount, note: jointNote }]);
+    setJointCart([...jointCart, { id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, advancedBy: jointAdvanced, cat: jointCat, amount: parsedAmount, note: jointNote, necessity: jointNecessity }]);
     setJointAmount('');
     setJointNote('');
     setJointCat(null);
+    setJointNecessity('need');
   };
 
   const handleRemoveJointCart = (id) => {
@@ -225,7 +239,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         await customAlert("請為最後一筆選擇分類！");
         return;
       }
-      finalItems.push({ advancedBy: jointAdvanced, cat: jointCat, amount: parsedAmount, note: jointNote });
+      finalItems.push({ advancedBy: jointAdvanced, cat: jointCat, amount: parsedAmount, note: jointNote, necessity: jointNecessity });
     }
     if (finalItems.length === 0) {
       await customAlert("請輸入金額或加入暫存！");
@@ -238,14 +252,16 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
     const grouped = {};
     finalItems.forEach(item => {
-      if (!grouped[item.advancedBy]) grouped[item.advancedBy] = [];
-      grouped[item.advancedBy].push(item);
+      const gKey = `${item.advancedBy}_${item.necessity || 'need'}`;
+      if (!grouped[gKey]) grouped[gKey] = [];
+      grouped[gKey].push(item);
     });
 
     let errors = [];
-    for (const advancedBy of Object.keys(grouped)) {
-      let items = grouped[advancedBy];
+    for (const gKey of Object.keys(grouped)) {
+      let items = grouped[gKey];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
+      const [advancedBy] = gKey.split('_');
 
       if (advancedBy === 'jointCash') {
         if (newAssets.jointCash < total) {
@@ -267,9 +283,10 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       return;
     }
 
-    for (const advancedBy of Object.keys(grouped)) {
-      let items = grouped[advancedBy];
+    for (const gKey of Object.keys(grouped)) {
+      let items = grouped[gKey];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
+      const [advancedBy, necessity] = gKey.split('_');
       const isMulti = items.length > 1;
       const mainCat = isMulti ? '多筆合併' : items[0].cat;
 
@@ -292,7 +309,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         date: txDate, month: txDate.slice(0, 7), type: 'spend', category: '共同支出', payer: '共同帳戶',
         total: total, note: safeNote ? `${mainCat} - ${safeNote}` : mainCat,
         advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
-        isSettled: false
+        isSettled: false, subCategory: mainCat, necessity: necessity
       });
     }
 
@@ -309,6 +326,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     setJointAmount('');
     setJointNote('');
     setJointCat(null);
+    setJointNecessity('need');
   };
 
   // --- 個人記帳邏輯 ---
@@ -338,10 +356,11 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       return;
     }
 
-    setPersCart([...persCart, { id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, user: persUser, cat: persCat, amount: parsedAmount, note: persNote }]);
+    setPersCart([...persCart, { id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, user: persUser, cat: persCat, amount: parsedAmount, note: persNote, necessity: persNecessity }]);
     setPersAmount('');
     setPersNote('');
     setPersCat(null);
+    setPersNecessity('need');
   };
 
   const handleRemovePersCart = (id) => {
@@ -364,7 +383,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
         await customAlert("請為最後一筆選擇分類！");
         return;
       }
-      finalItems.push({ user: persUser, cat: persCat, amount: parsedAmount, note: persNote });
+      finalItems.push({ user: persUser, cat: persCat, amount: parsedAmount, note: persNote, necessity: persNecessity });
     }
     if (finalItems.length === 0) {
       await customAlert("請輸入花費金額或加入暫存！");
@@ -377,14 +396,16 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
     const grouped = {};
     finalItems.forEach(item => {
-      if (!grouped[item.user]) grouped[item.user] = [];
-      grouped[item.user].push(item);
+      const gKey = `${item.user}_${item.necessity || 'need'}`;
+      if (!grouped[gKey]) grouped[gKey] = [];
+      grouped[gKey].push(item);
     });
 
     let errors = [];
-    for (const user of Object.keys(grouped)) {
-      let items = grouped[user];
+    for (const gKey of Object.keys(grouped)) {
+      let items = grouped[gKey];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
+      const [user] = gKey.split('_');
       const payerKey = user === 'userA' ? 'userA' : 'userB';
       const payerName = user === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
@@ -398,9 +419,10 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       return;
     }
 
-    for (const user of Object.keys(grouped)) {
-      let items = grouped[user];
+    for (const gKey of Object.keys(grouped)) {
+      let items = grouped[gKey];
       const total = items.reduce((sum, item) => sum + item.amount, 0);
+      const [user, necessity] = gKey.split('_');
       const isMulti = items.length > 1;
       const finalNote = items.map(i => {
         let s = isMulti ? `[${i.cat}] $${i.amount}` : '';
@@ -410,15 +432,15 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       }).join('，');
 
       // Task 1 Dynamic category schema mapper
-      const expenseData = { food: 0, shopping: 0, fixed: 0, other: 0 };
+      const expenseData = { food: 0, shopping: 0, entertainment: 0, other: 0 };
       items.forEach(i => {
         const cat = i.cat || '';
-        if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) {
+        if (cat === '餐費') {
           expenseData.food += i.amount;
-        } else if (cat.includes('購') || cat.includes('用') || cat.includes('玩') || cat.includes('樂')) {
+        } else if (cat === '購物') {
           expenseData.shopping += i.amount;
-        } else if (cat.includes('固定') || cat.includes('租') || cat.includes('費') || cat.includes('水') || cat.includes('電') || cat.includes('稅')) {
-          expenseData.fixed += i.amount;
+        } else if (cat === '娛樂') {
+          expenseData.entertainment += i.amount;
         } else {
           expenseData.other += i.amount;
         }
@@ -431,7 +453,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
       records.push({
         date: txDate, month: txDate.slice(0, 7), type: 'expense', category: '個人支出', details: expenseData,
-        total: total, payer: payerName, note: finalNote || '日記帳'
+        total: total, payer: payerName, note: finalNote || '日記帳', necessity: necessity
       });
     }
 
@@ -445,6 +467,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     setPersAmount('');
     setPersNote('');
     setPersCat(null);
+    setPersNecessity('need');
   };
 
   const handleSaveNewBill = async () => {
@@ -650,6 +673,21 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>🏷️ 分類</span>
               <SegmentedControl options={categoryOptions} value={jointCat} onChange={setJointCat} />
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '2px', alignSelf: 'flex-start', lineHeight: '1.4' }}>
+                ✦「固定費用」現已合併至「帳單」功能，請至「帳單」輸入。
+              </div>
+            </div>
+
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>🎯 支出性質</span>
+              <SegmentedControl 
+                options={[
+                  { label: '必要 🍲', value: 'need' }, 
+                  { label: '選擇性 ✨', value: 'want' }
+                ]} 
+                value={jointNecessity} 
+                onChange={setJointNecessity} 
+              />
             </div>
 
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
@@ -694,6 +732,17 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.88rem', marginBottom: '8px', borderBottom: '0.5px solid rgba(255,255,255,0.06)', paddingBottom: '6px', gap: '8px' }}>
                   <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                     <span style={{ background: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-primary)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{item.cat}</span>
+                    <span style={{ 
+                      background: item.necessity === 'want' ? 'rgba(255, 149, 0, 0.08)' : 'rgba(10, 132, 255, 0.08)', 
+                      color: item.necessity === 'want' ? '#ff9f0a' : '#0a84ff', 
+                      padding: '3px 8px', 
+                      borderRadius: '6px', 
+                      fontSize: '0.73rem', 
+                      fontWeight: '600', 
+                      whiteSpace: 'nowrap' 
+                    }}>
+                      {item.necessity === 'want' ? '選擇性 ✨' : '必要 🍲'}
+                    </span>
                     <span style={{ 
                       fontSize: '0.73rem', 
                       fontWeight: '700', 
@@ -750,6 +799,21 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>🏷️ 分類</span>
               <SegmentedControl options={categoryOptions} value={persCat} onChange={setPersCat} />
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '2px', alignSelf: 'flex-start', lineHeight: '1.4' }}>
+                ✦「固定費用」現已合併至「帳單」功能，請至「帳單」輸入。
+              </div>
+            </div>
+
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>🎯 支出性質</span>
+              <SegmentedControl 
+                options={[
+                  { label: '必要 🍲', value: 'need' }, 
+                  { label: '選擇性 ✨', value: 'want' }
+                ]} 
+                value={persNecessity} 
+                onChange={setPersNecessity} 
+              />
             </div>
 
             <div className="inset-group-row">
@@ -781,6 +845,17 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.88rem', marginBottom: '8px', borderBottom: '0.5px solid rgba(255,255,255,0.06)', paddingBottom: '6px', gap: '8px' }}>
                   <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                     <span style={{ background: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-primary)', padding: '3px 8px', borderRadius: '6px', fontSize: '0.73rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{item.cat}</span>
+                    <span style={{ 
+                      background: item.necessity === 'want' ? 'rgba(255, 149, 0, 0.08)' : 'rgba(10, 132, 255, 0.08)', 
+                      color: item.necessity === 'want' ? '#ff9f0a' : '#0a84ff', 
+                      padding: '3px 8px', 
+                      borderRadius: '6px', 
+                      fontSize: '0.73rem', 
+                      fontWeight: '600', 
+                      whiteSpace: 'nowrap' 
+                    }}>
+                      {item.necessity === 'want' ? '選擇性 ✨' : '必要 🍲'}
+                    </span>
                     <span style={{ 
                       fontSize: '0.73rem', 
                       fontWeight: '700', 

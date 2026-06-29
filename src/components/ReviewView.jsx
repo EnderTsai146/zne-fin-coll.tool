@@ -151,9 +151,11 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
     // ---------- Income / Expense ----------
     let totalIncome = 0, totalExpense = 0;
     let incomeUserA = 0, incomeUserB = 0;
+    let needTotal = 0;
+    let wantTotal = 0;
 
     // Task 1: Dynamic categories setup
-    const dynamicCategories = assets?.config?.categories || ["餐飲食品", "生活用品", "固定費用", "投資理財", "其他"];
+    const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
     const catTotals = {};
     const catItems = {};
     dynamicCategories.forEach(cat => {
@@ -195,6 +197,11 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
       } else if (r.type === 'expense' || r.type === 'spend') {
         totalExpense += r.total;
 
+        // Necessity accumulation
+        const necessity = r.necessity || 'need';
+        if (necessity === 'want') wantTotal += r.total;
+        else needTotal += r.total;
+
         // Track biggest single spend
         if (!biggestSpend || r.total > biggestSpend.total) biggestSpend = r;
 
@@ -210,29 +217,35 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
         // Category classification (Task 1 dynamic alignment)
         if (r.type === 'expense' && r.details) {
           dynamicCategories.forEach(cat => {
-            if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) {
+            if (cat === '餐費') {
               classifyAndPush(cat, r.details.food || 0, r);
-            } else if (cat.includes('購') || cat.includes('用') || cat.includes('玩') || cat.includes('樂')) {
+            } else if (cat === '購物') {
               classifyAndPush(cat, r.details.shopping || 0, r);
-            } else if (cat.includes('固定') || cat.includes('租') || cat.includes('費') || cat.includes('水') || cat.includes('電') || cat.includes('稅')) {
-              classifyAndPush(cat, r.details.fixed || 0, r);
-            } else if (cat.includes('其他')) {
-              classifyAndPush(cat, r.details.other || 0, r);
+            } else if (cat === '娛樂') {
+              classifyAndPush(cat, r.details.entertainment || 0, r);
+            } else if (cat === '其他') {
+              classifyAndPush(cat, (r.details.other || 0) + (r.details.fixed || 0), r);
             }
           });
         } else if (r.type === 'spend') {
-          const note = r.note || '';
-          const sub = r.subCategory || '其他';
+          let sub = r.subCategory || '其他';
+          if (sub.includes('餐') || sub.includes('食') || sub.includes('喝')) sub = '餐費';
+          else if (sub.includes('購') || sub.includes('用') || sub.includes('生')) sub = '購物';
+          else if (sub.includes('玩') || sub.includes('樂') || sub.includes('娛')) sub = '娛樂';
+          else sub = '其他';
+
           if (catTotals[sub] !== undefined) {
             classifyAndPush(sub, r.total, r);
           } else {
-            const match = dynamicCategories.find(c => sub.includes(c) || c.includes(sub));
-            if (match) classifyAndPush(match, r.total, r);
-            else classifyAndPush("其他", r.total, r);
+            classifyAndPush("其他", r.total, r);
           }
         }
       }
     });
+
+    const totalExpForPct = totalExpense || 1;
+    const needPercent = Math.round((needTotal / totalExpForPct) * 100);
+    const wantPercent = 100 - needPercent;
 
     const savings = totalIncome - totalExpense;
     const savingsRate = totalIncome > 0 ? ((savings / totalIncome) * 100).toFixed(1) : '0.0';
@@ -278,6 +291,7 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
       topUserA, topUserB, topJoint,
       adviceLines, daysInMonth, daysPassed,
       incomeUserA, incomeUserB,
+      needTotal, wantTotal, needPercent, wantPercent
     };
   }, [combinedHistory, selectedMonth, assets]);
 
@@ -353,6 +367,18 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
               <div className="review-hero-sub">日均: {formatMoney(Math.round(stats.totalExpense / stats.daysPassed))}/天</div>
             </div>
           </div>
+          {/* Necessity Breakdown */}
+          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+              <span className="nobrk" style={{ color: 'var(--accent-blue)' }}>必要支出 🍲: {formatMoney(stats.needTotal)} ({stats.needPercent}%)</span>
+              <span className="nobrk" style={{ color: 'var(--accent-orange)' }}>選擇性消費 ✨: {formatMoney(stats.wantTotal)} ({stats.wantPercent}%)</span>
+            </div>
+            <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', display: 'flex', overflow: 'hidden', marginBottom: '14px' }}>
+              <div style={{ width: `${stats.needPercent}%`, background: 'var(--accent-blue)', height: '100%', borderRadius: '4px 0 0 4px', transition: 'width 0.3s ease' }} />
+              <div style={{ width: `${stats.wantPercent}%`, background: 'var(--accent-orange)', height: '100%', borderRadius: '0 4px 4px 0', transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+
           <div className="review-savings-bar">
             <div className="review-savings-badge" style={{
               background: stats.savings >= 0
