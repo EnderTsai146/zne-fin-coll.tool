@@ -105,31 +105,31 @@ const CHANGELOG_DATA = [
     date: '2026-06-29',
     highlights: [
       {
-        emoji: '✦',
+        emoji: '🏷️',
         color: 'rgba(0, 122, 255, 0.15)',
         title: '自訂分類標籤配置',
         desc: '開放使用者動態設定自訂分類標籤，解除系統預設之硬編碼限制，提供更靈活的記帳彈性。'
       },
       {
-        emoji: '✦',
+        emoji: '📊',
         color: 'rgba(52, 199, 89, 0.15)',
         title: '全新視覺化圖表',
         desc: '新增跨月度開銷對比長條圖與長期資產動態配置堆疊圖，協助深度分析資產變動趨勢。'
       },
       {
-        emoji: '✦',
+        emoji: '🚨',
         color: 'rgba(255, 149, 0, 0.15)',
         title: '動態預算即時預警',
         desc: '於日常記帳認列與暫存購物車送出時，當總支出達預算之 70%、90% 及 100% 時，系統將即時彈出對話視窗提示。'
       },
       {
-        emoji: '✦',
+        emoji: '💬',
         color: 'rgba(48, 209, 88, 0.15)',
         title: 'LINE 通知內容強化',
         desc: 'LINE 增強型通知自動整合動態預算進度文字，讓您即時掌握預算執行狀態。'
       },
       {
-        emoji: '✦',
+        emoji: '📅',
         color: 'rgba(175, 82, 222, 0.15)',
         title: '跨時區日期修正',
         desc: '修正因跨時區結算而導致定期帳單日期產生幽靈偏移之競爭條件（Race Condition）。'
@@ -138,7 +138,7 @@ const CHANGELOG_DATA = [
     tutorials: [
       {
         title: '設定自訂分類標籤',
-        content: '前往「設定」，點選「自訂標籤」，即可新增或編輯您的專屬交易分類，系統將即時更新記帳表單的下拉選單。'
+        content: '前往「設定」，點選「自訂標籤」，即可新增或編輯您的專屬交易分類，系統將即時更新記帳表單 the 下拉選單。'
       },
       {
         title: '查看跨月開銷對比',
@@ -155,37 +155,37 @@ const CHANGELOG_DATA = [
     date: '2026-06-29',
     highlights: [
       {
-        emoji: '✦',
+        emoji: '📱',
         color: 'rgba(0, 122, 255, 0.15)',
         title: 'Apple HIG 原生視覺與極簡重構',
         desc: '表單與設定全面升級為 iOS「設定」風格的圓角分組清單 (Grouped Inset Cards)，欄位水平排版、標籤靠左、數值靠右。'
       },
       {
-        emoji: '✦',
+        emoji: '📲',
         color: 'rgba(52, 199, 89, 0.15)',
         title: 'iOS Bottom Action Sheet 快捷選單',
         desc: '流水帳列表移除繁雜明文按鈕，點擊行項目即從螢幕底部平滑滑出 iOS 風格 Action Sheet 快顯功能表，提供修改與作廢。'
       },
       {
-        emoji: '✦',
+        emoji: '📥',
         color: 'rgba(255, 149, 0, 0.15)',
         title: 'iOS Card Sheet 底部滑出面板',
         desc: '文字修改對話視窗與對帳明細升級為 Card Sheet，頂部備有灰色 Drag Handle 手勢指示條與「取消/儲存」左右文字控制按鈕。'
       },
       {
-        emoji: '✦',
+        emoji: '✨',
         color: 'rgba(175, 82, 222, 0.15)',
         title: 'SF Symbols 風格向量圖示替換',
         desc: '所有彩色表情符號 Emoji 替換為線條幾何嚴謹、純色的 SVG 向量圖示，致敬 Apple 系統圖示質感。'
       },
       {
-        emoji: '✦',
+        emoji: '📈',
         color: 'rgba(48, 209, 88, 0.15)',
         title: '資產配置堆疊圖與跨月花費對比',
         desc: '總覽頁新增「配置比例」切換，支援 Stacked Area 堆疊圖查看科目移轉；回顧與資料庫加入上月 vs 本月同分類跨月開銷對比長條圖。'
       },
       {
-        emoji: '✦',
+        emoji: '⚙️',
         color: 'rgba(255, 59, 48, 0.15)',
         title: '系統設定與操作歷史雲端備份',
         desc: '新增「馬鈴薯管家」設定按鈕，支援檢視基本資訊、說明、常見問題與詳細「使用者操作歷史紀錄」，且支援隨其他財務帳務資料一起打包無感備份到雲端。'
@@ -211,31 +211,31 @@ const CHANGELOG_DATA = [
     date: '2026-06-25',
     highlights: [
       {
-        emoji: '✦',
+        emoji: '💵',
         color: 'rgba(0, 122, 255, 0.15)',
         title: '金額輸入千分位與貨幣符號',
         desc: '金額欄位輸入時即時自動套用 $ 和千分位逗號。後台無感轉換為數值，輸入更直覺。'
       },
       {
-        emoji: '✦',
+        emoji: '🛒',
         color: 'rgba(52, 199, 89, 0.15)',
         title: '暫存購物車排版防護與響應式',
         desc: '最佳化手機寬度下的備註與標籤折行，金額與刪除按鈕始終完美對齊，再窄的螢幕都不跑版。'
       },
       {
-        emoji: '✦',
+        emoji: '🧮',
         color: 'rgba(255, 149, 0, 0.15)',
         title: '先進先出 (FIFO) 成本估算',
         desc: '賣出股票時自動依據買入紀錄回估並預填投入本金，極大簡化損益紀錄程序。'
       },
       {
-        emoji: '✦',
+        emoji: '☁️',
         color: 'rgba(48, 209, 88, 0.15)',
         title: '全自動雲端試算表備份',
         desc: '每日首次開啟應用程式時，自動於背景將資料備份至 Google 雲端硬碟，保護您的資產數據。'
       },
       {
-        emoji: '✦',
+        emoji: '🔮',
         color: 'rgba(175, 82, 222, 0.15)',
         title: '全磨砂玻璃化 (Liquid Glass) 升級',
         desc: '移除總覽、回顧、投資分頁中的實色方塊，全面升級為透亮半透明玻璃質感。'
