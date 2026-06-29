@@ -16,13 +16,13 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
   const [lastUpdated, setLastUpdated] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const history = assets.monthlyExpenses || [];
+  const history = useMemo(() => assets.monthlyExpenses || [], [assets.monthlyExpenses]);
   const safeJoint = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
   const safeUserA = assets.userInvestments?.userA || { stock: 0, fund: 0, deposit: 0, other: 0 };
   const safeUserB = assets.userInvestments?.userB || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const currentData = activeTab === 'jointCash' ? safeJoint : (activeTab === 'userA' ? safeUserA : safeUserB);
-  const currentHistoryFilter = activeTab === 'jointCash' ? '共同帳戶' : (activeTab === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+  const currentHistoryFilter = activeTab === 'jointCash' ? '共同帳戶' : (activeTab === 'userA' ? '大狗狗' : '阿陞');
 
   // ★ 修正核心：使用 FIFO 計算正確的持倉成本（含歸檔基底支援）
   const stockHoldings = useMemo(() => {
@@ -124,6 +124,10 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
     return holdings;
   }, [history, currentHistoryFilter, assets.currentStockHoldings]);
 
+  const holdingsSymbolsKey = useMemo(() => {
+    return Object.keys(stockHoldings).sort().join(',');
+  }, [stockHoldings]);
+
   // ★ 股價獲取引擎 (加入安全鎖與錯誤提示)
   useEffect(() => {
     let isMounted = true;
@@ -172,7 +176,8 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
 
     fetchPrices();
     return () => { isMounted = false; };
-  }, [activeTab, stockHoldings, refreshKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, holdingsSymbolsKey, refreshKey]);
 
   // ★ 計算持倉列表（以 USD 為核心計算，轉台幣僅做展示）
   let stockMarketValue = 0;
@@ -408,9 +413,33 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
       <h1 className="page-title">投資部位</h1>
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
-        <button className={`glass-btn ${activeTab === 'jointCash' ? '' : 'inactive'}`} onClick={() => setActiveTab('jointCash')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>🏫 共同</button>
-        <button className={`glass-btn ${activeTab === 'userA' ? '' : 'inactive'}`} onClick={() => setActiveTab('userA')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>大狗狗🐕</button>
-        <button className={`glass-btn ${activeTab === 'userB' ? '' : 'inactive'}`} onClick={() => setActiveTab('userB')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem' }}>阿陞🐶</button>
+        <button className={`glass-btn ${activeTab === 'jointCash' ? '' : 'inactive'}`} onClick={() => setActiveTab('jointCash')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          共同
+        </button>
+        <button className={`glass-btn ${activeTab === 'userA' ? '' : 'inactive'}`} onClick={() => setActiveTab('userA')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+            <line x1="9" y1="9" x2="9.01" y2="9" />
+            <line x1="15" y1="9" x2="15.01" y2="9" />
+          </svg>
+          大狗狗
+        </button>
+        <button className={`glass-btn ${activeTab === 'userB' ? '' : 'inactive'}`} onClick={() => setActiveTab('userB')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+            <line x1="9" y1="9" x2="9.01" y2="9" />
+            <line x1="15" y1="9" x2="15.01" y2="9" />
+          </svg>
+          阿陞
+        </button>
       </div>
 
       <div className="glass-card card-animate" style={{ marginBottom: '18px', textAlign: 'center', padding: '24px 16px' }}>
@@ -474,7 +503,7 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
               <div style={{ textAlign: 'center' }}>市價 / 均價</div>
               <div style={{ textAlign: 'right' }}>股數 / 損益</div>
             </div>
-            {holdingList.map((h, idx) => <StockCard key={h.sym} h={h} />)}
+            {holdingList.map(h => <StockCard key={h.sym} h={h} />)}
           </>
         )}
 

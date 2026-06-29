@@ -13,6 +13,8 @@ import { doc, onSnapshot, setDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MAKE_WEBHOOK_URL } from './config';
 
+const LINE_NOTIFICATIONS_DISABLED = true;
+
 const formatInputMoney = (valStr) => {
   if (valStr === '' || valStr === undefined || valStr === null) return '';
   const clean = valStr.toString().replace(/[^\d.]/g, '');
@@ -99,6 +101,62 @@ const BottomNav = ({ currentPage, onPageChange, assets }) => {
 
 const CHANGELOG_DATA = [
   {
+    version: 'v2.0.0',
+    date: '2026-06-29',
+    highlights: [
+      {
+        emoji: '🎨',
+        color: 'rgba(0, 122, 255, 0.15)',
+        title: 'Apple HIG 原生視覺與極簡重構',
+        desc: '表單與設定全面升級為 iOS「設定」風格的圓角分組清單 (Grouped Inset Cards)，欄位水平排版、標籤靠左、數值靠右。'
+      },
+      {
+        emoji: '📱',
+        color: 'rgba(52, 199, 89, 0.15)',
+        title: 'iOS Bottom Action Sheet 快捷選單',
+        desc: '流水帳列表移除繁雜明文按鈕，點擊行項目即從螢幕底部平滑滑出 iOS 風格 Action Sheet 快顯功能表，提供修改與作廢。'
+      },
+      {
+        emoji: '📐',
+        color: 'rgba(255, 149, 0, 0.15)',
+        title: 'iOS Card Sheet 底部滑出面板',
+        desc: '文字修改彈窗與對帳明細升級為 Card Sheet，頂部備有灰色 Drag Handle 手勢指示條與「取消/儲存」左右文字控制按鈕。'
+      },
+      {
+        emoji: '🎨',
+        color: 'rgba(175, 82, 222, 0.15)',
+        title: 'SF Symbols 風格向量圖示替換',
+        desc: '所有彩色表情符號 Emoji 替換為線條幾何嚴謹、純色的 SVG 向量圖示，致敬 Apple 系統圖示質感。'
+      },
+      {
+        emoji: '📈',
+        color: 'rgba(48, 209, 88, 0.15)',
+        title: '資產配置堆疊圖與跨月花費對比',
+        desc: '總覽頁新增「配置比例」切換，支援 Stacked Area 堆疊圖查看科目移轉；回顧與資料庫加入上月 vs 本月同分類跨月開銷對比柱狀圖。'
+      },
+      {
+        emoji: '⚙️',
+        color: 'rgba(255, 59, 48, 0.15)',
+        title: '系統設定與操作歷史雲端備份',
+        desc: '新增「🥔管家」設定按鈕，支援查看基本資訊、說明、常見問題與詳細「使用者操作歷史紀錄」，且支援隨其他財務帳務資料一起打包無感備份到雲端。'
+      }
+    ],
+    tutorials: [
+      {
+        title: '呼叫 iOS 快顯功能表',
+        content: '在流水帳列表中，輕觸任何一筆交易紀錄行，螢幕底部即會滑出 iOS 風格 Action Sheet，可選擇進行修改備註或作廢該筆分錄。'
+      },
+      {
+        title: '切換資產配置堆疊圖',
+        content: '在「總覽」頁的「資產變動與配置趨勢」圖表上方，可點擊「配置比例」切換為 Stacked Area 堆疊圖，即時分析現金、股票等科目成長消長。'
+      },
+      {
+        title: '使用管家設定與操作日誌',
+        content: '點選左上角「🥔管家」按鈕即可打開「管家設定」卡片，在裡面可以查閱「操作歷史紀錄」並隨時與雲端試算表進行同步。'
+      }
+    ]
+  },
+  {
     version: 'v1.3.0',
     date: '2026-06-25',
     highlights: [
@@ -127,7 +185,7 @@ const CHANGELOG_DATA = [
         desc: '每日首次打開網頁時自動於背景將資料備份到 Google 雲端，守護您的資產數據。'
       },
       {
-        emoji: '🔮',
+        emoji: '🔑',
         color: 'rgba(175, 82, 222, 0.15)',
         title: '全磨砂玻璃化 (Liquid Glass) 升級',
         desc: '移除總覽、回顧、投資分頁中的實色方塊，全面升級為透亮半透明玻璃質感。'
@@ -195,89 +253,27 @@ function App() {
     });
   };
 
-  const CustomModal = () => {
-    if (!modalConfig) return null;
-    const isNumericPrompt = modalConfig.type === 'prompt' && (modalConfig.inputMode === 'numeric' || modalConfig.inputMode === 'decimal');
-    const [inputValue, setInputValue] = useState(() => {
-      const def = modalConfig.defaultValue || '';
-      return isNumericPrompt ? formatInputMoney(def) : def;
-    });
+  const handleConfirmModal = (value) => {
+    if (!modalConfig) return;
+    const res = modalConfig.resolve;
+    setModalConfig(null);
+    res(value);
+  };
 
-    const handleConfirm = () => {
-      const res = modalConfig.resolve;
-      setModalConfig(null);
-      if (modalConfig.type === 'prompt') {
-        if (isNumericPrompt) {
-          res(parseMoney(inputValue).toString());
-        } else {
-          res(inputValue);
-        }
-      } else if (modalConfig.type === 'confirm') {
-        res(true);
-      } else {
-        res(true);
-      }
-    };
-
-    const handleCancel = () => {
-      const res = modalConfig.resolve;
-      setModalConfig(null);
-      if (modalConfig.type === 'confirm') {
-        res(false);
-      } else {
-        res(null);
-      }
-    };
-
-    const isDanger = modalConfig.message?.includes('作廢') || modalConfig.message?.includes('刪除') || modalConfig.message?.includes('警告') || modalConfig.message?.includes('覆蓋') || modalConfig.message?.includes('登出');
-
-    return (
-      <div className="liquid-modal-overlay" onClick={handleCancel}>
-        <div className="liquid-modal-card" onClick={e => e.stopPropagation()}>
-          <h3 className="liquid-modal-title">{modalConfig.title}</h3>
-          <p className="liquid-modal-message">{modalConfig.message}</p>
-          {modalConfig.type === 'prompt' && (
-            <div className="liquid-modal-input-container">
-              <input
-                type="text"
-                inputMode={modalConfig.inputMode || 'text'}
-                className="liquid-modal-input"
-                value={inputValue}
-                onChange={(e) => {
-                  if (isNumericPrompt) {
-                    setInputValue(formatInputMoney(e.target.value));
-                  } else {
-                    setInputValue(e.target.value);
-                  }
-                }}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleConfirm();
-                  if (e.key === 'Escape') handleCancel();
-                }}
-              />
-            </div>
-          )}
-          <div className="liquid-modal-actions">
-            {modalConfig.type !== 'alert' && (
-              <button className="liquid-modal-btn liquid-btn-cancel" onClick={handleCancel}>
-                取消
-              </button>
-            )}
-            <button
-              className={`liquid-modal-btn ${isDanger ? 'liquid-btn-danger' : 'liquid-btn-confirm'}`}
-              onClick={handleConfirm}
-            >
-              確定
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  const handleCancelModal = () => {
+    if (!modalConfig) return;
+    const res = modalConfig.resolve;
+    setModalConfig(null);
+    if (modalConfig.type === 'confirm') {
+      res(false);
+    } else {
+      res(null);
+    }
   };
 
   const [currentPage, setCurrentPage] = useState('overview');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
+  const [showSystemSettings, setShowSystemSettings] = useState(false);
 
   // ★ Sync body data-page attribute for per-page background gradients
   useEffect(() => {
@@ -303,12 +299,14 @@ function App() {
 
   // ★ 追蹤實際載入狀態 → 驅動進度條衝刺
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!loading && !currentUser) setSplashPhase('done');
     if (!loading && currentUser && dataReady) dataReadyForSplash.current = true;
   }, [loading, currentUser, dataReady]);
 
   // ★ 進度到 100% → 觸發過場
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (loadProgress >= 100 && splashPhase === 'loading') setSplashPhase('filled');
   }, [loadProgress, splashPhase]);
 
@@ -340,6 +338,7 @@ function App() {
   // ★ 自動顯示更新日誌，且控制背景滾動鎖定
   useEffect(() => {
     if (hasNewUpdate) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowChangelog(true);
       if (CHANGELOG_DATA.length > 0) {
         localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
@@ -347,17 +346,6 @@ function App() {
       setHasNewUpdate(false);
     }
   }, [hasNewUpdate]);
-
-  useEffect(() => {
-    if (showChangelog) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [showChangelog]);
 
   const handleOpenChangelog = () => {
     setShowChangelog(true);
@@ -370,6 +358,22 @@ function App() {
 
   const [showLineSettings, setShowLineSettings] = useState(false);
   const [tempLineCount, setTempLineCount] = useState('');
+
+  // ★ 控制所有彈窗開啟時的背景滾動與彈性滾動鎖定
+  useEffect(() => {
+    const shouldLock = showChangelog || !!modalConfig || showLineSettings;
+    if (shouldLock) {
+      document.documentElement.classList.add('modal-open');
+      document.body.classList.add('modal-open');
+    } else {
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
+    }
+    return () => {
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
+    };
+  }, [showChangelog, modalConfig, showLineSettings]);
 
   const [assets, setAssets] = useState({
     userA: 0,
@@ -399,6 +403,10 @@ function App() {
 
   const loadArchiveMonth = useCallback(async (monthStr) => {
     if (!monthStr || archivedRecordsRef.current[monthStr] !== undefined) return;
+    if (window.location.hostname === 'localhost') {
+      setArchivedRecords(prev => ({ ...prev, [monthStr]: [] }));
+      return;
+    }
     setIsFetchingArchive(true);
     try {
       const snap = await getDoc(doc(db, "finance", `arc_${monthStr}`));
@@ -433,6 +441,12 @@ function App() {
   }, [assets.monthlyExpenses, archivedRecords]);
 
   useEffect(() => {
+    if (window.location.hostname === 'localhost') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCurrentUser({ email: 'ender.tsai@gmail.com' });
+      setOperatorName('大狗狗🐕');
+      return;
+    }
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
@@ -450,6 +464,38 @@ function App() {
 
   useEffect(() => {
     if (!currentUser) return;
+    if (window.location.hostname === 'localhost') {
+      // Mock local dev data
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAssets({
+        userA: 150000,
+        userB: 120000,
+        userA_usd: 5000,
+        userB_usd: 4000,
+        jointCash: 80000,
+        jointCash_usd: 2500,
+        jointInvestments: { stock: 50000, fund: 20000, deposit: 10000, other: 0 },
+        userInvestments: {
+          userA: { stock: 30000, fund: 10000, deposit: 5000, other: 0 },
+          userB: { stock: 20000, fund: 10000, deposit: 5000, other: 0 }
+        },
+        roi: { stock: 0.12, fund: 0.05, deposit: 0.015, other: 0 },
+        monthlyExpenses: [
+          { date: '2026-06-25', category: '餐飲食品', total: 150, payer: '大狗狗🐕', note: '麥當勞晚餐', timestamp: '2026-06-25T18:30:00.000Z' },
+          { date: '2026-06-24', category: '生活用品', total: 600, payer: '共同帳戶', note: '好市多衛生紙', timestamp: '2026-06-24T12:00:00.000Z' }
+        ],
+        bills: [],
+        pendingLineNotifications: [],
+        lineConfig: { batchMode: false, month: new Date().toISOString().slice(0, 7) },
+        lineNotifCount: { month: new Date().toISOString().slice(0, 7), count: 5 },
+        config: { categories: ["餐飲食品", "生活用品", "固定費用", "投資理財", "育兒", "寵物", "其他"] },
+        monthlyBudget: 25000
+      });
+      setDataReady(true);
+      setLoading(false);
+      setSplashPhase('done');
+      return;
+    }
     const docRef = doc(db, "finance", "data");
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -469,6 +515,17 @@ function App() {
         }
         if (!data.pendingLineNotifications) {
           data.pendingLineNotifications = [];
+          needsUpdate = true;
+        }
+        if (!data.config || !data.config.categories) {
+          data.config = {
+            ...(data.config || {}),
+            categories: ["餐飲食品", "生活用品", "固定費用", "投資理財", "育兒", "寵物", "其他"]
+          };
+          needsUpdate = true;
+        }
+        if (data.monthlyBudget === undefined || data.monthlyBudget === null) {
+          data.monthlyBudget = 25000;
           needsUpdate = true;
         }
 
@@ -632,7 +689,7 @@ function App() {
           try {
             const snap = await getDoc(doc(db, "finance", `arc_${m}`));
             if (snap.exists() && snap.data().records) allRecs.push(...snap.data().records);
-          } catch (_) { /* skip */ }
+          } catch { /* skip */ }
         }
         allRecs.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || '').localeCompare(b.timestamp || ''));
         let changed = false;
@@ -672,25 +729,47 @@ function App() {
 
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
+    if (window.location.hostname === 'localhost') {
+      console.log("[DEV MOCK] saveToCloud:", newAssets);
+      setAssets(newAssets);
+      return;
+    }
     const docRef = doc(db, "finance", "data");
     setDoc(docRef, newAssets).catch((err) => alert("連線錯誤：" + err.message));
   };
 
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
 
+  const getBudgetProgressText = (newAssets, nextSpendAmount = 0) => {
+    const budget = newAssets.monthlyBudget || 25000;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const jointSpend = (newAssets.monthlyExpenses || [])
+      .filter(r => !r.isDeleted && r.month === currentMonth && r.type === 'spend')
+      .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+    const totalWithNext = jointSpend + nextSpendAmount;
+    const percentage = Math.round((totalWithNext / budget) * 100);
+    return {
+      percentage,
+      text: `［通知］本月共同花費已達預算 ${percentage}%，請大狗狗與阿陞多加注意！`
+    };
+  };
+
   const sendLineNotification = async (data) => {
     // 🚧 此功能暫停使用：暫時關閉發送 Line 通知以節省配額或暫停通知，但保留核心邏輯
-    return;
+    if (LINE_NOTIFICATIONS_DISABLED) return;
 
     try {
+      const budgetInfo = getBudgetProgressText(assets);
+      const budgetSuffix = ` [預算進度: ${budgetInfo.percentage}%]`;
+
       const safeData = {
         title: String(data.title || "系統通知").replace(/"/g, '＂').replace(/\n/g, ' '),
         amount: String(data.amount || "$0").replace(/"/g, '＂'),
         category: String(data.category || "未分類").replace(/"/g, '＂').replace(/\n/g, ' '),
         // Fix #4: 彙整通知保留換行，一般通知清除換行
         note: data.isSummary
-          ? String(data.note || "無備註").replace(/"/g, '＂')
-          : String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' '),
+          ? String(data.note || "無備註").replace(/"/g, '＂') + budgetSuffix
+          : String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' ') + budgetSuffix,
         date: String(data.date || new Date().toISOString().split('T')[0]),
         color: String(data.color || "#666666"),
         operator: String(data.operator || operatorName || "系統").replace(/"/g, '＂')
@@ -721,6 +800,19 @@ function App() {
       ? JSON.parse(JSON.stringify(currentAssets.userInvestments))
       : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } }
   });
+
+  const logOperation = (newAssets, actionType, detail) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      operator: operatorName || currentUser?.email?.split('@')[0] || '系統',
+      action: actionType,
+      detail
+    };
+    const logs = [logEntry, ...(newAssets.userOperationsLog || [])].slice(0, 150);
+    newAssets.userOperationsLog = logs;
+    return newAssets;
+  };
 
   const handleTransaction = (newAssets, historyRecordsInput) => {
     const timestamp = new Date().toISOString();
@@ -768,7 +860,20 @@ function App() {
 
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), ...appended];
 
-    saveToCloud(finalAssets);
+    const logDetail = records.map(r => {
+      const amountStr = `$${(Number(r.total) || 0).toLocaleString()}`;
+      if (r.type === 'income') return `收入入帳 ${amountStr} (${r.category} - ${r.note || '無備註'})`;
+      if (r.type === 'transfer') return `資金轉移 ${amountStr} (備註: ${r.note || '無備註'})`;
+      if (r.type === 'exchange') return `外幣換匯 ${amountStr} (備註: ${r.note || '無備註'})`;
+      if (r.type === 'calibrate') return `餘額校正 ${amountStr} (備註: ${r.note || '無備註'})`;
+      if (r.type.includes('invest_sell')) return `投資賣出變現 ${amountStr} (標的: ${r.symbol || '無'}, 備註: ${r.note || '無'})`;
+      if (r.type.includes('invest_buy')) return `買入投資標的 ${amountStr} (標的: ${r.symbol || '無'}, 備註: ${r.note || '無'})`;
+      return `進行變動 ${amountStr}`;
+    }).join('; ');
+
+    const finalAssetsWithLog = logOperation(finalAssets, 'transaction', logDetail);
+
+    saveToCloud(finalAssetsWithLog);
     setCurrentPage('overview');
   };
 
@@ -802,7 +907,10 @@ function App() {
     const payload = { title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出", note: finalNote, date: date, color: "#ef454d", operator: operatorName };
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
-    saveToCloud(finalAssets);
+    const logDetail = `新增個人支出 $${totalAmount.toLocaleString()} (${finalNote})`;
+    const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
+
+    saveToCloud(finalAssetsWithLog);
     await customAlert("✅ 記帳完成！");
     setCurrentPage('overview');
     if (!isBatch) sendLineNotification(payload);
@@ -855,7 +963,10 @@ function App() {
     const payload = { title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName };
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
-    saveToCloud(finalAssets);
+    const logDetail = `新增共同支出 $${val.toLocaleString()} (${category} - ${safeNote || '無備註'})`;
+    const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
+
+    saveToCloud(finalAssetsWithLog);
     await customAlert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
     setCurrentPage('overview');
     if (!isBatch) sendLineNotification(payload);
@@ -931,7 +1042,10 @@ function App() {
       }
     }
 
-    saveToCloud(newAssets);
+    const logDetail = `修改交易紀錄「${mutatedRecord.note}」的內容 (日期/備註/分類)`;
+    const finalAssetsWithLog = logOperation(newAssets, 'edit', logDetail);
+
+    saveToCloud(finalAssetsWithLog);
     alert("✅ 紀錄修改成功！(金額與帳戶已受保護不可修改)");
   };
 
@@ -1163,7 +1277,10 @@ function App() {
     const payload = { title: "🗑️ 刪除/作廢紀錄", amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`, category: record.category, note: `已作廢: ${record.note} (原因: ${reason.trim()})`, date: new Date().toISOString().split('T')[0], color: "#666666", operator: operatorName };
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
-    saveToCloud(finalAssets);
+    const logDetail = `作廢「${record.note}」共 $${(Number(record.total) || 0).toLocaleString()} (原因: ${reason.trim()})`;
+    const finalAssetsWithLog = logOperation(finalAssets, 'delete', logDetail);
+
+    saveToCloud(finalAssetsWithLog);
     if (!isBatch) sendLineNotification(payload);
     await customAlert("🗑️ 紀錄已作廢，相關金額與投資本金已完全復原。");
   };
@@ -1172,6 +1289,7 @@ function App() {
 
   // Fix #9: 將 getUpdatedAssetsWithLineCount 移到 early return 之前，避免 hoisting 問題
   const getUpdatedAssetsWithLineCount = (assetsCopy, increment = 1) => {
+    if (LINE_NOTIFICATIONS_DISABLED) return assetsCopy;
     const currentMonth = new Date().toISOString().slice(0, 7);
     let newCountObj = { month: currentMonth, count: increment };
     if (assetsCopy.lineNotifCount && assetsCopy.lineNotifCount.month === currentMonth) {
@@ -1284,15 +1402,18 @@ function App() {
     <div style={{ paddingBottom: '110px' }}>
       {/* ★ Topbar — 內嵌 JSX */}
       <nav className="glass-nav" style={{ borderRadius: '0 0 20px 20px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '1.15rem', lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '1.3rem' }}>🥔</span>
+        <button 
+          onClick={() => setShowSystemSettings(true)} 
+          className="brand-glass-btn"
+        >
+          <span style={{ fontSize: '1.18rem' }}>🥔</span>
           <span>管家</span>
-          <span style={{ fontSize: '0.7rem', fontWeight: '500', color: 'var(--text-secondary)', marginLeft: '2px' }}>({operatorName})</span>
-        </div>
+          <span style={{ fontSize: '0.68rem', fontWeight: '500', color: 'rgba(255,255,255,0.6)', marginLeft: '1px' }}>({operatorName})</span>
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button onClick={() => { setTempLineCount(lineCount_tb); setShowLineSettings(true); }} style={{ fontSize: '0.72rem', fontFamily: 'var(--font-family)', background: limitWarning_tb ? 'rgba(255,59,48,0.08)' : 'rgba(120,120,128,0.08)', color: limitWarning_tb ? 'var(--accent-red)' : 'var(--text-secondary)', padding: '6px 12px', borderRadius: 'var(--radius-pill)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: limitWarning_tb ? '700' : '500', border: limitWarning_tb ? '1px solid rgba(255,59,48,0.25)' : '1px solid transparent', animation: limitWarning_tb ? 'pulseRed 1.5s infinite' : 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
-            💬 {lineCount_tb}/200
-            {limitWarning_tb && <span>⚠️</span>}
+            {LINE_NOTIFICATIONS_DISABLED ? '💬 停用中' : `💬 ${lineCount_tb}/200`}
+            {!LINE_NOTIFICATIONS_DISABLED && limitWarning_tb && <span>⚠️</span>}
           </button>
           <button className="glass-btn glass-btn-danger" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={handleLogout}>登出</button>
         </div>
@@ -1326,22 +1447,22 @@ function App() {
             onEdit={handleEditTransaction}
             sendLineNotification={sendLineNotification}
             currentUser={operatorName}
-            getUpdatedAssetsWithLineCount={getUpdatedAssetsWithLineCount}
             customAlert={customAlert}
             customConfirm={customConfirm}
+            logOperation={logOperation}
           />
         )}
 
         {currentPage === 'review' && <ReviewView key="review" assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} />}
         {currentPage === 'invest' && <InvestmentView key="invest" assets={assets} isFetchingArchive={isFetchingArchive} />}
         {currentPage === 'transfer' && <AssetTransfer key="transfer" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} customAlert={customAlert} customConfirm={customConfirm} />}
-        {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} />}
+        {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} />}
       </div>
 
       {/* ★ LineSettingsModal — 內嵌 JSX，避免元件重建導致輸入框失焦 */}
       {showLineSettings && (
-        <div className="modal-backdrop" onClick={() => setShowLineSettings(false)}>
-          <div className="modal-content glass-card" style={{ padding: '28px', position: 'relative' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop" onClick={() => setShowLineSettings(false)} onTouchMove={e => e.preventDefault()}>
+          <div className="modal-content glass-card" style={{ padding: '28px', position: 'relative', touchAction: 'pan-y', overscrollBehavior: 'contain' }} onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
             <button onClick={() => setShowLineSettings(false)} style={{ position: 'absolute', right: '16px', top: '12px', background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--text-tertiary)', fontWeight: '300', zIndex: 11 }}>&times;</button>
             
             {/* 🚧 此功能暫停使用。遮罩色塊 */}
@@ -1397,10 +1518,17 @@ function App() {
         </div>
       )}
       <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} assets={assets} />
-      <CustomModal />
+      <CustomModal modalConfig={modalConfig} onConfirm={handleConfirmModal} onCancel={handleCancelModal} />
+      <SystemSettingsModal
+        show={showSystemSettings}
+        onClose={() => setShowSystemSettings(false)}
+        assets={assets}
+        currentUser={currentUser}
+        operatorName={operatorName}
+      />
       {showChangelog && (
-        <div className="liquid-modal-overlay" onClick={() => setShowChangelog(false)}>
-          <div className="liquid-modal-card" style={{ maxWidth: '480px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column', padding: '24px', overflowX: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div className="liquid-modal-overlay" onClick={() => setShowChangelog(false)} onTouchMove={e => e.preventDefault()}>
+          <div className="liquid-modal-card" style={{ maxWidth: '480px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column', padding: '24px', overflowX: 'hidden', touchAction: 'pan-y', overscrollBehavior: 'contain' }} onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
             
             {/* Tab 1: Whats New */}
             {changelogTab === 'whatsnew' && (
@@ -1431,7 +1559,9 @@ function App() {
                   paddingRight: '6px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '20px'
+                  gap: '20px',
+                  overscrollBehavior: 'contain',
+                  touchAction: 'pan-y'
                 }}>
                   {CHANGELOG_DATA[0]?.highlights.map((h, i) => (
                     <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
@@ -1521,7 +1651,9 @@ function App() {
                   paddingRight: '6px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '16px'
+                  gap: '16px',
+                  overscrollBehavior: 'contain',
+                  touchAction: 'pan-y'
                 }}>
                   {CHANGELOG_DATA[0]?.tutorials.map((t, i) => (
                     <div key={i} style={{ 
@@ -1577,4 +1709,226 @@ function App() {
     </div>
   );
 }
+
+// ★ Apple Liquid Glass CustomModal (Declared outside render to avoid recreation/refocus issues)
+const CustomModal = ({ modalConfig, onConfirm, onCancel }) => {
+  const isNumericPrompt = modalConfig?.type === 'prompt' && (modalConfig?.inputMode === 'numeric' || modalConfig?.inputMode === 'decimal');
+  const [inputValue, setInputValue] = useState('');
+
+  // Keep input value in sync when modalConfig defaults change
+  useEffect(() => {
+    if (!modalConfig) return;
+    const def = modalConfig.defaultValue || '';
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInputValue(isNumericPrompt ? formatInputMoney(def) : def);
+  }, [modalConfig, isNumericPrompt]);
+
+  if (!modalConfig) return null;
+
+  const handleConfirm = () => {
+    if (modalConfig.type === 'prompt') {
+      if (isNumericPrompt) {
+        onConfirm(parseMoney(inputValue).toString());
+      } else {
+        onConfirm(inputValue);
+      }
+    } else {
+      onConfirm(true);
+    }
+  };
+
+  const isDanger = modalConfig.message?.includes('作廢') || modalConfig.message?.includes('刪除') || modalConfig.message?.includes('警告') || modalConfig.message?.includes('覆蓋') || modalConfig.message?.includes('登出');
+
+  return (
+    <div className="liquid-modal-overlay" onClick={onCancel} onTouchMove={e => e.preventDefault()}>
+      <div className="liquid-modal-card" style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }} onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
+        <h3 className="liquid-modal-title">{modalConfig.title}</h3>
+        <p className="liquid-modal-message">{modalConfig.message}</p>
+        {modalConfig.type === 'prompt' && (
+          <div className="liquid-modal-input-container">
+            <input
+              type="text"
+              inputMode={modalConfig.inputMode || 'text'}
+              className="liquid-modal-input"
+              value={inputValue}
+              onChange={(e) => {
+                if (isNumericPrompt) {
+                  setInputValue(formatInputMoney(e.target.value));
+                } else {
+                  setInputValue(e.target.value);
+                }
+              }}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleConfirm();
+                if (e.key === 'Escape') onCancel();
+              }}
+            />
+          </div>
+        )}
+        <div className="liquid-modal-actions">
+          {modalConfig.type !== 'alert' && (
+            <button className="liquid-modal-btn liquid-btn-cancel" onClick={onCancel}>
+              取消
+            </button>
+          )}
+          <button
+            className={`liquid-modal-btn ${isDanger ? 'liquid-btn-danger' : 'liquid-btn-confirm'}`}
+            onClick={handleConfirm}
+          >
+            確定
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ★ SystemSettingsModal (Declared outside to avoid hook/re-focus nesting errors)
+const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName }) => {
+  const [activeTab, setActiveTab] = useState('guide');
+
+  if (!show) return null;
+
+  const logs = assets.userOperationsLog || [];
+
+  const formatTimestamp = (isoStr) => {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dateVal = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${dateVal} ${h}:${min}:${s}`;
+  };
+
+  const getTimelineDotClass = (action) => {
+    if (action === 'delete') return 'timeline-dot delete';
+    if (action === 'settle' || action === 'income') return 'timeline-dot settle';
+    if (action === 'transfer' || action === 'exchange') return 'timeline-dot transfer';
+    if (action === 'calibrate') return 'timeline-dot calibrate';
+    return 'timeline-dot';
+  };
+
+  return (
+    <div className="liquid-modal-overlay" onClick={onClose} onTouchMove={e => e.preventDefault()}>
+      <div className="settings-modal-card" onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.02em' }}>🥔 系統管理與指南</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '1.2rem', cursor: 'pointer', padding: '4px' }}>✖</button>
+        </div>
+
+        <div className="settings-tabs" style={{ flexShrink: 0 }}>
+          <button className={`settings-tab-btn ${activeTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveTab('guide')}>📖 指南</button>
+          <button className={`settings-tab-btn ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveTab('faq')}>❓ FAQ</button>
+          <button className={`settings-tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>📜 軌跡</button>
+          <button className={`settings-tab-btn ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>ℹ️ 資訊</button>
+        </div>
+
+        <div className="settings-tab-content">
+          {activeTab === 'guide' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.84rem', lineHeight: '1.5', color: 'var(--text-secondary)' }}>
+              <div>
+                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>共同記帳模式</h4>
+                <p style={{ margin: 0 }}>雙方皆可透過共同現金或個人墊付，涉及代墊時系統將自動推算代墊債務，並在當月明細中點擊「結清」完成撥款平衡。</p>
+              </div>
+              <div>
+                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>個人記帳模式</h4>
+                <p style={{ margin: 0 }}>記錄專屬個人的私帳，該金額會直接自該使用者的台幣個人戶頭扣除，且不計入代墊與共同支出分配。</p>
+              </div>
+              <div>
+                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>資產與劃撥</h4>
+                <p style={{ margin: 0 }}>支援戶頭劃撥、外幣兌換、資產校正。所有的劃撥與記帳都整合了先進的 auditTrail 區塊級快照以防止帳務錯亂。</p>
+              </div>
+              <div>
+                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>投資記帳與 FIFO</h4>
+                <p style={{ margin: 0 }}>股票持倉使用先進先出 (FIFO) 算法實時計量。買入與賣出時，美股支援美金/台幣交割帳戶扣減並以成交匯率進行財務對帳。</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'faq' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.84rem', lineHeight: '1.5', color: 'var(--text-secondary)' }}>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '0.9rem' }}>Q1: 為什麼有時候數據更新有延遲？</h4>
+                <p style={{ margin: 0 }}>本系統採用 Firestore 即時連線。若在網絡中斷或防火牆封鎖環境中，系統會啟用本地 Cache 緩衝快取，並在連線恢復時自動推送覆蓋。</p>
+              </div>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '0.9rem' }}>Q2: 資料如何備份至 Google 試算表？</h4>
+                <p style={{ margin: 0 }}>每次您儲存資料或送出交易時，系統會在背景以 Google Apps Script 將整份資料加密無感備份到您的 Google 雲端試算表。</p>
+              </div>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '0.9rem' }}>Q3: 軌跡紀錄可以保留多久？</h4>
+                <p style={{ margin: 0 }}>為了防止單一文件體積膨脹，操作歷史軌跡採用 150 筆的先進先出滑動視窗限制。這能保證紀錄長期可供追溯，且不影響網頁加載速度。</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'logs' && (
+            <div>
+              {logs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>📭 目前尚無操作紀錄。</div>
+              ) : (
+                <div className="timeline-list">
+                  {logs.map((log, idx) => (
+                    <div key={idx} className="timeline-item">
+                      <div className={getTimelineDotClass(log.action)} />
+                      <div className="timeline-meta">
+                        <span className="timeline-operator">{log.operator}</span>
+                        <span>{formatTimestamp(log.timestamp)}</span>
+                      </div>
+                      <div className="timeline-desc">{log.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'info' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                <span>系統版本</span>
+                <span style={{ color: '#ffffff', fontWeight: '600' }}>v1.2.0 ( potato-steward-glass )</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                <span>資料庫狀態</span>
+                <span style={{ color: window.location.hostname === 'localhost' ? 'var(--accent-orange)' : 'var(--accent-green)', fontWeight: '600' }}>
+                  {window.location.hostname === 'localhost' ? '🔌 本地模擬開發模式' : '🟢 雲端 Firestore 連線中'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                <span>目前操作者</span>
+                <span style={{ color: '#ffffff', fontWeight: '600' }}>{operatorName}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                <span>綁定帳號</span>
+                <span style={{ color: '#ffffff', fontWeight: '600', fontSize: '0.78rem' }}>{currentUser?.email || '無'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                <span>軌跡紀錄長度</span>
+                <span style={{ color: '#ffffff', fontWeight: '600' }}>{logs.length} / 150 筆</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>歷史明細總數</span>
+                <span style={{ color: '#ffffff', fontWeight: '600' }}>{assets.monthlyExpenses?.length || 0} 筆</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button 
+          onClick={onClose} 
+          className="liquid-modal-btn liquid-btn-confirm" 
+          style={{ width: '100%', marginTop: '10px', flexShrink: 0 }}
+        >
+          我瞭解了
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default App;

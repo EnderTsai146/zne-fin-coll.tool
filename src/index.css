@@ -710,12 +710,20 @@ h4 {
 }
 
 /* Modal Layers */
+html.modal-open,
+body.modal-open {
+  overflow: hidden !important;
+  height: 100dvh !important;
+}
+
 .modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
+  width: 100vw;
+  height: 100dvh;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
@@ -725,12 +733,14 @@ h4 {
   justify-content: center;
   padding: 20px;
   animation: backdropFadeIn 0.25s var(--ease-out-expo) both;
+  overscroll-behavior: none;
 }
 
 .modal-content {
   width: 88%;
   max-width: 380px;
   animation: modalEnter 0.45s var(--ease-out-spring) both;
+  overscroll-behavior: contain;
 }
 
 .modal-content.glass-card {
@@ -1178,14 +1188,18 @@ h4 {
 
 .splash-burst-ring {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 360px;
+  height: 360px;
   border-radius: 50%;
-  border: 2px solid rgba(245, 197, 66, 0.7);
+  border: 1.5px solid rgba(245, 197, 66, 0.85);
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  box-shadow: 0 0 12px rgba(245, 197, 66, 0.3);
+  transform: translate3d(-50%, -50%, 0) scale(0);
+  box-shadow: 0 0 16px rgba(245, 197, 66, 0.35);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
 }
 
 .splash-burst-ring-1 {
@@ -1202,15 +1216,13 @@ h4 {
 
 @keyframes burstRingExpand {
   0% {
-    transform: translate(-50%, -50%) scale(0);
-    opacity: 0.8;
-    border-width: 2px;
+    transform: translate3d(-50%, -50%, 0) scale(0.05);
+    opacity: 0.9;
   }
 
   100% {
-    transform: translate(-50%, -50%) scale(18);
+    transform: translate3d(-50%, -50%, 0) scale(1);
     opacity: 0;
-    border-width: 0.5px;
   }
 }
 
@@ -1990,6 +2002,8 @@ div {
 .liquid-modal-overlay {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100dvh;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(20px) saturate(190%);
   -webkit-backdrop-filter: blur(20px) saturate(190%);
@@ -1998,6 +2012,7 @@ div {
   align-items: center;
   z-index: 10000;
   animation: liquid-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  overscroll-behavior: none;
 }
 
 .liquid-modal-card {
@@ -2018,6 +2033,7 @@ div {
   flex-direction: column;
   gap: 16px;
   color: #ffffff;
+  overscroll-behavior: contain;
 }
 
 .liquid-modal-card::before {
@@ -2172,5 +2188,410 @@ div {
   100% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* ======================================================
+   === System Settings Modal & Activity Timeline ===
+   ====================================================== */
+.settings-modal-card {
+  width: 92%;
+  max-width: 600px;
+  height: 80dvh;
+  max-height: 720px;
+  background: rgba(25, 25, 27, 0.88);
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 
+    0 16px 45px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  animation: liquid-pop-in 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  display: flex;
+  flex-direction: column;
+  color: #ffffff;
+  overscroll-behavior: contain;
+}
+
+.settings-tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px;
+  border-radius: 14px;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.settings-tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 4px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.settings-tab-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.settings-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar for tab content */
+.settings-tab-content::-webkit-scrollbar {
+  width: 5px;
+}
+.settings-tab-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.settings-tab-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+
+/* Activity Log Timeline */
+.timeline-list {
+  position: relative;
+  padding-left: 20px;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.timeline-list::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.timeline-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -20px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #007aff;
+  box-shadow: 0 0 8px rgba(0, 122, 255, 0.5);
+  border: 2px solid rgba(25, 25, 27, 1);
+}
+
+.timeline-dot.delete {
+  background: var(--accent-red);
+  box-shadow: 0 0 8px rgba(255, 59, 48, 0.5);
+}
+.timeline-dot.settle {
+  background: var(--accent-green);
+  box-shadow: 0 0 8px rgba(52, 199, 89, 0.5);
+}
+.timeline-dot.transfer {
+  background: var(--accent-blue);
+  box-shadow: 0 0 8px rgba(0, 122, 255, 0.5);
+}
+.timeline-dot.calibrate {
+  background: #8e44ad;
+  box-shadow: 0 0 8px rgba(142, 68, 173, 0.5);
+}
+
+.timeline-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.timeline-operator {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.timeline-desc {
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+/* Glass Brand Button styling */
+.brand-glass-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 6px 12px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.brand-glass-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.brand-glass-btn:active {
+  background: rgba(25, 25, 27, 0.08);
+  transform: translateY(0);
+}
+
+/* ======================================================
+   === iOS Inset Lists, Action Sheets & Card Sheets ===
+   ====================================================== */
+
+/* 1. Grouped Inset Lists */
+.inset-group-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.02);
+}
+
+.inset-group-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  min-height: 48px;
+  box-sizing: border-box;
+  font-size: 0.9rem;
+}
+
+.inset-group-row:not(:last-child) {
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.07);
+}
+
+.inset-group-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inset-group-value {
+  display: flex;
+  align-items: center;
+  color: var(--text-primary);
+  text-align: right;
+  font-weight: 500;
+}
+
+.inset-group-input {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #ffffff !important;
+  text-align: right !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  outline: none !important;
+  width: 100% !important;
+  box-shadow: none !important;
+}
+
+/* 2. iOS Action Sheets */
+.action-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: liquid-fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.action-sheet-container {
+  width: 94%;
+  max-width: 440px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: action-sheet-slide-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.action-sheet-group {
+  background: rgba(28, 28, 30, 0.88);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.action-sheet-title {
+  padding: 14px 16px;
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.action-sheet-btn {
+  width: 100%;
+  padding: 16px;
+  background: transparent;
+  border: none;
+  color: #007aff;
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.15s ease;
+}
+
+.action-sheet-btn:not(:last-child) {
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.action-sheet-btn:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.action-sheet-btn.destructive {
+  color: var(--accent-red);
+  font-weight: 600;
+}
+
+.action-sheet-cancel {
+  background: rgba(28, 28, 30, 0.95) !important;
+  font-weight: 600 !important;
+  color: #007aff !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+@keyframes action-sheet-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* 3. iOS Bottom Card Sheets */
+.card-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 10200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: liquid-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.card-sheet-container {
+  width: 100%;
+  max-width: 600px;
+  height: 82dvh;
+  background: rgba(20, 20, 22, 0.92);
+  border-radius: 20px 20px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.3);
+  padding: 16px 20px 24px 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  animation: card-sheet-slide-up 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.card-sheet-drag-handle {
+  width: 36px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2.5px;
+  margin: 0 auto 16px auto;
+  flex-shrink: 0;
+}
+
+.card-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.card-sheet-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.card-sheet-btn-text {
+  background: transparent;
+  border: none;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #007aff;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.card-sheet-btn-text.done {
+  font-weight: 700;
+}
+
+.card-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+@keyframes card-sheet-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }

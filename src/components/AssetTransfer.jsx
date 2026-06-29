@@ -67,7 +67,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
   // Sync usFxRate with currentFxRate when it changes from external background fetch
   useEffect(() => {
     if (currentFxRate) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUsFxRate(currentFxRate.toString());
     }
   }, [currentFxRate]);
@@ -100,13 +99,31 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     const baseAmount = p * s;
     const fee = Math.max(20, Math.floor(baseAmount * 0.001425 * 0.6));
     if (investAction === 'buy') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setInvestAmount(Math.round(baseAmount + fee).toString());
     } else if (investAction === 'sell') {
       const tax = Math.floor(baseAmount * 0.003);
       setInvestAmount(Math.round(baseAmount - fee - tax).toString());
     }
   }, [stockPrice, stockShares, stockMarket, investAction, investType]);
+
+  // Task 2: Real-time US Stocks Pre-fill & Calculations
+  useEffect(() => {
+    if (investType !== 'stock' || stockMarket !== 'US') return;
+    const price = parseMoney(stockPrice);
+    const shares = Number(stockShares) || 0;
+    if (price <= 0 || shares <= 0) return;
+
+    const computedTotalUsd = Number((price * shares).toFixed(2));
+    setUsTotalUsd(formatInputMoney(computedTotalUsd.toString()));
+
+    if (settleCurrency === 'TWD') {
+      const rate = Number(usFxRate) || 0;
+      if (rate > 0) {
+        const computedTotalTWD = Math.round(computedTotalUsd * rate);
+        setInvestAmount(formatInputMoney(computedTotalTWD.toString()));
+      }
+    }
+  }, [stockPrice, stockShares, stockMarket, investType, settleCurrency, usFxRate]);
 
   // ★ 自動 FIFO 成本計算與預填引擎
   useEffect(() => {
@@ -122,7 +139,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     }
 
     const isJoint = investAccount === 'jointCash';
-    const currentHistoryFilter = isJoint ? '共同帳戶' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+    const currentHistoryFilter = isJoint ? '共同帳戶' : (investAccount === 'userA' ? '大狗狗' : '阿陞');
     
     // 1. 重建此帳戶的持股基準 lots (包含 currentStockHoldings 歸檔基底)
     const holdings = {};
@@ -219,7 +236,6 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           remainingToSell = 0;
         }
       }
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setInvestPrincipal(formatInputMoney(Math.round(totalCostTwd).toString()));
       if (stockMarket === 'US') {
         setUsInvestPrincipalUsd(formatInputMoney(Number(totalCostUsd.toFixed(2)).toString()));
@@ -230,7 +246,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     }
   }, [stockSymbol, stockShares, investAccount, investAction, stockMarket, investType, assets.monthlyExpenses, assets.currentStockHoldings]);
 
-  const getDeepCopy = (obj) => JSON.parse(JSON.stringify(obj));
+  const getDeepCopy = (obj) => structuredClone(obj);
 
   const handleIncomeSubmit = async () => {
     if (!incomeUser) return await customAlert("請選擇戶頭！");
@@ -238,462 +254,339 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     if (val <= 0) return await customAlert("請輸入有效的正數金額");
     const userName = incomeUser === 'userA' ? '大狗狗🐕' : '阿陞🐶';
     if (!await customConfirm(`確定要記錄 ${userName} 收入 ${formatMoney(val)} 嗎？`)) return;
-    const newAssets = getDeepCopy(assets);
+
+    let newAssets = getDeepCopy(assets);
     newAssets[incomeUser] += val;
+
     onTransaction(newAssets, { type: 'income', category: '個人收入', payer: userName, total: val, note: incomeNote.trim() || '一般收入', month: txDate.slice(0, 7), date: txDate });
-    await customAlert(`✅ 已記錄收入：${formatMoney(val)}`);
-    setIncomeAmount(''); setIncomeNote(''); setIncomeUser(null);
+
+    setIncomeAmount('');
+    setIncomeNote('');
+    setIncomeUser(null);
   };
 
   const handleTransfer = async () => {
-    if (!transSource) return await customAlert("請選擇來源！");
+    if (!transSource) return await customAlert("請選擇來源個人帳戶！");
     const val = parseMoney(transAmount);
     if (val <= 0) return await customAlert("請輸入有效的正數金額");
-    if (assets[transSource] < val) return await customAlert("❌ 個人餘額不足！");
+    if (assets[transSource] < val) return await customAlert("個人餘額不足以轉移上繳！");
+
     const userName = transSource === 'userA' ? '大狗狗🐕' : '阿陞🐶';
-    if (!await customConfirm(`確定要從 ${userName} 上繳 ${formatMoney(val)} 至共同帳戶嗎？`)) return;
-    const newAssets = getDeepCopy(assets);
+    if (!await customConfirm(`確定要將 ${userName} 的 ${formatMoney(val)} 上繳公庫（共同現金）嗎？`)) return;
+
+    let newAssets = getDeepCopy(assets);
     newAssets[transSource] -= val;
     newAssets.jointCash += val;
+
     onTransaction(newAssets, { type: 'transfer', category: '資產劃撥', payer: userName, total: val, note: `轉移至 共同現金`, month: txDate.slice(0, 7), date: txDate });
-    await customAlert("✅ 劃撥成功！");
-    setTransAmount(''); setTransSource(null);
+
+    setTransAmount('');
+    setTransSource(null);
   };
 
   const handleExchange = async () => {
-    if (!exchangeSource) return await customAlert("請選擇操作帳戶！");
+    if (!exchangeSource) return await customAlert("請選擇換匯帳戶！");
     if (!exchangeDir) return await customAlert("請選擇換匯方向！");
-    if (!exchangeTwd || !exchangeUsd) return await customAlert("請輸入台幣與美金金額");
     const twd = parseMoney(exchangeTwd);
     const usd = parseMoney(exchangeUsd);
-    if (twd <= 0 || usd <= 0) return await customAlert("請輸入有效的台幣與美金正數金額！");
-    const newAssets = getDeepCopy(assets);
-    const accountName = exchangeSource === 'jointCash' ? '共同帳戶' : (exchangeSource === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+    if (twd <= 0 || usd <= 0) return await customAlert("請輸入有效的台幣與美金金額");
 
-    if (exchangeDir === 'TWD_TO_USD') {
-      if ((newAssets[exchangeSource] || 0) < twd) return await customAlert(`❌ ${accountName} 台幣餘額不足！`);
+    const accountName = exchangeSource === 'jointCash' ? '共同帳戶🏫' : (exchangeSource === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+    const isTwdToUsd = exchangeDir === 'TWD_TO_USD';
+
+    if (isTwdToUsd) {
+      if (assets[exchangeSource] < twd) return await customAlert("台幣餘額不足！");
+    } else {
+      const sourceUsdKey = `${exchangeSource}_usd`;
+      if ((assets[sourceUsdKey] || 0) < usd) return await customAlert("美金餘額不足！");
+    }
+
+    if (!await customConfirm(`確定要在 ${accountName} 換匯嗎？\n${isTwdToUsd ? `台幣 -$${twd.toLocaleString()} ➔ 美金 +$${usd.toLocaleString()} USD` : `美金 -$${usd.toLocaleString()} USD ➔ 台幣 +$${twd.toLocaleString()}`}`)) return;
+
+    let newAssets = getDeepCopy(assets);
+    const usdKey = `${exchangeSource}_usd`;
+    if (isTwdToUsd) {
       newAssets[exchangeSource] -= twd;
-      newAssets[`${exchangeSource}_usd`] = (newAssets[`${exchangeSource}_usd`] || 0) + usd;
+      newAssets[usdKey] = (newAssets[usdKey] || 0) + usd;
       onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `台幣換美金 (買入 $${usd} USD)`, date: txDate });
     } else {
-      if ((newAssets[`${exchangeSource}_usd`] || 0) < usd) return await customAlert(`❌ ${accountName} 美金餘額不足！`);
-      newAssets[`${exchangeSource}_usd`] -= usd;
       newAssets[exchangeSource] += twd;
+      newAssets[usdKey] = (newAssets[usdKey] || 0) - usd;
       onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `美金換台幣 (賣出 $${usd} USD)`, date: txDate });
     }
-    await customAlert("✅ 換匯成功！");
-    setExchangeTwd(''); setExchangeUsd('');
-    setExchangeSource(null); setExchangeDir(null);
+
+    setExchangeTwd('');
+    setExchangeUsd('');
+    setExchangeSource(null);
+    setExchangeDir(null);
   };
 
   const handleCalibrate = async () => {
-    if (!calibAccount) return await customAlert("請選擇校正帳戶！");
-    if (calibTwd === '' && calibUsd === '') return await customAlert("請至少輸入一項實際餘額");
+    if (!calibAccount) return await customAlert("請選擇帳戶！");
+    if (!calibTwd && !calibUsd) return await customAlert("請輸入至少一項要校正的值（台幣或美金）");
 
-    const parsedTwdVal = calibTwd !== '' ? parseMoney(calibTwd) : null;
-    const parsedUsdVal = calibUsd !== '' ? parseMoney(calibUsd) : null;
+    const targetTwd = calibTwd ? parseMoney(calibTwd) : assets[calibAccount];
+    const targetUsd = calibUsd ? parseMoney(calibUsd) : (assets[`${calibAccount}_usd`] || 0);
 
-    if ((calibTwd !== '' && parsedTwdVal < 0) ||
-        (calibUsd !== '' && parsedUsdVal < 0)) {
-      return await customAlert("請輸入有效的非負校正餘額數字！");
-    }
+    const accountName = calibAccount === 'jointCash' ? '共同帳戶🏫' : (calibAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+    if (!await customConfirm(`確定要把 ${accountName} 校正為：\n台幣：${formatMoney(targetTwd)}\n美金：$${targetUsd.toLocaleString()} USD 嗎？`)) return;
 
-    const currentTwd = assets[calibAccount] || 0;
-    const currentUsd = assets[`${calibAccount}_usd`] || 0;
+    let newAssets = getDeepCopy(assets);
+    const diffTwd = targetTwd - (assets[calibAccount] || 0);
+    const diffUsd = targetUsd - (assets[`${calibAccount}_usd`] || 0);
 
-    const newTwd = calibTwd !== '' ? parsedTwdVal : currentTwd;
-    const newUsd = calibUsd !== '' ? parsedUsdVal : currentUsd;
-
-    const twdDiff = newTwd - currentTwd;
-    const usdDiff = newUsd - currentUsd;
-
-    if (twdDiff === 0 && usdDiff === 0) return await customAlert("輸入的餘額與目前帳面相同，無需校正");
-
-    const accountName = calibAccount === 'jointCash' ? '共同帳戶' : (calibAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
-
-    let diffNotes = [];
-    if (twdDiff !== 0) diffNotes.push(`台幣 ${twdDiff > 0 ? '+' : ''}${twdDiff}`);
-    if (usdDiff !== 0) diffNotes.push(`美金 ${usdDiff > 0 ? '+' : ''}${usdDiff.toFixed(2)}`);
-
-    if (!await customConfirm(`確定要將 ${accountName} 的餘額校正為：\n台幣: ${formatMoney(newTwd)}\n美金: $${newUsd.toFixed(2)} USD\n\n(系統將自動調整: ${diffNotes.join(' / ')})`)) return;
-
-    const newAssets = getDeepCopy(assets);
-    newAssets[calibAccount] = newTwd;
-    newAssets[`${calibAccount}_usd`] = newUsd;
+    newAssets[calibAccount] = targetTwd;
+    newAssets[`${calibAccount}_usd`] = targetUsd;
 
     onTransaction(newAssets, {
-      type: 'calibrate',
-      category: '餘額校正',
-      payer: accountName,
-      accountKey: calibAccount,
-      total: Math.abs(twdDiff),
-      twdDiff: twdDiff,
-      usdDiff: usdDiff,
-      note: `系統校正 (${diffNotes.join(', ')})`,
+      type: 'calibrate', category: '餘額校正', payer: accountName, accountKey: calibAccount,
+      total: Math.abs(diffTwd), usdAmount: Math.abs(diffUsd),
+      note: `帳戶校正 (台幣異動: ${diffTwd >= 0 ? '+' : ''}${formatMoney(diffTwd)}，美金異動: ${diffUsd >= 0 ? '+' : ''}$${diffUsd.toFixed(2)} USD)`,
       date: txDate
     });
 
-    await customAlert("✅ 餘額校正完成！");
     setCalibTwd('');
     setCalibUsd('');
     setCalibAccount(null);
   };
 
   const handleAddInvestCart = async () => {
-    if (!investAccount) return await customAlert("請選擇操作帳戶！");
+    if (!investAccount) return await customAlert("請選擇帳戶！");
     if (!investAction) return await customAlert("請選擇動作！");
     if (!investType) return await customAlert("請選擇標的類型！");
-    if (investType === 'stock' && !stockMarket) return await customAlert("請選擇股票市場！");
-    if (investType === 'stock' && stockMarket === 'US' && !settleCurrency) return await customAlert("請選擇交割帳戶！");
-    if (investAction === 'day_trade' && !dayTradeResult) return await customAlert("請選擇當沖結果！");
 
-    // ★ Context-aware validation: only require fields relevant to the current path
-    const isUsStock = investType === 'stock' && stockMarket === 'US';
-    const isUsdSettle = isUsStock && settleCurrency === 'USD';
-    const isTwdSettle = isUsStock && settleCurrency === 'TWD';
+    let val = parseMoney(investAmount);
+    let usTotalUsdNum = parseMoney(usTotalUsd);
 
-    if (isUsStock) {
-      // US stock always needs USD total
-      const usdVal = parseMoney(usTotalUsd);
-      if (usdVal <= 0) return await customAlert("請確認並輸入有效的正數美金總額 (USD)！");
+    if (investAction === 'day_trade' && !dayTradeResult) {
+      return await customAlert("當沖請選擇 賺錢 或是 賠錢！");
+    }
 
-      const fxRateVal = parseMoney(usFxRate);
-      if (settleCurrency === 'TWD' && fxRateVal <= 0) {
-        return await customAlert("請輸入有效的正數成交匯率！");
-      }
+    if (investType === 'stock') {
+      if (!stockSymbol) return await customAlert("請輸入股票代號！");
+      if (!stockShares || Number(stockShares) <= 0) return await customAlert("請輸入有效的交易股數！");
+      if (stockMarket === 'US' && !settleCurrency) return await customAlert("請選擇交割幣種！");
 
-      if (isUsdSettle && investAction === 'buy') {
-        // USD settlement buy: only needs usTotalUsd — no investAmount, no FX rate needed
-        // Auto-compute investAmount (台幣本金) for bookkeeping using current FX rate
-        const autoTwd = Math.round(usdVal * Number(usFxRate || currentFxRate || 31.5));
-        const currentAmount = parseMoney(investAmount);
-        if (currentAmount <= 0) {
-          setInvestAmount(autoTwd.toString());
+      if (stockMarket === 'US') {
+        if (settleCurrency === 'USD') {
+          val = 0;
+          if (usTotalUsdNum <= 0) return await customAlert("美金交割模式下，請輸入有效的美金總額！");
+        } else {
+          if (val <= 0) return await customAlert("台幣交割模式下，請輸入有效的最終台幣交割額！");
         }
-      } else if (isTwdSettle && investAction === 'buy') {
-        // TWD settlement buy: needs investAmount (台幣交割額) + usFxRate
-        const val = parseMoney(investAmount);
-        if (val <= 0) return await customAlert("請確認並輸入有效的台幣交割總額！");
-      } else if (investAction === 'sell') {
-        // US stock sell: needs usInvestPrincipalUsd. investPrincipal is only required for TWD settle
-        const principalUsdVal = parseMoney(usInvestPrincipalUsd);
-        if (principalUsdVal <= 0) return await customAlert("請輸入有效的正數美金成本！");
-        if (isTwdSettle) {
-          const principalVal = parseMoney(investPrincipal);
-          if (principalVal <= 0) return await customAlert("請輸入有效的正數扣除台幣本金！");
-          const val = parseMoney(investAmount);
-          if (val <= 0) return await customAlert("請確認並輸入有效的台幣收回總額！");
-        }
+      } else {
+        if (val <= 0) return await customAlert("台股交易請輸入有效的最終交割額！");
       }
-    } else if (investAction === 'day_trade') {
-      const val = parseMoney(investAmount);
-      if (val <= 0) return await customAlert("請輸入有效的正數當沖淨差額！");
     } else {
-      // TW stock or non-stock (fund/deposit/other)
-      const val = parseMoney(investAmount);
-      if (val <= 0) return await customAlert("請確認並輸入有效的正數收支總額！");
-      // TW stock sell needs principal
-      if (investType === 'stock' && stockMarket === 'TW' && investAction === 'sell') {
-        const principalVal = parseMoney(investPrincipal);
-        if (principalVal <= 0) return await customAlert("請輸入有效的正數扣除台幣本金！");
+      if (val <= 0) return await customAlert("請輸入有效的總金額！");
+    }
+
+    // 購物車餘額分段預檢 (Early cart checks)
+    const existingCartSameSource = investCart
+      .filter(item => item.investAccount === investAccount)
+      .reduce((sum, item) => sum + (item.investAction === 'buy' ? item.investAmount : 0), 0);
+    const existingCartSameSourceUsd = investCart
+      .filter(item => item.investAccount === investAccount)
+      .reduce((sum, item) => sum + (item.investAction === 'buy' ? item.usTotalUsd : 0), 0);
+
+    const proposedTwdTotal = existingCartSameSource + (investAction === 'buy' ? val : 0);
+    const currentBalance = assets[investAccount] || 0;
+    if (investAction === 'buy' && currentBalance < proposedTwdTotal) {
+      const payerName = investAccount === 'jointCash' ? '共同現金🏫' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+      return await customAlert(`❌ 餘額不足！當前 ${payerName} 餘額為 ${formatMoney(currentBalance)}，暫存購物車已累計 ${formatMoney(existingCartSameSource)}，無法再加入 ${formatMoney(val)}`);
+    }
+
+    if (investAction === 'buy' && stockMarket === 'US' && settleCurrency === 'USD') {
+      const usdBalance = assets[`${investAccount}_usd`] || 0;
+      const proposedUsdTotal = existingCartSameSourceUsd + usTotalUsdNum;
+      if (usdBalance < proposedUsdTotal) {
+        const payerName = investAccount === 'jointCash' ? '共同帳戶🏫' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+        return await customAlert(`❌ 美金餘額不足！當前 ${payerName} 美金餘額為 $${usdBalance} USD，暫存購物車已累計 $${existingCartSameSourceUsd} USD，無法再加入 $${usTotalUsdNum} USD`);
       }
     }
 
-    let finalSymbol = stockSymbol ? stockSymbol.toUpperCase().trim() : '';
-    if (investType === 'stock' && stockMarket === 'TW' && finalSymbol && !finalSymbol.includes('.')) {
-      finalSymbol += '.TW';
-    }
-
-    let finalInvestAmount = investAmount;
-    if (isUsdSettle && investAction === 'buy' && (!finalInvestAmount || parseMoney(finalInvestAmount) <= 0)) {
-      finalInvestAmount = Math.round(parseMoney(usTotalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
-    }
-
-    let finalInvestPrincipal = investPrincipal;
-    if (isUsdSettle && investAction === 'sell' && (!finalInvestPrincipal || parseMoney(finalInvestPrincipal) <= 0)) {
-      finalInvestPrincipal = Math.round(parseMoney(usInvestPrincipalUsd) * Number(usFxRate || currentFxRate || 31.5)).toString();
-    }
-
-    setInvestCart([...investCart, {
-      id: Date.now(),
-      investAccount,
-      investAction,
-      investType,
-      stockMarket,
-      settleCurrency,
-      stockSymbol: finalSymbol,
-      stockShares,
-      stockPrice,
-      usTotalUsd,
-      usFxRate: usFxRate || (currentFxRate || 31.5).toString(),
-      investAmount: finalInvestAmount,
-      investPrincipal: finalInvestPrincipal,
-      usInvestPrincipalUsd,
+    const payload = {
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      investAccount, investAction, investType, investAmount: val,
+      stockMarket, settleCurrency, usTotalUsd: usTotalUsdNum,
+      stockSymbol: stockSymbol.toUpperCase().trim(),
+      stockShares: Number(stockShares) || 0,
+      stockPrice: parseMoney(stockPrice),
+      usFxRate: Number(usFxRate) || 0,
+      investPrincipal: parseMoney(investPrincipal),
+      usInvestPrincipalUsd: parseMoney(usInvestPrincipalUsd),
       dayTradeResult
-    }]);
+    };
 
-    setInvestAmount(''); setInvestPrincipal(''); setStockPrice(''); setStockShares(''); setStockSymbol(''); setUsTotalUsd(''); setUsInvestPrincipalUsd('');
-    // 依要求：保留 investType, stockMarket, settleCurrency, investAction, investAccount, dayTradeResult 的選項進度
+    setInvestCart([...investCart, payload]);
+
+    setStockSymbol('');
+    setStockShares('');
+    setStockPrice('');
+    setUsTotalUsd('');
+    setInvestAmount('');
+    setInvestPrincipal('');
+    setUsInvestPrincipalUsd('');
+    setDayTradeResult(null);
   };
 
   const handleInvestSubmit = async () => {
-    const items = [...investCart];
-    // Check if there's unsaved data in the form (either investAmount or usTotalUsd has value)
-    if ((investAmount && parseMoney(investAmount) > 0) || (usTotalUsd && parseMoney(usTotalUsd) > 0)) {
-      return await customAlert("請先點擊「➕ 暫存此筆」，將資料加入清單後再送出喔！");
-    }
-    if (items.length === 0) return await customAlert("暫存清單沒有任何項目！");
-
-    // 1. 模擬與餘額校驗階段 (Validation & Simulation Phase)
-    const simAssets = getDeepCopy(assets);
-    if (!simAssets.userInvestments) simAssets.userInvestments = { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } };
-    if (!simAssets.jointInvestments) simAssets.jointInvestments = { stock: 0, fund: 0, deposit: 0, other: 0 };
-    
-    let errors = [];
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const { investAccount, investAction, investType, stockMarket, settleCurrency, usTotalUsd, usFxRate, investAmount, investPrincipal, dayTradeResult } = item;
-
-      const isJoint = investAccount === 'jointCash';
-      const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
-
-      const val = parseMoney(investAmount);
-
-      if (investAction === 'day_trade') {
-        const isProfit = dayTradeResult === 'profit';
-        if (!isProfit && (simAssets[investAccount] || 0) < val) {
-          errors.push(`第 ${i + 1} 筆錯誤：${accountName} 現金不足以支付當沖虧損！(需要 ${formatMoney(val)}，剩餘 ${formatMoney(simAssets[investAccount] || 0)})`);
-        } else {
-          if (isProfit) simAssets[investAccount] = (simAssets[investAccount] || 0) + val;
-          else simAssets[investAccount] = (simAssets[investAccount] || 0) - val;
-        }
-        continue;
-      }
-
-      if (investType === 'stock' && stockMarket === 'US') {
-        const costUsd = parseMoney(usTotalUsd);
-        const equivalentTwd = Math.round(costUsd * Number(usFxRate || 31.5));
-
-        if (investAction === 'buy') {
-          if (settleCurrency === 'USD') {
-            if ((simAssets[`${investAccount}_usd`] || 0) < costUsd) {
-              errors.push(`第 ${i + 1} 筆錯誤：${accountName} 美金餘額不足！(需要 $${costUsd.toFixed(2)} USD，剩餘 $${(simAssets[`${investAccount}_usd`] || 0).toFixed(2)} USD)`);
-            } else {
-              simAssets[`${investAccount}_usd`] = (simAssets[`${investAccount}_usd`] || 0) - costUsd;
-              if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) + equivalentTwd;
-              else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) + equivalentTwd;
-            }
-          } else {
-            if ((simAssets[investAccount] || 0) < val) {
-              errors.push(`第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！(需要 ${formatMoney(val)}，剩餘 ${formatMoney(simAssets[investAccount] || 0)})`);
-            } else {
-              simAssets[investAccount] = (simAssets[investAccount] || 0) - val;
-              if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) + val;
-              else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) + val;
-            }
-          }
-        } else if (investAction === 'sell') {
-          const principalTwd = parseMoney(investPrincipal);
-          const currentPrincipal = isJoint ? (simAssets.jointInvestments[investType] || 0) : (simAssets.userInvestments[investAccount][investType] || 0);
-          if (currentPrincipal < principalTwd) {
-            errors.push(`第 ${i + 1} 筆錯誤：${accountName} 帳面本金不足！(需要扣除 ${formatMoney(principalTwd)}，但目前本金僅剩 ${formatMoney(currentPrincipal)})`);
-          } else {
-            if (settleCurrency === 'USD') {
-              simAssets[`${investAccount}_usd`] = (simAssets[`${investAccount}_usd`] || 0) + costUsd;
-            } else {
-              simAssets[investAccount] = (simAssets[investAccount] || 0) + val;
-            }
-            if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) - principalTwd;
-            else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) - principalTwd;
-          }
-        }
-        continue;
-      }
-
-      if (investAction === 'buy') {
-        if ((simAssets[investAccount] || 0) < val) {
-          errors.push(`第 ${i + 1} 筆錯誤：${accountName} 台幣餘額不足！(需要 ${formatMoney(val)}，剩餘 ${formatMoney(simAssets[investAccount] || 0)})`);
-        } else {
-          simAssets[investAccount] = (simAssets[investAccount] || 0) - val;
-          if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) + val;
-          else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) + val;
-        }
-      } else if (investAction === 'sell') {
-        const principalVal = parseMoney(investPrincipal);
-        const currentPrincipal = isJoint ? (simAssets.jointInvestments[investType] || 0) : (simAssets.userInvestments[investAccount][investType] || 0);
-        if (currentPrincipal < principalVal) {
-          errors.push(`第 ${i + 1} 筆錯誤：${accountName} 帳面本金不足！(需要扣除 ${formatMoney(principalVal)}，但目前本金僅剩 ${formatMoney(currentPrincipal)})`);
-        } else {
-          simAssets[investAccount] = (simAssets[investAccount] || 0) + val;
-          if (isJoint) simAssets.jointInvestments[investType] = (simAssets.jointInvestments[investType] || 0) - principalVal;
-          else simAssets.userInvestments[investAccount][investType] = (simAssets.userInvestments[investAccount][investType] || 0) - principalVal;
-        }
-      }
-    }
-
-    if (errors.length > 0) {
-      const errorMsg = `❌ 批次交易無法送出，原因如下：\n\n` + errors.map((err, idx) => `${idx + 1}. ${err}`).join('\n\n');
-      await customAlert(errorMsg);
+    let finalItems = [...investCart];
+    if (investAction && (investAmount || usTotalUsd)) {
+      await customAlert("請先點擊「➕ 暫存此筆」將目前的輸入加入暫存明細，或將下方輸入清除後再送出批次交易！");
       return;
     }
-
-    // 2. 實際資料扣減與紀錄寫入階段 (Execution Phase)
-    const newAssets = getDeepCopy(assets);
-    if (!newAssets.userInvestments) newAssets.userInvestments = { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } };
-    if (!newAssets.jointInvestments) newAssets.jointInvestments = { stock: 0, fund: 0, deposit: 0, other: 0 };
-
-    const transactionRecords = [];
-    let summaryNotes = [];
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const { investAccount, investAction, investType, stockMarket, settleCurrency, stockSymbol, stockShares, stockPrice, usTotalUsd, usFxRate, investAmount, investPrincipal, usInvestPrincipalUsd, dayTradeResult } = item;
-
-      const isJoint = investAccount === 'jointCash';
-      const accountName = isJoint ? '共同帳戶🏫' : (investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
-      const label = investType === 'stock' && stockSymbol ? stockSymbol : { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[investType];
-
-      const val = parseMoney(investAmount);
-
-      if (investAction === 'day_trade') {
-        const isProfit = dayTradeResult === 'profit';
-        if (isProfit) newAssets[investAccount] += val; else newAssets[investAccount] -= val;
-        transactionRecords.push({ type: isProfit ? 'personal_invest_profit' : 'personal_invest_loss', category: '當沖結算', payer: accountName, accountKey: investAccount, investType, total: val, note: `當沖${isProfit ? '賺' : '賠'} - ${label}`, date: txDate, symbol: stockSymbol });
-        summaryNotes.push(`當沖 ${label} ${isProfit ? '賺' : '賠'} ${formatMoney(val)}`);
-        continue;
-      }
-
-      if (investType === 'stock' && stockMarket === 'US') {
-        const costUsd = parseMoney(usTotalUsd);
-        const equivalentTwd = Math.round(costUsd * Number(usFxRate || 31.5));
-
-        if (investAction === 'buy') {
-          if (settleCurrency === 'USD') {
-            newAssets[`${investAccount}_usd`] -= costUsd;
-            if (isJoint) newAssets.jointInvestments[investType] += equivalentTwd; else newAssets.userInvestments[investAccount][investType] += equivalentTwd;
-            transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, usdAmount: costUsd, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
-          } else {
-            newAssets[investAccount] -= val;
-            if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
-            transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, usdAmount: costUsd, note: `買入 ${label} (台幣交割)`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
-          }
-          summaryNotes.push(`買入 ${label}`);
-        } else if (investAction === 'sell') {
-          const principalTwd = parseMoney(investPrincipal);
-          const principalUsd = parseMoney(usInvestPrincipalUsd);
-          const profitUsd = costUsd - principalUsd;
-          const profitNote = profitUsd >= 0 ? `(賺 $${profitUsd.toFixed(2)} USD)` : `(賠 $${Math.abs(profitUsd).toFixed(2)} USD)`;
-
-          if (settleCurrency === 'USD') {
-            newAssets[`${investAccount}_usd`] = (newAssets[`${investAccount}_usd`] || 0) + costUsd;
-            if (isJoint) newAssets.jointInvestments[investType] -= principalTwd; else newAssets.userInvestments[investAccount][investType] -= principalTwd;
-            transactionRecords.push({ type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell', category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: equivalentTwd, principal: principalTwd, usdAmount: costUsd, note: `賣出 ${label} ${profitNote}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares) });
-          } else {
-            newAssets[investAccount] += val;
-            if (isJoint) newAssets.jointInvestments[investType] -= principalTwd; else newAssets.userInvestments[investAccount][investType] -= principalTwd;
-            transactionRecords.push({ type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell', category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, principal: principalTwd, usdAmount: costUsd, note: `賣出 ${label} (台幣交割) ${profitNote}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares) });
-          }
-          summaryNotes.push(`賣出 ${label} ${profitNote}`);
-        }
-        continue;
-      }
-
-      if (investAction === 'buy') {
-        newAssets[investAccount] -= val;
-        if (isJoint) newAssets.jointInvestments[investType] += val; else newAssets.userInvestments[investAccount][investType] += val;
-        transactionRecords.push({ type: isJoint ? 'joint_invest_buy' : 'personal_invest_buy', category: '投資買入', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, note: `買入 ${label}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares), market: stockMarket, buyPrice: parseMoney(stockPrice) });
-        summaryNotes.push(`買入 ${label}`);
-
-      } else if (investAction === 'sell') {
-        const principalVal = parseMoney(investPrincipal);
-        const profit = val - principalVal;
-        const profitNote = profit >= 0 ? `(賺 ${formatMoney(profit)})` : `(賠 ${formatMoney(Math.abs(profit))})`;
-        newAssets[investAccount] += val;
-        if (isJoint) newAssets.jointInvestments[investType] -= principalVal; else newAssets.userInvestments[investAccount][investType] -= principalVal;
-        transactionRecords.push({ type: isJoint ? 'joint_invest_sell' : 'personal_invest_sell', category: '投資變現', payer: isJoint ? '共同帳戶' : accountName, accountKey: investAccount, investType, total: val, principal: principalVal, note: `賣出 ${label} ${profitNote}`, date: txDate, symbol: stockSymbol, shares: Number(stockShares) });
-        summaryNotes.push(`賣出 ${label} ${profitNote}`);
-      }
+    if (finalItems.length === 0) {
+      return await customAlert("暫存明細中沒有任何交易！請先輸入並點擊「➕ 暫存此筆」。");
     }
 
-    if (!await customConfirm(`確定將這 ${items.length} 筆一起送出嗎？\n\n預計的動作有：\n${summaryNotes.join('\n')}`)) return;
+    if (!await customConfirm(`確定要送出這 ${finalItems.length} 筆投資批次交易嗎？`)) return;
+
+    let newAssets = getDeepCopy(assets);
+    let transactionRecords = [];
+
+    for (const item of finalItems) {
+      const isJoint = item.investAccount === 'jointCash';
+      const payerName = isJoint ? '共同帳戶' : (item.investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+      const usdKey = `${item.investAccount}_usd`;
+
+      let record = {
+        date: txDate, month: txDate.slice(0, 7),
+        type: `${item.investAccount === 'jointCash' ? 'joint' : 'personal'}_invest_${item.investAction}`,
+        payer: payerName,
+        total: item.investAmount,
+        usdAmount: item.usTotalUsd || 0,
+        shares: item.stockShares || 0,
+        price: item.stockPrice || 0,
+        market: item.stockMarket || 'TW',
+        symbol: item.stockSymbol || '',
+        category: '投資理財'
+      };
+
+      if (item.investAction === 'buy') {
+        if (item.stockMarket === 'US' && item.settleCurrency === 'USD') {
+          newAssets[usdKey] -= item.usTotalUsd;
+          newAssets.jointInvestments.stock += Math.round(item.usTotalUsd * (currentFxRate || 31.5));
+          record.total = Math.round(item.usTotalUsd * (currentFxRate || 31.5));
+          record.note = `美股買入 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 美金交割)`;
+        } else if (item.stockMarket === 'US' && item.settleCurrency === 'TWD') {
+          newAssets[item.investAccount] -= item.investAmount;
+          newAssets.jointInvestments.stock += item.investAmount;
+          record.note = `美股買入 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 台幣交割, 匯率: ${item.usFxRate})`;
+        } else {
+          newAssets[item.investAccount] -= item.investAmount;
+          const invKey = item.investType === 'fund' ? 'fund' : (item.investType === 'deposit' ? 'deposit' : 'stock');
+          newAssets.jointInvestments[invKey] += item.investAmount;
+          record.note = `${item.investType === 'fund' ? '基金' : item.investType === 'deposit' ? '定存' : '台股'}買入 (${item.stockSymbol ? `代碼: ${item.stockSymbol}, ` : ''}${item.stockShares ? `${item.stockShares}股 @ $${item.stockPrice}, ` : ''}台幣支出)`;
+        }
+      } else if (item.investAction === 'sell') {
+        let principalTwd = item.investPrincipal;
+        if (item.stockMarket === 'US' && item.settleCurrency === 'USD') {
+          newAssets[usdKey] += item.usTotalUsd;
+          principalTwd = Math.round(item.usInvestPrincipalUsd * (currentFxRate || 31.5));
+          newAssets.jointInvestments.stock -= principalTwd;
+          record.total = Math.round(item.usTotalUsd * (currentFxRate || 31.5));
+          record.note = `美股賣出 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 美金交割, 實現本金 $${item.usInvestPrincipalUsd} USD)`;
+        } else if (item.stockMarket === 'US' && item.settleCurrency === 'TWD') {
+          newAssets[item.investAccount] += item.investAmount;
+          newAssets.jointInvestments.stock -= principalTwd;
+          record.note = `美股賣出 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 台幣交割, 匯率: ${item.usFxRate}, 實現本金 $${principalTwd})`;
+        } else {
+          newAssets[item.investAccount] += item.investAmount;
+          const invKey = item.investType === 'fund' ? 'fund' : (item.investType === 'deposit' ? 'deposit' : 'stock');
+          newAssets.jointInvestments[invKey] -= principalTwd;
+          record.note = `${item.investType === 'fund' ? '基金' : item.investType === 'deposit' ? '定存' : '台股'}賣出 (${item.stockSymbol ? `代碼: ${item.stockSymbol}, ` : ''}拿回台幣 ${item.investAmount}, 原本金 ${principalTwd})`;
+        }
+      } else if (item.investAction === 'day_trade') {
+        const isProfit = item.dayTradeResult === 'profit';
+        if (isProfit) newAssets[item.investAccount] += item.investAmount;
+        else newAssets[item.investAccount] -= item.investAmount;
+        record.note = `當沖結算 (標的: ${item.stockSymbol}, 股數: ${item.stockShares}, 結果: ${isProfit ? '獲利' : '虧損'} ${formatMoney(item.investAmount)})`;
+      }
+
+      transactionRecords.push(record);
+    }
 
     onTransaction(newAssets, transactionRecords);
-    await customAlert(`✅ 已成功批次處理 ${items.length} 筆投資操作！`);
     setInvestCart([]);
   };
 
   const handleExport = () => {
-    const json = JSON.stringify(assets, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob); link.download = `雙人資產備份_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(assets, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `potato_financial_backup_${txDate}.json`);
+    dlAnchorElem.click();
   };
 
-  const handleImportClick = () => fileInputRef.current.click();
+  const handleImportClick = () => {
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = async (evt) => {
       try {
-        const data = JSON.parse(event.target.result);
-        if (data.userA === undefined) return await customAlert("❌ 格式錯誤！");
-        if (await customConfirm("⚠️ 警告：這將會「覆蓋」所有資料！確定還原嗎？")) {
-          setAssets(data);
-          await customAlert("✅ 還原成功！");
+        const imported = JSON.parse(evt.target.result);
+        if (!imported.userA || !imported.userB || !imported.jointCash) {
+          return await customAlert("❌ JSON 格式不正確，缺乏必要帳務欄位！");
         }
-      } catch {
-        await customAlert("❌ 讀取失敗。");
+        if (!await customConfirm("⚠️ 警告：匯入此備份檔案將會覆蓋您當前所有的帳戶餘額與流水帳！確定要繼續嗎？")) return;
+        setAssets(imported);
+        await customAlert("✅ 備份資料覆蓋匯入成功！");
+      } catch (err) {
+        await customAlert("❌ 讀取檔案失敗：" + err.message);
       }
     };
-    reader.readAsText(file); e.target.value = '';
+    reader.readAsText(file);
   };
 
   const [isManualBackingUp, setIsManualBackingUp] = useState(false);
   const handleManualBackup = async () => {
     setIsManualBackingUp(true);
     try {
-      const now = new Date();
-      const todayDate = now.toISOString().split('T')[0];
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}點${String(now.getMinutes()).padStart(2, '0')}分${String(now.getSeconds()).padStart(2, '0')}秒`;
-
-      const res = await fetch(MY_GOOGLE_API_URL, {
+      const response = await fetch(MY_GOOGLE_API_URL, {
         method: 'POST',
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: 'backup', date: todayDate, fileName: `手動備份_${todayDate}_${timeStr}.json`, assets: assets }),
-        redirect: 'follow'
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(assets)
       });
-      const text = await res.text();
-      if (text.includes('success')) await customAlert('✅ 成功備份至 Google 雲端硬碟！請至雲端硬碟確認檔案。');
-      else throw new Error("API 錯誤");
-    } catch {
-      await customAlert('❌ 備份失敗，請檢查網路');
-    } finally {
-      setIsManualBackingUp(false);
+      console.log("手動備份請求已送出:", response);
+      await customAlert("☁️ 備份指令已成功傳送至 Google Apps Script 雲端處理！");
+    } catch (err) {
+      await customAlert("❌ 雲端備份傳送失敗：" + err.message);
     }
+    setIsManualBackingUp(false);
   };
+
+  const existingCartTotal = investCart
+    .filter(item => item.investAccount === investAccount)
+    .reduce((sum, item) => sum + (item.investAction === 'buy' ? item.investAmount : 0), 0);
 
   return (
     <div className="page-transition-enter">
-      <h1 className="page-title">資產操作</h1>
+      <h1 className="page-title">資產轉帳/投資</h1>
 
       <div
+        className="glass-card"
         style={{
           display: 'flex',
           gap: '8px',
-          marginTop: '-8px',
-          paddingTop: '8px',
-          marginBottom: '14px',
+          marginBottom: '18px',
+          padding: '6px',
           overflowX: 'auto',
-          paddingBottom: '8px',
           scrollbarWidth: 'none',
           WebkitOverflowScrolling: 'touch'
         }}
       >
         <button className={`glass-btn ${activeTab === 'invest' ? '' : 'inactive'}`} onClick={() => setActiveTab('invest')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          📈 投資
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+            <polyline points="16 7 22 7 22 13" />
+          </svg>
+          投資
           {investCart.length > 0 && (
             <span style={{
               marginLeft: '6px',
@@ -710,162 +603,214 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
             </span>
           )}
         </button>
-        <button className={`glass-btn ${activeTab === 'exchange' ? '' : 'inactive'}`} onClick={() => setActiveTab('exchange')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem' }}>💱 換匯</button>
-        <button className={`glass-btn ${activeTab === 'transfer' ? '' : 'inactive'}`} onClick={() => setActiveTab('transfer')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem' }}>💸 上繳</button>
-        <button className={`glass-btn ${activeTab === 'income' ? '' : 'inactive'}`} onClick={() => setActiveTab('income')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem' }}>💰 收入</button>
-        <button className={`glass-btn ${activeTab === 'calibrate' ? '' : 'inactive'}`} onClick={() => setActiveTab('calibrate')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem' }}>⚖️ 校正</button>
+        <button className={`glass-btn ${activeTab === 'exchange' ? '' : 'inactive'}`} onClick={() => setActiveTab('exchange')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <polyline points="16 3 21 3 21 8" />
+            <line x1="4" y1="20" x2="21" y2="3" />
+            <polyline points="8 21 3 21 3 16" />
+          </svg>
+          換匯
+        </button>
+        <button className={`glass-btn ${activeTab === 'transfer' ? '' : 'inactive'}`} onClick={() => setActiveTab('transfer')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <polyline points="19 12 12 19 5 12" />
+          </svg>
+          上繳公庫
+        </button>
+        <button className={`glass-btn ${activeTab === 'income' ? '' : 'inactive'}`} onClick={() => setActiveTab('income')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <line x1="12" y1="1" x2="12" y2="23" />
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+          收入
+        </button>
+        <button className={`glass-btn ${activeTab === 'calibrate' ? '' : 'inactive'}`} onClick={() => setActiveTab('calibrate')} style={{ flex: '0 0 auto', whiteSpace: 'nowrap', padding: '9px 16px', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <path d="M12 2v20M17 5H9.5A3.5 3.5 0 0 0 6 8.5C6 11 9 12 9 12M2 12h20M5 19h14" />
+          </svg>
+          校正
+        </button>
       </div>
 
-      <div className="glass-card card-animate" style={{ padding: '12px 16px', marginBottom: '18px', borderLeft: '4px solid var(--accent-indigo)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <label style={{ fontWeight: '600', fontSize: '1rem', margin: 0, color: 'var(--text-primary)' }}>📅 交易日期</label>
-        <input type="date" className="glass-input" style={{ width: 'auto', marginBottom: 0, padding: '8px 12px' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+      {/* 📅 Date Selection Grouped Inset Card */}
+      <div className="inset-group-card" style={{ marginBottom: '18px' }}>
+        <div className="inset-group-row">
+          <span className="inset-group-label" style={{ fontWeight: '600' }}>📅 交易日期</span>
+          <span className="inset-group-value">
+            <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+          </span>
+        </div>
       </div>
 
+      {/* 📈 投資面板 */}
       {activeTab === 'invest' && (
-        <div key="invest-panel" className="glass-card card-animate page-transition-enter">
-          <h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>📈 投資操作中心</h3>
+        <div key="invest-panel" className="glass-card card-animate page-transition-enter" style={{ padding: '20px 18px' }}>
+          <h3 style={{ marginBottom: '20px', marginTop: 0, fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-indigo)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+              <polyline points="16 7 22 7 22 13" />
+            </svg>
+            投資操作中心
+          </h3>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>操作帳戶</label>
-            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '大狗狗🐕', value: 'userA' }, { label: '阿陞🐶', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
-          </div>
+          <div className="inset-group-card">
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>操作帳戶</span>
+              <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗', value: 'userA' }, { label: '阿陞', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
+            </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>動作</label>
-            <SegmentedControl options={[{ label: '📥 買入', value: 'buy' }, { label: '📤 賣出', value: 'sell' }, { label: '⚡ 當沖', value: 'day_trade' }]} value={investAction} onChange={setInvestAction} disabledValue={investAccount === 'jointCash' ? 'day_trade' : null} />
-          </div>
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>動作</span>
+              <SegmentedControl options={[{ label: '📥 買入', value: 'buy' }, { label: '📤 賣出', value: 'sell' }, { label: '⚡ 當沖', value: 'day_trade' }]} value={investAction} onChange={setInvestAction} disabledValue={investAccount === 'jointCash' ? 'day_trade' : null} />
+            </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>標的類型</label>
-            <SegmentedControl options={[{ label: '股票', value: 'stock' }, { label: '基金', value: 'fund' }, { label: '定存', value: 'deposit' }, { label: '其他', value: 'other' }]} value={investType} onChange={setInvestType} />
-          </div>
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>標的類型</span>
+              <SegmentedControl options={[{ label: '股票', value: 'stock' }, { label: '基金', value: 'fund' }, { label: '定存', value: 'deposit' }, { label: '其他', value: 'other' }]} value={investType} onChange={setInvestType} />
+            </div>
 
-          {investType === 'stock' && (
-            <div style={{ background: 'rgba(88,86,214,0.06)', padding: '15px', borderRadius: 'var(--radius-sm)', marginBottom: '15px' }}>
-              <div style={{ marginBottom: '10px' }}>
-                <SegmentedControl options={[{ label: '🇹🇼 台股', value: 'TW' }, { label: '🇺🇸 美股複委託', value: 'US' }]} value={stockMarket} onChange={setStockMarket} />
+            {investType === 'stock' && (
+              <>
+                <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                  <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>市場</span>
+                  <SegmentedControl options={[{ label: '🇹🇼 台股', value: 'TW' }, { label: '🇺🇸 美股複委託', value: 'US' }]} value={stockMarket} onChange={setStockMarket} />
+                </div>
+
+                {stockMarket === 'US' && (
+                  <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                    <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>交割帳戶</span>
+                    <SegmentedControl options={[{ label: '台幣帳戶', value: 'TWD' }, { label: '美金帳戶', value: 'USD' }]} value={settleCurrency} onChange={setSettleCurrency} />
+                  </div>
+                )}
+
+                <div className="inset-group-row" style={{ position: 'relative' }}>
+                  <span className="inset-group-label">股票代號/名稱</span>
+                  <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                    <input type="text" className="inset-group-input" value={stockSymbol} onChange={e => { setStockSymbol(e.target.value.toUpperCase()); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onBlur={() => setTimeout(() => setShowDropdown(false), 200)} placeholder="例: NVDA" />
+                    {showDropdown && (searchResults.length > 0 || isSearching) && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(28,28,30,0.96)', backdropFilter: 'blur(20px)', zIndex: 100, borderRadius: '12px', boxShadow: '0 8px 25px rgba(0,0,0,0.3)', overflow: 'hidden', marginTop: '4px', border: '1px solid rgba(255,255,255,0.12)' }}>
+                        {isSearching ? (
+                          <div style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>尋找中...</div>
+                        ) : searchResults.map((item, idx) => (
+                          <div key={idx} onClick={() => { setStockSymbol(item.symbol); setShowDropdown(false); }} style={{ padding: '10px 14px', borderBottom: '0.5px solid rgba(255,255,255,0.06)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ color: 'var(--accent-blue)', fontSize: '0.86rem' }}>{item.symbol}</strong>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{item.shortname || item.longname}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </span>
+                </div>
+
+                <div className="inset-group-row">
+                  <span className="inset-group-label">交易股數</span>
+                  <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                    <input type="text" inputMode="numeric" className="inset-group-input" value={stockShares} onChange={e => setStockShares(e.target.value.replace(/[^\d]/g, ''))} placeholder="例: 10" />
+                  </span>
+                </div>
+
+                {stockMarket === 'US' ? (
+                  <>
+                    <div className="inset-group-row">
+                      <span className="inset-group-label">單價 (USD)</span>
+                      <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                        <input type="text" inputMode="decimal" className="inset-group-input" value={stockPrice} onChange={e => setStockPrice(formatInputMoney(e.target.value))} placeholder="$0.00" />
+                      </span>
+                    </div>
+
+                    <div className="inset-group-row" style={{ background: 'rgba(255,149,0,0.02)' }}>
+                      <span className="inset-group-label" style={{ color: 'var(--accent-orange)' }}>預估/實際總額 (USD)</span>
+                      <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                        <input type="text" inputMode="decimal" className="inset-group-input" style={{ color: 'var(--accent-orange)', fontWeight: '700' }} value={usTotalUsd} onChange={e => setUsTotalUsd(formatInputMoney(e.target.value))} placeholder="$0" />
+                      </span>
+                    </div>
+
+                    {settleCurrency === 'TWD' && (
+                      <div className="inset-group-row" style={{ background: 'rgba(255,149,0,0.02)' }}>
+                        <span className="inset-group-label" style={{ color: 'var(--accent-orange)' }}>成交匯率</span>
+                        <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                          <input type="text" inputMode="decimal" className="inset-group-input" style={{ color: 'var(--accent-orange)', fontWeight: '700' }} value={usFxRate} onChange={e => setUsFxRate(e.target.value.replace(/[^\d.]/g, ''))} placeholder="31.5" />
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="inset-group-row">
+                    <span className="inset-group-label">成交單價 (TWD)</span>
+                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                      <input type="text" inputMode="decimal" className="inset-group-input" value={stockPrice} onChange={e => setStockPrice(formatInputMoney(e.target.value))} placeholder="$0" />
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {investAction === 'day_trade' && (
+              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>當沖結果</span>
+                <SegmentedControl options={[{ label: '📈 賺錢', value: 'profit' }, { label: '📉 賠錢', value: 'loss' }]} value={dayTradeResult} onChange={setDayTradeResult} />
               </div>
+            )}
 
-              {stockMarket === 'US' && (
+            {(investType !== 'stock' || !stockMarket || stockMarket === 'TW' || (stockMarket === 'US' && settleCurrency === 'TWD') || investAction === 'day_trade') && (
+              <div className="inset-group-row" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <span className="inset-group-label" style={{ fontWeight: '700' }}>
+                  {investAction === 'buy' ? '最終交割總額 (台幣)' : investAction === 'sell' ? '最終拿回現金 (台幣)' : '結算淨差額 (台幣)'}
+                </span>
+                <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                  <input type="text" inputMode="decimal" className="inset-group-input" style={{ fontSize: '1rem', fontWeight: '700' }} value={investAmount} onChange={(e) => setInvestAmount(formatInputMoney(e.target.value))} placeholder="$0" />
+                </span>
+              </div>
+            )}
+
+            {investAction === 'sell' && stockMarket === 'TW' && (
+              <div className="inset-group-row" style={{ background: 'rgba(255,204,0,0.04)', flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                <span className="inset-group-label" style={{ color: 'var(--accent-orange)', fontWeight: '700', alignSelf: 'flex-start' }}>原本扣除本金 (台幣) - FIFO已預估</span>
+                <input type="text" inputMode="numeric" className="inset-group-input" style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="$0" />
+              </div>
+            )}
+
+            {investAction === 'sell' && stockMarket === 'US' && (
+              <div style={{ background: 'rgba(255,204,0,0.04)', padding: '14px' }}>
+                <span style={{ color: 'var(--accent-orange)', fontWeight: '700', fontSize: '0.84rem', display: 'block', marginBottom: '8px' }}>賣出美股成本計算 (台幣/美金本金已自動預填)</span>
+                
                 <div style={{ marginBottom: '10px' }}>
-                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>交割帳戶 (扣除/拿回的錢包)</label>
-                  <SegmentedControl options={[{ label: '🇹🇼 台幣帳戶', value: 'TWD' }, { label: '🇺🇸 美金帳戶', value: 'USD' }]} value={settleCurrency} onChange={setSettleCurrency} />
+                  <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>美金持有成本 (USD)</label>
+                  <input type="text" inputMode="decimal" className="glass-input" style={{ margin: 0 }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(formatInputMoney(e.target.value))} placeholder="例: 800" />
                 </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>股票代號/名稱</label>
-                  <input type="text" className="glass-input" value={stockSymbol} onChange={e => { setStockSymbol(e.target.value.toUpperCase()); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onBlur={() => setTimeout(() => setShowDropdown(false), 200)} placeholder="例: NVDA" />
-                  {showDropdown && (searchResults.length > 0 || isSearching) && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', zIndex: 50, borderRadius: '8px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', overflow: 'hidden', marginTop: '4px', border: '1px solid #ddd' }}>
-                      {isSearching ? <div style={{ padding: '10px', fontSize: '0.84rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>📡 尋找股號中...</div> : searchResults.map((item, idx) => (<div key={idx} onClick={() => { setStockSymbol(item.symbol); setShowDropdown(false); }} style={{ padding: '10px 12px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}> <strong style={{ color: 'var(--accent-purple)', fontSize: '0.88rem' }}>{item.symbol}</strong> <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginLeft: '10px' }}> {item.shortname || item.longname} </span> </div>))}
-                    </div>
-                  )}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>交易股數</label>
-                  <input type="text" inputMode="numeric" className="glass-input" value={stockShares} onChange={e => setStockShares(e.target.value.replace(/[^\d]/g, ''))} placeholder="例: 10" />
-                </div>
+                {settleCurrency !== 'USD' ? (
+                  <div>
+                    <label style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>對應原始台幣本金 (TWD)</label>
+                    <input type="text" inputMode="numeric" className="glass-input" style={{ margin: 0 }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="例: 25200" />
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.04)', padding: '6px', borderRadius: '8px', marginTop: '6px' }}>
+                    💡 美金交割模式下，系統會直接依匯率扣減台幣投資基準，無需手動調整。
+                  </div>
+                )}
               </div>
+            )}
+          </div>
 
-              {stockMarket === 'US' ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ flex: 1, minWidth: '100px' }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>單價 (USD)</label>
-                    <input type="text" inputMode="decimal" className="glass-input" value={stockPrice} onChange={e => setStockPrice(formatInputMoney(e.target.value))} placeholder="$170" />
-                  </div>
-                  <div style={{ flex: 1, minWidth: '120px' }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>{investAction === 'buy' ? '總額含息費(USD)' : '賣出總得(USD)'}</label>
-                    <input type="text" inputMode="decimal" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usTotalUsd} onChange={e => {
-                      setUsTotalUsd(formatInputMoney(e.target.value));
-                      if (settleCurrency === 'TWD') setInvestAmount(formatInputMoney(Math.round(parseMoney(e.target.value) * Number(usFxRate || 0)).toString()));
-                    }} placeholder="依元大輸入" />
-                  </div>
-                  {/* ★ Only show exchange rate when TWD settlement is selected (USD settlement doesn't need it) */}
-                  {settleCurrency === 'TWD' && (
-                    <div style={{ flex: 1, minWidth: '80px' }}>
-                      <label style={{ fontSize: '0.78rem', color: 'var(--accent-orange)', fontWeight: '700' }}>成交匯率</label>
-                      <input type="text" inputMode="decimal" className="glass-input" style={{ borderColor: 'var(--accent-orange)' }} value={usFxRate} onChange={e => {
-                        setUsFxRate(e.target.value.replace(/[^\d.]/g, ''));
-                        setInvestAmount(formatInputMoney(Math.round(parseMoney(usTotalUsd) * Number(e.target.value || 0)).toString()));
-                      }} placeholder="31.5" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>成交單價 (TWD)</label>
-                    <input type="text" inputMode="decimal" className="glass-input" value={stockPrice} onChange={e => setStockPrice(formatInputMoney(e.target.value))} placeholder="輸入單價" />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {investAction === 'day_trade' && (
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>當沖結果</label>
-              <SegmentedControl options={[{ label: '📈 賺錢', value: 'profit' }, { label: '📉 賠錢', value: 'loss' }]} value={dayTradeResult} onChange={setDayTradeResult} />
-            </div>
-          )}
-
-          {/* ★ Show TWD amount field: always for non-US, for US only when TWD settlement, or for day_trade */}
-          {(investType !== 'stock' || !stockMarket || stockMarket === 'TW' || (stockMarket === 'US' && settleCurrency === 'TWD') || investAction === 'day_trade') && (
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                <span>{investAction === 'buy' ? '最終交割總額 (台幣)' : investAction === 'sell' ? '最終拿回現金 (台幣)' : '結算淨差額 (台幣)'}</span>
-              </label>
-              <input type="text" inputMode="decimal" className="glass-input" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)' }} value={investAmount} onChange={(e) => setInvestAmount(formatInputMoney(e.target.value))} placeholder="$0" />
-            </div>
-          )}
-
-          {investAction === 'sell' && stockMarket === 'TW' && (
-            <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(255,204,0,0.06)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--accent-yellow)' }}>
-              <label style={{ color: 'var(--accent-orange)', fontWeight: '700' }}>⚠️ 這批賣掉的資產，當初買入的「本金(台幣)」是多少？<br /><span style={{ fontSize: '0.73rem', fontWeight: '400', color: 'var(--text-secondary)' }}>(已依 FIFO 自動估算，亦可手動修改)</span></label>
-              <input type="text" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', border: '1px solid var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="請輸入扣除本金" />
-            </div>
-          )}
-
-          {investAction === 'sell' && stockMarket === 'US' && (
-            <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(255,204,0,0.06)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--accent-yellow)' }}>
-              <label style={{ color: 'var(--accent-orange)', fontWeight: '700', fontSize: '0.92rem' }}>⚠️ 賣出美股成本計算</label>
-              <div style={{ marginTop: '8px' }}>
-                <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>元大/國泰顯示的「美金持有成本」<span style={{ color: 'var(--accent-red)' }}>(必填)</span> <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>(已依 FIFO 自動估算，亦可手動修改)</span></label>
-                <input type="text" inputMode="decimal" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={usInvestPrincipalUsd} onChange={(e) => setUsInvestPrincipalUsd(formatInputMoney(e.target.value))} placeholder="例: 800" />
-              </div>
-              {settleCurrency !== 'USD' ? (
-                <div style={{ marginTop: '8px' }}>
-                  <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>這批股票當初投入的「大約台幣本金」 <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>(已依 FIFO 自動估算，亦可手動修改)</span><br /><span style={{ fontSize: '0.7rem' }}>(用於精準扣除系統帳面總投資額)</span></label>
-                  <input type="text" inputMode="numeric" className="glass-input" style={{ margin: '5px 0', borderColor: 'var(--accent-yellow)' }} value={investPrincipal} onChange={(e) => setInvestPrincipal(formatInputMoney(e.target.value))} placeholder="例: 25200" />
-                </div>
-              ) : (
-                <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.4)', padding: '6px', borderRadius: '4px' }}>
-                  💡 美金交割模式下，系統會直接依當前匯率自動換算並扣除台幣帳面本金，無需手動輸入。
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '15px' }}>
-            <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem' }} onClick={handleAddInvestCart}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+            <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem', fontWeight: '600' }} onClick={handleAddInvestCart}>
               ➕ 暫存此筆
             </button>
-            {investCart.length > 0 && <button className="glass-btn glass-btn-danger" style={{ padding: '8px 12px', fontSize: '0.88rem' }} onClick={() => setInvestCart([])}>🗑️ 清空</button>}
+            {investCart.length > 0 && <button className="glass-btn glass-btn-danger" style={{ padding: '8px 16px', fontSize: '0.88rem' }} onClick={() => setInvestCart([])}>清空暫存</button>}
           </div>
 
           {investCart.length > 0 && (
-            <div style={{ background: 'rgba(88,86,214,0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', marginBottom: '15px', border: '1px solid rgba(88,86,214,0.12)', animation: 'slideDown 0.3s ease-out' }}>
-              <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>🛒 本次批次明細 ({investCart.length}筆)：</div>
+            <div style={{ background: 'rgba(88,86,214,0.05)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid rgba(88,86,214,0.15)', animation: 'slideDown 0.3s ease-out' }}>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px', fontWeight: '700' }}>🛒 本次批次明細 ({investCart.length}筆)：</div>
               {investCart.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', marginBottom: '6px', borderBottom: '0.5px solid rgba(0,0,0,0.04)', paddingBottom: '4px', gap: '8px' }}>
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.88rem', marginBottom: '8px', borderBottom: '0.5px solid rgba(255,255,255,0.06)', paddingBottom: '6px', gap: '8px' }}>
                   <div style={{ color: 'var(--text-primary)', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                     <span style={{ 
                       padding: '3px 8px', 
                       borderRadius: '6px', 
                       fontSize: '0.73rem', 
-                      fontWeight: '600', 
+                      fontWeight: '700', 
                       whiteSpace: 'nowrap',
                       background: item.investAction === 'buy' ? 'rgba(0, 122, 255, 0.12)' : (item.investAction === 'sell' ? 'rgba(255, 149, 0, 0.12)' : 'rgba(175, 82, 222, 0.12)'),
                       color: item.investAction === 'buy' ? '#7fc0ff' : (item.investAction === 'sell' ? '#ffb94f' : '#dcb2ff')
@@ -874,129 +819,208 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
                     </span>
                     <span style={{ 
                       fontSize: '0.73rem', 
-                      fontWeight: '600', 
+                      fontWeight: '700', 
                       whiteSpace: 'nowrap',
                       padding: '3px 8px',
                       borderRadius: '6px',
                       background: item.investAccount === 'jointCash' ? 'rgba(255, 149, 0, 0.12)' : (item.investAccount === 'userA' ? 'rgba(255, 45, 87, 0.12)' : 'rgba(52, 199, 89, 0.15)'),
                       color: item.investAccount === 'jointCash' ? '#ffb94f' : (item.investAccount === 'userA' ? '#ff8da1' : '#8effa2')
                     }}>
-                      {item.investAccount === 'jointCash' ? '🏫 共同' : (item.investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶')}
+                      {item.investAccount === 'jointCash' ? '共同' : (item.investAccount === 'userA' ? '大狗狗' : '阿陞')}
                     </span>
                     <span style={{ minWidth: 0, wordBreak: 'break-all' }}>
                       {item.stockSymbol || { stock: '股票', fund: '基金', deposit: '定存', other: '其他' }[item.investType]}
                     </span>
                   </div>
-                  <div style={{ fontWeight: '500', flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>{formatMoney(item.investAmount)} {item.investAction === 'sell' ? '(收回)' : '(支出)'}</span>
-                    <button onClick={() => setInvestCart(investCart.filter(i => i.id !== item.id))} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', padding: '2px 6px', cursor: 'pointer', fontSize: '0.85rem' }}>✖</button>
+                  <div style={{ fontWeight: '600', flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{formatMoney(item.investAmount || Math.round(item.usTotalUsd * (currentFxRate || 31.5)))}</span>
+                    <button onClick={() => setInvestCart(investCart.filter(i => i.id !== item.id))} style={{ border: 'none', background: 'none', color: 'var(--accent-red)', padding: '2px 6px', cursor: 'pointer', fontSize: '0.9rem' }}>✖</button>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleInvestSubmit}>
-            ✅ 確認批次送出 ({investCart.length} 筆)
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', padding: '14px', borderRadius: '14px' }} onClick={handleInvestSubmit}>
+            確認批次送出 ({investCart.length} 筆)
           </button>
         </div>
       )}
 
+      {/* 💱 換匯面板 */}
       {activeTab === 'exchange' && (
-        <div key="exchange-panel" className="glass-card card-animate page-transition-enter">
-          <h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>💱 外幣換匯中心</h3>
+        <div key="exchange-panel" className="glass-card card-animate page-transition-enter" style={{ padding: '20px 18px' }}>
+          <h3 style={{ marginBottom: '20px', marginTop: 0, fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="16 3 21 3 21 8" />
+              <line x1="4" y1="20" x2="21" y2="3" />
+              <polyline points="8 21 3 21 3 16" />
+            </svg>
+            外幣換匯中心
+          </h3>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>操作帳戶</label>
-            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '大狗狗🐕', value: 'userA' }, { label: '阿陞🐶', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
-          </div>
-
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>換匯方向</label>
-            <SegmentedControl options={[{ label: '🇹🇼 台幣 ➔ 🇺🇸 美金', value: 'TWD_TO_USD' }, { label: '🇺🇸 美金 ➔ 🇹🇼 台幣', value: 'USD_TO_TWD' }]} value={exchangeDir} onChange={setExchangeDir} />
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>台幣總額</label>
-              <input type="text" inputMode="numeric" className="glass-input" value={exchangeTwd} onChange={e => setExchangeTwd(formatInputMoney(e.target.value))} placeholder="例: 31500" />
+          <div className="inset-group-card">
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>操作帳戶</span>
+              <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗', value: 'userA' }, { label: '阿陞', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>美金總額 (USD)</label>
-              <input type="text" inputMode="decimal" className="glass-input" value={exchangeUsd} onChange={e => setExchangeUsd(formatInputMoney(e.target.value))} placeholder="例: 1000" />
+
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>換匯方向</span>
+              <SegmentedControl options={[{ label: '台幣 ➔ 美金', value: 'TWD_TO_USD' }, { label: '美金 ➔ 台幣', value: 'USD_TO_TWD' }]} value={exchangeDir} onChange={setExchangeDir} />
+            </div>
+
+            <div className="inset-group-row">
+              <span className="inset-group-label">台幣總額</span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                <input type="text" inputMode="numeric" className="inset-group-input" value={exchangeTwd} onChange={e => setExchangeTwd(formatInputMoney(e.target.value))} placeholder="$0" />
+              </span>
+            </div>
+
+            <div className="inset-group-row">
+              <span className="inset-group-label">美金總額 (USD)</span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                <input type="text" inputMode="decimal" className="inset-group-input" value={exchangeUsd} onChange={e => setExchangeUsd(formatInputMoney(e.target.value))} placeholder="$0.00" />
+              </span>
             </div>
           </div>
 
-          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleExchange}>確認換匯</button>
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', padding: '14px', borderRadius: '14px' }} onClick={handleExchange}>確認換匯</button>
         </div>
       )}
 
+      {/* ⚖️ 校正面板 */}
       {activeTab === 'calibrate' && (
-        <div key="calibrate-panel" className="glass-card card-animate page-transition-enter">
-          <h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>⚖️ 餘額校正回歸</h3>
-          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '15px', lineHeight: '1.5' }}>用於修正手續費、匯差等造成的帳面微小落差，此操作<strong style={{ color: 'var(--accent-red)' }}>不會</strong>計入當月收支與預算。</p>
+        <div key="calibrate-panel" className="glass-card card-animate page-transition-enter" style={{ padding: '20px 18px' }}>
+          <h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v20M17 5H9.5A3.5 3.5 0 0 0 6 8.5C6 11 9 12 9 12M2 12h20M5 19h14" />
+            </svg>
+            餘額校正回歸
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.5' }}>用於修正帳務手續費或小數點匯差。此操作僅校正水位，<strong style={{ color: 'var(--accent-orange)' }}>不會</strong>認列入當月收支預算。</p>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '600' }}>校正帳戶</label>
-            <SegmentedControl options={[{ label: '🏫 共同', value: 'jointCash' }, { label: '大狗狗🐕', value: 'userA' }, { label: '阿陞🐶', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
+          <div className="inset-group-card">
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>校正帳戶</span>
+              <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗', value: 'userA' }, { label: '阿陞', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
+            </div>
+
+            {calibAccount && (
+              <>
+                <div className="inset-group-row" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <span className="inset-group-label">目前台幣帳面</span>
+                  <span className="inset-group-value" style={{ fontWeight: '700' }}>{formatMoney(assets[calibAccount] || 0)}</span>
+                </div>
+                <div className="inset-group-row" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <span className="inset-group-label">目前美金帳面</span>
+                  <span className="inset-group-value" style={{ fontWeight: '700' }}>${(assets[`${calibAccount}_usd`] || 0).toFixed(2)} USD</span>
+                </div>
+              </>
+            )}
+
+            <div className="inset-group-row">
+              <span className="inset-group-label">實際台幣餘額</span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                <input type="text" inputMode="numeric" className="inset-group-input" value={calibTwd} onChange={e => setCalibTwd(formatInputMoney(e.target.value))} placeholder="不修改請留空" />
+              </span>
+            </div>
+
+            <div className="inset-group-row">
+              <span className="inset-group-label">實際美金餘額</span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                <input type="text" inputMode="decimal" className="inset-group-input" value={calibUsd} onChange={e => setCalibUsd(formatInputMoney(e.target.value))} placeholder="不修改請留空" />
+              </span>
+            </div>
           </div>
 
-          {calibAccount ? (
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              <div style={{ flex: 1, padding: '12px', background: 'rgba(120,120,128,0.04)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>目前台幣帳面</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', marginTop: '4px' }}>{formatMoney(assets[calibAccount] || 0)}</div>
-              </div>
-              <div style={{ flex: 1, padding: '12px', background: 'rgba(120,120,128,0.04)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '500' }}>目前美金帳面</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', marginTop: '4px' }}>${(assets[`${calibAccount}_usd`] || 0).toFixed(2)}</div>
-              </div>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '18px', color: 'var(--text-tertiary)', fontSize: '0.88rem', marginBottom: '15px' }}>↑ 請先選擇要校正的帳戶</div>
-          )}
-
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>輸入實際台幣餘額<br /><span style={{ fontSize: '0.7rem', fontWeight: '400' }}>(留空代表不修改)</span></label>
-              <input type="text" inputMode="numeric" className="glass-input" style={{ marginTop: '4px' }} value={calibTwd} onChange={e => setCalibTwd(formatInputMoney(e.target.value))} placeholder={`例: ${assets[calibAccount] || 0}`} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>輸入實際美金餘額<br /><span style={{ fontSize: '0.7rem', fontWeight: '400' }}>(留空代表不修改)</span></label>
-              <input type="text" inputMode="decimal" className="glass-input" style={{ marginTop: '4px' }} value={calibUsd} onChange={e => setCalibUsd(formatInputMoney(e.target.value))} placeholder={`例: ${(assets[`${calibAccount}_usd`] || 0).toFixed(2)}`} />
-            </div>
-          </div>
-
-          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleCalibrate}>確認校正</button>
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', padding: '14px', borderRadius: '14px' }} onClick={handleCalibrate}>確認校正</button>
         </div>
       )}
 
+      {/* 💸 上繳面板 */}
       {activeTab === 'transfer' && (
-        <div key="transfer-panel" className="glass-card card-animate page-transition-enter"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>💸 上繳公庫</h3>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>來源</label><SegmentedControl options={[{ label: `大狗狗🐕`, value: 'userA' }, { label: `阿陞🐶`, value: 'userB' }]} value={transSource} onChange={setTransSource} /></div>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="text" inputMode="numeric" className="glass-input" value={transAmount} onChange={(e) => setTransAmount(formatInputMoney(e.target.value))} placeholder="$0" /></div>
-          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleTransfer}>確認上繳</button>
+        <div key="transfer-panel" className="glass-card card-animate page-transition-enter" style={{ padding: '20px 18px' }}>
+          <h3 style={{ marginBottom: '20px', marginTop: 0, fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <polyline points="19 12 12 19 5 12" />
+            </svg>
+            上繳公庫
+          </h3>
+
+          <div className="inset-group-card">
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>上繳來源</span>
+              <SegmentedControl options={[{ label: `大狗狗`, value: 'userA' }, { label: `阿陞`, value: 'userB' }]} value={transSource} onChange={setTransSource} />
+            </div>
+
+            <div className="inset-group-row">
+              <span className="inset-group-label">劃撥金額 (台幣)</span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                <input type="text" inputMode="numeric" className="inset-group-input" value={transAmount} onChange={(e) => setTransAmount(formatInputMoney(e.target.value))} placeholder="$0" />
+              </span>
+            </div>
+          </div>
+
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', padding: '14px', borderRadius: '14px' }} onClick={handleTransfer}>確認上繳</button>
         </div>
       )}
 
+      {/* 💰 收入面板 */}
       {activeTab === 'income' && (
-        <div key="income-panel" className="glass-card card-animate page-transition-enter"><h3 style={{ marginBottom: '15px', marginTop: 0, fontWeight: '700' }}>💰 一般收入</h3>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>戶頭</label><SegmentedControl options={[{ label: `大狗狗🐕`, value: 'userA' }, { label: `阿陞🐶`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} /></div>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>金額</label><input type="text" inputMode="numeric" className="glass-input" value={incomeAmount} onChange={(e) => setIncomeAmount(formatInputMoney(e.target.value))} placeholder="輸入金額" /></div>
-          <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontWeight: '600' }}>備註</label><input type="text" className="glass-input" value={incomeNote} onChange={(e) => setIncomeNote(e.target.value)} placeholder="例如：3月薪水" /></div>
-          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleIncomeSubmit}>確認收入入帳</button>
+        <div key="income-panel" className="glass-card card-animate page-transition-enter" style={{ padding: '20px 18px' }}>
+          <h3 style={{ marginBottom: '20px', marginTop: 0, fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+            一般收入
+          </h3>
+
+          <div className="inset-group-card">
+            <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>入帳戶頭</span>
+              <SegmentedControl options={[{ label: `大狗狗`, value: 'userA' }, { label: `阿陞`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} />
+            </div>
+
+            <div className="inset-group-row">
+              <span className="inset-group-label">入帳金額</span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                <input type="text" inputMode="numeric" className="inset-group-input" value={incomeAmount} onChange={(e) => setIncomeAmount(formatInputMoney(e.target.value))} placeholder="$0" />
+              </span>
+            </div>
+
+            <div className="inset-group-row">
+              <span className="inset-group-label">來源備註</span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                <input type="text" className="inset-group-input" value={incomeNote} onChange={(e) => setIncomeNote(e.target.value)} placeholder="例如：本月薪資入帳" />
+              </span>
+            </div>
+          </div>
+
+          <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', padding: '14px', borderRadius: '14px' }} onClick={handleIncomeSubmit}>確認收入入帳</button>
         </div>
       )}
 
-      <div style={{ marginTop: '36px', paddingTop: '20px', borderTop: '0.5px solid rgba(0,0,0,0.06)' }}>
-        <h3 style={{ color: 'var(--text-secondary)', marginBottom: '15px', fontWeight: '700' }}>💾 資料管理</h3>
+      {/* 💾 資料管理 */}
+      <div style={{ marginTop: '36px', paddingTop: '20px', borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
+        <h3 style={{ color: 'var(--text-secondary)', marginBottom: '15px', fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          資料備份與還原
+        </h3>
+        
         <div style={{ display: 'flex', gap: '12px', marginBottom: '10px' }}>
-          <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem' }} onClick={handleExport}>📥 匯出</button>
-          <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem' }} onClick={handleImportClick}>📤 匯入</button>
+          <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem', fontWeight: '600' }} onClick={handleExport}>📥 匯出 JSON</button>
+          <button className="glass-btn" style={{ flex: 1, fontSize: '0.88rem', fontWeight: '600' }} onClick={handleImportClick}>📤 匯入 JSON</button>
           <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json" onChange={handleFileChange} />
         </div>
-        <button onClick={handleManualBackup} disabled={isManualBackingUp} className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }}>
-          {isManualBackingUp ? '備份中...' : '☁️ 手動備份至雲端'}
+        <button onClick={handleManualBackup} disabled={isManualBackingUp} className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700', padding: '12px', borderRadius: '12px' }}>
+          {isManualBackingUp ? '備份傳送中...' : '☁️ 手動觸發雲端備份'}
         </button>
       </div>
     </div>

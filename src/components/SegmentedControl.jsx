@@ -14,6 +14,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
     const container = containerRef.current;
     const idx = options.findIndex(o => o.value === value);
     if (idx < 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPillStyle({ opacity: 0 });
       return;
     }

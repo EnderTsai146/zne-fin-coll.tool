@@ -17,10 +17,16 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const lastYear = useMemo(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d; }, []);
     const [chartDateRange, setChartDateRange] = useState({ start: formatDate(new Date(new Date().setFullYear(new Date().getFullYear() - 1))), end: formatDate(new Date()) });
     const [activeHistory, setActiveHistory] = useState(null);
+    const [chartViewMode, setChartViewMode] = useState('line'); // Task 3 Stacked Area Toggle
     const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
     const [backupWarning, setBackupWarning] = useState(false);
     const [selectedChartDate, setSelectedChartDate] = useState(null);
-
+    const yesterday = useMemo(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return d;
+    }, []);
+    const recordDate = useMemo(() => `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`, [yesterday]);
     // ★ 當用戶點擊折線圖的某一天時，系統自動背景調取那一個月的歸檔紀錄
     useEffect(() => {
         if (selectedChartDate && loadArchiveMonth) {
@@ -55,6 +61,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
     // ★ 儲存包含股票漲跌的「真實總市值」
     const [liveMarketNetWorth, setLiveMarketNetWorth] = useState(0);
+    const currentLiveMarketNetWorth = (assets.dailyNetWorth && assets.dailyNetWorth[recordDate]) || liveMarketNetWorth;
     // ★ 新增：背景抓取即時報價的 UI 狀態
     const [isFetchingLive, setIsFetchingLive] = useState(false);
 
@@ -166,18 +173,12 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     // ----------------------------------------------------
     // 2. 每日打卡快照引擎 (抓取真實市場現值)
     // ----------------------------------------------------
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const recordDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
 
     const hasSnapshot = (assets.dailyNetWorth || {})[recordDate];
     const isFetchingSnapshotRef = useRef(false);
 
-    useEffect(() => {
-        if (assets.dailyNetWorth && assets.dailyNetWorth[recordDate]) {
-            setLiveMarketNetWorth(assets.dailyNetWorth[recordDate]);
-        }
-    }, [assets.dailyNetWorth, recordDate]);
+
 
     useEffect(() => {
         if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
@@ -225,7 +226,6 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 const finalNetWorth = Math.round(totalTwdCash + usdCashTwd + nonStockInvest + stockMarketValue);
 
                 setLiveMarketNetWorth(finalNetWorth);
-                // ★ Fix: 傳入完整物件而非函式，確保 dailyNetWorth 快照真正寫入 Firebase
                 setAssets({ ...assets, dailyNetWorth: { ...(assets.dailyNetWorth || {}), [recordDate]: finalNetWorth } });
             } catch (e) {
                 console.error("快照失敗:", e);
@@ -243,6 +243,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     // 3. 繪製折線圖資料
     // ----------------------------------------------------
     const historyData = useMemo(() => {
+        const getDeepCopy = (obj) => structuredClone(obj);
+
         const getAssetsTotal = (state) => {
             if (!state) return 0;
             const twd = (state.userA || 0) + (state.userB || 0) + (state.jointCash || 0);
@@ -252,16 +254,38 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
         };
 
         const chartDataPoints = {};
+        const categoriesDataPoints = {
+            cash: {},
+            usd: {},
+            stock: {},
+            fund: {},
+            deposit: {},
+            other: {}
+        };
+
         const sortedRecords = [...(combinedHistory || [])]
             .filter(r => !r.isDeleted && r.auditTrail?.after && r.auditTrail?.before)
-            // 嚴格依照日期與時間排序
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || new Date(a.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
 
-        // 取得所有需要繪製的日期
         let allDates = [...new Set([formatDate(today), ...sortedRecords.map(r => r.date), ...Object.keys(assets.dailyNetWorth || {})])].sort();
 
-        // 以現在的實際總資產作為絕對起點，開始往前回推歷史資產線。完美避開修改日期造成的幽靈狀態錯置。
-        let currentBal = liveMarketNetWorth > 0 ? liveMarketNetWorth : totalAssets;
+        let currentBal = currentLiveMarketNetWorth > 0 ? currentLiveMarketNetWorth : totalAssets;
+
+        let currentBalances = {
+            userA: assets.userA || 0,
+            userA_usd: assets.userA_usd || 0,
+            userB: assets.userB || 0,
+            userB_usd: assets.userB_usd || 0,
+            jointCash: assets.jointCash || 0,
+            jointCash_usd: assets.jointCash_usd || 0,
+            userInvestments: getDeepCopy(assets.userInvestments || {
+                userA: { stock: 0, fund: 0, deposit: 0, other: 0 },
+                userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
+            }),
+            jointInvestments: getDeepCopy(assets.jointInvestments || {
+                stock: 0, fund: 0, deposit: 0, other: 0
+            })
+        };
 
         for (let i = allDates.length - 1; i >= 0; i--) {
             const d = allDates[i];
@@ -272,10 +296,52 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
             chartDataPoints[d] = currentBal;
 
+            // Reconstruct categories
+            const twdCashVal = currentBalances.userA + currentBalances.userB + currentBalances.jointCash;
+            const usdCashVal = Math.round((currentBalances.userA_usd + currentBalances.userB_usd + currentBalances.jointCash_usd) * currentFxRate);
+            const stockVal = (currentBalances.userInvestments?.userA?.stock || 0) + (currentBalances.userInvestments?.userB?.stock || 0) + (currentBalances.jointInvestments?.stock || 0);
+            const fundVal = (currentBalances.userInvestments?.userA?.fund || 0) + (currentBalances.userInvestments?.userB?.fund || 0) + (currentBalances.jointInvestments?.fund || 0);
+            const depositVal = (currentBalances.userInvestments?.userA?.deposit || 0) + (currentBalances.userInvestments?.userB?.deposit || 0) + (currentBalances.jointInvestments?.deposit || 0);
+            const otherVal = (currentBalances.userInvestments?.userA?.other || 0) + (currentBalances.userInvestments?.userB?.other || 0) + (currentBalances.jointInvestments?.other || 0);
+
+            categoriesDataPoints.cash[d] = twdCashVal;
+            categoriesDataPoints.usd[d] = usdCashVal;
+            categoriesDataPoints.stock[d] = stockVal;
+            categoriesDataPoints.fund[d] = fundVal;
+            categoriesDataPoints.deposit[d] = depositVal;
+            categoriesDataPoints.other[d] = otherVal;
+
             const dayRecords = sortedRecords.filter(r => r.date === d);
             let dayNetChange = 0;
             dayRecords.forEach(r => {
                 dayNetChange += (getAssetsTotal(r.auditTrail.after) - getAssetsTotal(r.auditTrail.before));
+
+                if (r.auditTrail?.before && r.auditTrail?.after) {
+                    const before = r.auditTrail.before;
+                    const after = r.auditTrail.after;
+                    
+                    currentBalances.userA -= ((after.userA || 0) - (before.userA || 0));
+                    currentBalances.userA_usd -= ((after.userA_usd || 0) - (before.userA_usd || 0));
+                    currentBalances.userB -= ((after.userB || 0) - (before.userB || 0));
+                    currentBalances.userB_usd -= ((after.userB_usd || 0) - (before.userB_usd || 0));
+                    currentBalances.jointCash -= ((after.jointCash || 0) - (before.jointCash || 0));
+                    currentBalances.jointCash_usd -= ((after.jointCash_usd || 0) - (before.jointCash_usd || 0));
+                    
+                    if (after.userInvestments && before.userInvestments) {
+                        ['userA', 'userB'].forEach(usr => {
+                            ['stock', 'fund', 'deposit', 'other'].forEach(k => {
+                                if (currentBalances.userInvestments[usr]) {
+                                    currentBalances.userInvestments[usr][k] -= (((after.userInvestments[usr]?.[k] || 0) - (before.userInvestments[usr]?.[k] || 0)));
+                                }
+                            });
+                        });
+                    }
+                    if (after.jointInvestments && before.jointInvestments) {
+                        ['stock', 'fund', 'deposit', 'other'].forEach(k => {
+                            currentBalances.jointInvestments[k] -= (((after.jointInvestments[k] || 0) - (before.jointInvestments[k] || 0)));
+                        });
+                    }
+                }
             });
 
             currentBal -= dayNetChange;
@@ -285,12 +351,29 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
         if (chartDateRange.start) {
             let startValue = 0;
+            const startBalances = { cash: 0, usd: 0, stock: 0, fund: 0, deposit: 0, other: 0 };
             for (let i = labels.length - 1; i >= 0; i--) {
-                if (labels[i] <= chartDateRange.start) { startValue = chartDataPoints[labels[i]]; break; }
+                if (labels[i] <= chartDateRange.start) { 
+                    startValue = chartDataPoints[labels[i]]; 
+                    startBalances.cash = categoriesDataPoints.cash[labels[i]] || 0;
+                    startBalances.usd = categoriesDataPoints.usd[labels[i]] || 0;
+                    startBalances.stock = categoriesDataPoints.stock[labels[i]] || 0;
+                    startBalances.fund = categoriesDataPoints.fund[labels[i]] || 0;
+                    startBalances.deposit = categoriesDataPoints.deposit[labels[i]] || 0;
+                    startBalances.other = categoriesDataPoints.other[labels[i]] || 0;
+                    break; 
+                }
             }
             labels = labels.filter(d => d >= chartDateRange.start);
             if (labels.length === 0 || labels[0] > chartDateRange.start) {
-                labels.unshift(chartDateRange.start); chartDataPoints[chartDateRange.start] = startValue;
+                labels.unshift(chartDateRange.start); 
+                chartDataPoints[chartDateRange.start] = startValue;
+                categoriesDataPoints.cash[chartDateRange.start] = startBalances.cash;
+                categoriesDataPoints.usd[chartDateRange.start] = startBalances.usd;
+                categoriesDataPoints.stock[chartDateRange.start] = startBalances.stock;
+                categoriesDataPoints.fund[chartDateRange.start] = startBalances.fund;
+                categoriesDataPoints.deposit[chartDateRange.start] = startBalances.deposit;
+                categoriesDataPoints.other[chartDateRange.start] = startBalances.other;
             }
         }
         if (chartDateRange.end) {
@@ -298,16 +381,32 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             if (labels.length === 0 || labels[labels.length - 1] < chartDateRange.end) {
                 labels.push(chartDateRange.end);
                 let endValue = totalAssets;
+                const endBalances = { cash: totalTwdCash, usd: Math.round(totalUsdCash * currentFxRate), stock: (assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0), fund: (assets.userInvestments?.userA?.fund || 0) + (assets.userInvestments?.userB?.fund || 0) + (assets.jointInvestments?.fund || 0), deposit: (assets.userInvestments?.userA?.deposit || 0) + (assets.userInvestments?.userB?.deposit || 0) + (assets.jointInvestments?.deposit || 0), other: (assets.userInvestments?.userA?.other || 0) + (assets.userInvestments?.userB?.other || 0) + (assets.jointInvestments?.other || 0) };
                 for (let i = 0; i < Object.keys(chartDataPoints).sort().length; i++) {
-                    if (Object.keys(chartDataPoints).sort()[i] <= chartDateRange.end) endValue = chartDataPoints[Object.keys(chartDataPoints).sort()[i]];
+                    const lD = Object.keys(chartDataPoints).sort()[i];
+                    if (lD <= chartDateRange.end) {
+                        endValue = chartDataPoints[lD];
+                        endBalances.cash = categoriesDataPoints.cash[lD] || 0;
+                        endBalances.usd = categoriesDataPoints.usd[lD] || 0;
+                        endBalances.stock = categoriesDataPoints.stock[lD] || 0;
+                        endBalances.fund = categoriesDataPoints.fund[lD] || 0;
+                        endBalances.deposit = categoriesDataPoints.deposit[lD] || 0;
+                        endBalances.other = categoriesDataPoints.other[lD] || 0;
+                    }
                 }
                 chartDataPoints[chartDateRange.end] = endValue;
+                categoriesDataPoints.cash[chartDateRange.end] = endBalances.cash;
+                categoriesDataPoints.usd[chartDateRange.end] = endBalances.usd;
+                categoriesDataPoints.stock[chartDateRange.end] = endBalances.stock;
+                categoriesDataPoints.fund[chartDateRange.end] = endBalances.fund;
+                categoriesDataPoints.deposit[chartDateRange.end] = endBalances.deposit;
+                categoriesDataPoints.other[chartDateRange.end] = endBalances.other;
             }
         }
 
         const data = labels.map(d => chartDataPoints[d]);
-        return { labels, data };
-    }, [assets.monthlyExpenses, assets.dailyNetWorth, combinedHistory, totalAssets, chartDateRange, currentFxRate, liveMarketNetWorth]);
+        return { labels, data, categories: categoriesDataPoints };
+    }, [assets.monthlyExpenses, assets.dailyNetWorth, combinedHistory, totalAssets, chartDateRange, currentFxRate, currentLiveMarketNetWorth, totalTwdCash, totalUsdCash, assets.userInvestments, assets.jointInvestments]);
 
     const lineChartData = {
         labels: historyData.labels,
@@ -324,6 +423,104 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             pointHoverRadius: 6
         }]
     };
+
+    const stackedChartData = {
+        labels: historyData.labels,
+        datasets: [
+            {
+                label: '台幣現金',
+                data: historyData.labels.map(d => historyData.categories.cash[d] || 0),
+                borderColor: '#2ecc71',
+                backgroundColor: 'rgba(46, 204, 113, 0.45)',
+                fill: 'origin',
+                tension: 0.3,
+                pointRadius: 2
+            },
+            {
+                label: '美金現鈔',
+                data: historyData.labels.map(d => historyData.categories.usd[d] || 0),
+                borderColor: '#f1c40f',
+                backgroundColor: 'rgba(241, 196, 15, 0.45)',
+                fill: 'origin',
+                tension: 0.3,
+                pointRadius: 2
+            },
+            {
+                label: '股票',
+                data: historyData.labels.map(d => historyData.categories.stock[d] || 0),
+                borderColor: '#ff9f43',
+                backgroundColor: 'rgba(255, 159, 67, 0.45)',
+                fill: 'origin',
+                tension: 0.3,
+                pointRadius: 2
+            },
+            {
+                label: '基金',
+                data: historyData.labels.map(d => historyData.categories.fund[d] || 0),
+                borderColor: '#54a0ff',
+                backgroundColor: 'rgba(84, 160, 255, 0.45)',
+                fill: 'origin',
+                tension: 0.3,
+                pointRadius: 2
+            },
+            {
+                label: '定存',
+                data: historyData.labels.map(d => historyData.categories.deposit[d] || 0),
+                borderColor: '#9b59b6',
+                backgroundColor: 'rgba(155, 89, 182, 0.45)',
+                fill: 'origin',
+                tension: 0.3,
+                pointRadius: 2
+            },
+            {
+                label: '其他',
+                data: historyData.labels.map(d => historyData.categories.other[d] || 0),
+                borderColor: '#c8d6e5',
+                backgroundColor: 'rgba(200, 214, 229, 0.45)',
+                fill: 'origin',
+                tension: 0.3,
+                pointRadius: 2
+            }
+        ]
+    };
+
+    const stackedChartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top',
+                labels: { color: 'var(--text-secondary)', font: { size: 10 } }
+            },
+            tooltip: {
+                mode: 'index',
+                intersect: false,
+                backgroundColor: 'rgba(28, 28, 30, 0.95)',
+                titleColor: '#ffffff',
+                bodyColor: '#ffffff',
+                borderColor: 'rgba(255, 255, 255, 0.12)',
+                borderWidth: 1,
+                padding: 10,
+                cornerRadius: 8,
+                callbacks: {
+                    label: (ctx) => ` ${ctx.dataset.label}: ${formatMoney(ctx.raw)}`
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { color: 'var(--text-tertiary)', font: { size: 9 } }
+            },
+            y: {
+                stacked: true,
+                grid: { color: 'rgba(255, 255, 255, 0.06)' },
+                ticks: { color: 'var(--text-tertiary)', font: { size: 9 } }
+            }
+        }
+    };
+
 
     const lineChartOptions = {
         responsive: true, maintainAspectRatio: false,
@@ -562,18 +759,18 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     {isFetchingLive && <span className="nobrk" style={{ fontSize: '0.73rem', background: 'rgba(120,120,128,0.12)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', marginLeft: '5px' }}>🔄 更新報價中...</span>}
                 </div>
                 <div style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing: '-0.02em' }}>
-                    {formatMoney(liveMarketNetWorth > 0 ? liveMarketNetWorth : totalAssets)}
+                    {formatMoney(currentLiveMarketNetWorth > 0 ? currentLiveMarketNetWorth : totalAssets)}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '15px', fontSize: '0.82rem', flexWrap: 'wrap' }}>
                     <div className="nobrk" style={{ background: 'rgba(120,120,128,0.12)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>💰 總現金 {formatMoney(totalCashConverted)}</div>
                     <div className="nobrk" style={{ background: 'rgba(120,120,128,0.12)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>📥 總投入 {formatMoney(totalInvest)}</div>
                 </div>
 
-                {liveMarketNetWorth > 0 && liveMarketNetWorth !== totalAssets && (
+                {currentLiveMarketNetWorth > 0 && currentLiveMarketNetWorth !== totalAssets && (
                     <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px solid var(--glass-border)', fontSize: '0.84rem', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
                         <span className="nobrk">📊 包含股票未實現損益：</span>
-                        <span className="nobrk" style={{ fontWeight: '800', color: liveMarketNetWorth >= totalAssets ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '1rem' }}>
-                            {liveMarketNetWorth >= totalAssets ? '+' : ''}{formatMoney(liveMarketNetWorth - totalAssets)}
+                        <span className="nobrk" style={{ fontWeight: '800', color: currentLiveMarketNetWorth >= totalAssets ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '1rem' }}>
+                            {currentLiveMarketNetWorth >= totalAssets ? '+' : ''}{formatMoney(currentLiveMarketNetWorth - totalAssets)}
                         </span>
                     </div>
                 )}
@@ -591,7 +788,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         <span className="nobrk">美 ${usdUser1.toFixed(2)}</span><br />
                         <span className="nobrk">投 {formatMoney(investUser1)}</span>
                     </div>
-                    <button onClick={() => setActiveHistory(activeHistory === 'userA' ? null : 'userA')} className={activeHistory === 'userA' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
+                    <button onClick={() => handleToggleHistory('userA')} className={activeHistory === 'userA' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
                 </div>
 
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-green)', background: activeHistory === 'userB' ? 'rgba(52,199,89,0.04)' : undefined }}>
@@ -605,7 +802,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         <span className="nobrk">美 ${usdUser2.toFixed(2)}</span><br />
                         <span className="nobrk">投 {formatMoney(investUser2)}</span>
                     </div>
-                    <button onClick={() => setActiveHistory(activeHistory === 'userB' ? null : 'userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
+                    <button onClick={() => handleToggleHistory('userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
                 </div>
 
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-orange)', background: activeHistory === 'jointCash' ? 'rgba(255,149,0,0.04)' : undefined }}>
@@ -619,7 +816,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         <span className="nobrk">美 ${usdJoint.toFixed(2)}</span><br />
                         <span className="nobrk">投 {formatMoney(investJoint)}</span>
                     </div>
-                    <button onClick={() => setActiveHistory(activeHistory === 'jointCash' ? null : 'jointCash')} className={activeHistory === 'jointCash' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'jointCash' ? '收起' : '🔍 紀錄'}</button>
+                    <button onClick={() => handleToggleHistory('jointCash')} className={activeHistory === 'jointCash' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'jointCash' ? '收起' : '🔍 紀錄'}</button>
                 </div>
             </div>
 
@@ -752,7 +949,11 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {/* 【第四層】互動式資產成長趨勢折線圖 */}
             <div className="glass-card card-animate" style={{ marginBottom: '18px', padding: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.95rem' }}>📈 資產成長趨勢</div>
+                    <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.95rem' }}>📈 資產變動與配置趨勢</div>
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '20px', padding: '2px', display: 'flex', gap: '2px' }}>
+                        <button onClick={() => setChartViewMode('line')} style={{ background: chartViewMode === 'line' ? 'rgba(255,255,255,0.12)' : 'transparent', border: 'none', borderRadius: '12px', padding: '4px 10px', fontSize: '0.78rem', fontWeight: '600', color: chartViewMode === 'line' ? '#fff' : '#8e8e93', cursor: 'pointer' }}>趨勢線</button>
+                        <button onClick={() => setChartViewMode('stacked')} style={{ background: chartViewMode === 'stacked' ? 'rgba(255,255,255,0.12)' : 'transparent', border: 'none', borderRadius: '12px', padding: '4px 10px', fontSize: '0.78rem', fontWeight: '600', color: chartViewMode === 'stacked' ? '#fff' : '#8e8e93', cursor: 'pointer' }}>配置比例</button>
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
@@ -766,7 +967,11 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 </div>
 
                 <div style={{ height: '220px', width: '100%', cursor: 'pointer' }}>
-                    <Line data={lineChartData} options={lineChartOptions} />
+                    {chartViewMode === 'line' ? (
+                        <Line data={lineChartData} options={lineChartOptions} />
+                    ) : (
+                        <Line data={stackedChartData} options={stackedChartOptions} />
+                    )}
                 </div>
 
                 {renderChartDetails()}
