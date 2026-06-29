@@ -325,6 +325,103 @@ function App() {
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
   const [showSystemSettings, setShowSystemSettings] = useState(false);
 
+  // --- Inactivity & Session Security Protection (Task 2 & 3) ---
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
+  const [timeoutCountdown, setTimeoutCountdown] = useState(15);
+  const inactivityTimerRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
+
+  const performAutoLogout = useCallback((reason) => {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setShowTimeoutWarning(false);
+
+    localStorage.removeItem('loginTimestamp');
+    if (window.location.hostname !== 'localhost') {
+      signOut(auth);
+    } else {
+      setCurrentUser(null);
+      setOperatorName('');
+      setDataReady(false);
+      setLoading(false);
+    }
+
+    if (reason === 'inactivity') {
+      customAlert("操作逾時已自動登出");
+    } else if (reason === '3days') {
+      customAlert("已達 3 天安全會話限制，請重新登入。");
+    }
+  }, [customAlert]);
+
+  const resetInactivityTimer = useCallback(() => {
+    if (!currentUser) return;
+    if (showTimeoutWarning) return;
+
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+
+    // 3 minutes = 180000ms
+    inactivityTimerRef.current = setTimeout(() => {
+      setShowTimeoutWarning(true);
+      setTimeoutCountdown(15);
+    }, 180000);
+  }, [currentUser, showTimeoutWarning]);
+
+  // Global activity listeners
+  useEffect(() => {
+    if (!currentUser) {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      setShowTimeoutWarning(false);
+      return;
+    }
+
+    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
+    const handleActivity = () => {
+      resetInactivityTimer();
+    };
+
+    events.forEach(event => {
+      window.addEventListener(event, handleActivity);
+    });
+
+    // Initial reset
+    resetInactivityTimer();
+
+    return () => {
+      events.forEach(event => {
+        window.removeEventListener(event, handleActivity);
+      });
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    };
+  }, [currentUser, resetInactivityTimer]);
+
+  // Timer countdown warning handler
+  useEffect(() => {
+    if (showTimeoutWarning) {
+      countdownIntervalRef.current = setInterval(() => {
+        setTimeoutCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownIntervalRef.current);
+            performAutoLogout('inactivity');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    }
+
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, [showTimeoutWarning, performAutoLogout]);
+
+  const handleResumeSession = () => {
+    setShowTimeoutWarning(false);
+    resetInactivityTimer();
+  };
+
   // ★ Sync body data-page attribute for per-page background gradients
   useEffect(() => {
     document.body.setAttribute('data-page', currentPage);
@@ -411,7 +508,7 @@ function App() {
 
   // ★ 控制所有彈窗開啟時的背景滾動與彈性滾動鎖定
   useEffect(() => {
-    const shouldLock = showChangelog || !!modalConfig || showLineSettings;
+    const shouldLock = showChangelog || !!modalConfig || showLineSettings || showTimeoutWarning;
     if (shouldLock) {
       document.documentElement.classList.add('modal-open');
       document.body.classList.add('modal-open');
@@ -423,7 +520,7 @@ function App() {
       document.documentElement.classList.remove('modal-open');
       document.body.classList.remove('modal-open');
     };
-  }, [showChangelog, modalConfig, showLineSettings]);
+  }, [showChangelog, modalConfig, showLineSettings, showTimeoutWarning]);
 
   const [assets, setAssets] = useState({
     userA: 0,
@@ -499,10 +596,26 @@ function App() {
     }
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
+        if (window.location.hostname !== 'localhost') {
+          const storedLoginTime = localStorage.getItem('loginTimestamp');
+          const now = Date.now();
+          if (storedLoginTime) {
+            const daysElapsed = (now - Number(storedLoginTime)) / (1000 * 60 * 60 * 24);
+            if (daysElapsed >= 3) {
+              localStorage.removeItem('loginTimestamp');
+              signOut(auth);
+              customAlert("已達 3 天安全會話限制，請重新登入。");
+              return;
+            }
+          } else {
+            localStorage.setItem('loginTimestamp', now.toString());
+          }
+        }
         setCurrentUser(user);
         setOperatorName(USER_MAPPING[user.email] || user.email.split('@')[0]);
         // ★ 不要在此設 loading=false，等 Firestore 資料到位後再解鎖
       } else {
+        localStorage.removeItem('loginTimestamp');
         setCurrentUser(null);
         setOperatorName('');
         setDataReady(false);
@@ -835,7 +948,10 @@ function App() {
   };
 
   const handleLogout = async () => {
-    if (await customConfirm("確定要登出嗎？")) signOut(auth);
+    if (await customConfirm("確定要登出嗎？")) {
+      localStorage.removeItem('loginTimestamp');
+      signOut(auth);
+    }
   };
 
   const getSnapshot = (currentAssets) => ({
@@ -1462,8 +1578,8 @@ function App() {
     <div style={{ paddingBottom: '110px' }}>
       {/* ★ Topbar — 內嵌 JSX */}
       <nav className="glass-nav" style={{ borderRadius: '0 0 20px 20px', marginBottom: '16px' }}>
-        <button 
-          onClick={() => setShowSystemSettings(true)} 
+        <button
+          onClick={() => setShowSystemSettings(true)}
           className="brand-glass-btn"
         >
           <span style={{ fontSize: '1.18rem' }}>🥔</span>
@@ -1482,15 +1598,15 @@ function App() {
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
 
         {currentPage === 'overview' && (
-          <TotalOverview 
-            key="overview" 
-            assets={assets} 
-            combinedHistory={combinedHistory} 
-            loadArchiveMonth={loadArchiveMonth} 
-            isFetchingArchive={isFetchingArchive} 
-            setAssets={handleAssetsUpdate} 
-            currentFxRate={currentFxRate} 
-            setCurrentFxRate={setCurrentFxRate} 
+          <TotalOverview
+            key="overview"
+            assets={assets}
+            combinedHistory={combinedHistory}
+            loadArchiveMonth={loadArchiveMonth}
+            isFetchingArchive={isFetchingArchive}
+            setAssets={handleAssetsUpdate}
+            currentFxRate={currentFxRate}
+            setCurrentFxRate={setCurrentFxRate}
             hasNewUpdate={hasNewUpdate}
             onOpenChangelog={handleOpenChangelog}
           />
@@ -1524,7 +1640,7 @@ function App() {
         <div className="modal-backdrop" onClick={() => setShowLineSettings(false)} onTouchMove={e => e.preventDefault()}>
           <div className="modal-content glass-card" style={{ padding: '28px', position: 'relative', touchAction: 'pan-y', overscrollBehavior: 'contain' }} onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
             <button onClick={() => setShowLineSettings(false)} style={{ position: 'absolute', right: '16px', top: '12px', background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--text-tertiary)', fontWeight: '300', zIndex: 11 }}>&times;</button>
-            
+
             {/* 🚧 此功能暫停使用。遮罩色塊 */}
             <div style={{
               position: 'absolute',
@@ -1586,17 +1702,44 @@ function App() {
         currentUser={currentUser}
         operatorName={operatorName}
       />
+      {showTimeoutWarning && (
+        <div className="liquid-modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="liquid-modal-card" style={{ maxWidth: '380px', padding: '24px 20px', textAlign: 'center', background: 'rgba(28,28,30,0.95)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🛡️</div>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: '700', color: '#ffffff' }}>會話安全提示</h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: '0.88rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5' }}>
+              您已閒置一段時間，系統為了防範財務資料外洩，將在 <strong style={{ color: 'var(--accent-red)', fontSize: '1.1rem' }}>{timeoutCountdown}</strong> 秒後自動登出。
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => performAutoLogout('inactivity')} 
+                className="liquid-modal-btn liquid-btn-cancel" 
+                style={{ flex: 1, padding: '10px', fontSize: '0.88rem' }}
+              >
+                立即登出
+              </button>
+              <button 
+                onClick={handleResumeSession} 
+                className="liquid-modal-btn liquid-btn-confirm" 
+                style={{ flex: 1, padding: '10px', fontSize: '0.88rem' }}
+              >
+                繼續使用
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showChangelog && (
         <div className="liquid-modal-overlay" onClick={() => setShowChangelog(false)} onTouchMove={e => e.preventDefault()}>
           <div className="liquid-modal-card" style={{ maxWidth: '480px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column', padding: '24px', overflowX: 'hidden', touchAction: 'pan-y', overscrollBehavior: 'contain' }} onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
-            
+
             {/* Tab 1: Whats New */}
             {changelogTab === 'whatsnew' && (
               <>
                 <div style={{ textAlign: 'center', marginTop: '10px', marginBottom: '24px', flexShrink: 0 }}>
-                  <h2 style={{ 
-                    fontSize: '1.75rem', 
-                    fontWeight: '800', 
+                  <h2 style={{
+                    fontSize: '1.75rem',
+                    fontWeight: '800',
                     margin: '0 0 6px 0',
                     background: 'linear-gradient(135deg, #ffffff 0%, #dcdcdc 100%)',
                     WebkitBackgroundClip: 'text',
@@ -1611,10 +1754,10 @@ function App() {
                     提供更完整的資產最佳化工具與系統穩定度改善
                   </p>
                 </div>
-                
-                <div style={{ 
+
+                <div style={{
                   flex: 1,
-                  overflowY: 'auto', 
+                  overflowY: 'auto',
                   overflowX: 'hidden',
                   paddingRight: '6px',
                   display: 'flex',
@@ -1649,7 +1792,7 @@ function App() {
                     </div>
                   ))}
                 </div>
-                
+
                 <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, wordBreak: 'break-all' }}>
                   資產數據與隱私資訊已進行安全傳輸並儲存於私有資料庫中。<br />
                   <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('tutorial')}>
@@ -1658,18 +1801,18 @@ function App() {
                 </div>
 
                 <div style={{ flexShrink: 0, width: '100%' }}>
-                  <button 
-                    className="glass-btn-cta" 
-                    style={{ 
-                      width: '100%', 
-                      padding: '13px', 
-                      borderRadius: '14px', 
-                      fontSize: '0.95rem', 
-                      fontWeight: '700', 
-                      background: '#007aff', 
-                      color: '#ffffff', 
+                  <button
+                    className="glass-btn-cta"
+                    style={{
+                      width: '100%',
+                      padding: '13px',
+                      borderRadius: '14px',
+                      fontSize: '0.95rem',
+                      fontWeight: '700',
+                      background: '#007aff',
+                      color: '#ffffff',
                       WebkitTextFillColor: '#ffffff',
-                      border: 'none', 
+                      border: 'none',
                       cursor: 'pointer',
                       boxShadow: '0 4px 15px rgba(0, 122, 255, 0.3)',
                       transition: 'all 0.2s ease'
@@ -1686,9 +1829,9 @@ function App() {
             {changelogTab === 'tutorial' && (
               <>
                 <div style={{ textAlign: 'center', marginTop: '10px', marginBottom: '24px', flexShrink: 0 }}>
-                  <h2 style={{ 
-                    fontSize: '1.75rem', 
-                    fontWeight: '800', 
+                  <h2 style={{
+                    fontSize: '1.75rem',
+                    fontWeight: '800',
                     margin: '0 0 6px 0',
                     background: 'linear-gradient(135deg, #ffffff 0%, #dcdcdc 100%)',
                     WebkitBackgroundClip: 'text',
@@ -1703,10 +1846,10 @@ function App() {
                     協助掌握核心資產管理與交易操作步驟
                   </p>
                 </div>
-                
-                <div style={{ 
+
+                <div style={{
                   flex: 1,
-                  overflowY: 'auto', 
+                  overflowY: 'auto',
                   overflowX: 'hidden',
                   paddingRight: '6px',
                   display: 'flex',
@@ -1716,11 +1859,11 @@ function App() {
                   touchAction: 'pan-y'
                 }}>
                   {CHANGELOG_DATA[0]?.tutorials.map((t, i) => (
-                    <div key={i} style={{ 
-                      background: 'rgba(255,255,255,0.03)', 
-                      padding: '12px 14px', 
-                      borderRadius: '12px', 
-                      border: '1px solid rgba(255,255,255,0.06)' 
+                    <div key={i} style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255,255,255,0.06)'
                     }}>
                       <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700', wordBreak: 'break-all' }}>
                         {i + 1}. {t.title}
@@ -1731,7 +1874,7 @@ function App() {
                     </div>
                   ))}
                 </div>
-                
+
                 <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, wordBreak: 'break-all' }}>
                   <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('whatsnew')}>
                     返回系統更新日誌
@@ -1739,18 +1882,18 @@ function App() {
                 </div>
 
                 <div style={{ flexShrink: 0, width: '100%' }}>
-                  <button 
-                    className="glass-btn-cta" 
-                    style={{ 
-                      width: '100%', 
-                      padding: '13px', 
-                      borderRadius: '14px', 
-                      fontSize: '0.95rem', 
-                      fontWeight: '700', 
-                      background: '#007aff', 
-                      color: '#ffffff', 
+                  <button
+                    className="glass-btn-cta"
+                    style={{
+                      width: '100%',
+                      padding: '13px',
+                      borderRadius: '14px',
+                      fontSize: '0.95rem',
+                      fontWeight: '700',
+                      background: '#007aff',
+                      color: '#ffffff',
                       WebkitTextFillColor: '#ffffff',
-                      border: 'none', 
+                      border: 'none',
                       cursor: 'pointer',
                       boxShadow: '0 4px 15px rgba(0, 122, 255, 0.3)',
                       transition: 'all 0.2s ease'
@@ -1866,23 +2009,23 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
         setLoadingLogs(false);
         return;
       }
-      
+
       const querySnapshot = await getDocs(q);
       const newLogs = [];
       querySnapshot.forEach((doc) => {
         newLogs.push({ id: doc.id, ...doc.data() });
       });
-      
+
       if (querySnapshot.docs.length < 30) {
         setHasMoreLogs(false);
       } else {
         setHasMoreLogs(true);
       }
-      
+
       if (querySnapshot.docs.length > 0) {
         setLastVisibleDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
       }
-      
+
       if (isInitial) {
         setDbLogs(newLogs);
       } else {
@@ -1952,7 +2095,7 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                 padding: '16px'
               }}>
                 <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  ✦ 個人記帳與共同代墊之分流
+                  個人記帳與共同代墊之分流
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
                   登錄交易時，須於「付款方式」欄位選定帳戶。若屬個人私帳，請選擇個人帳戶，該筆金額將直接自個人帳戶扣除。若為共同支出且由個人（大狗狗或阿陞）代墊，系統在暫存或送出時會先啟動「前端餘額阻斷校驗」，檢查代墊人帳戶之可用餘額是否足夠；確認足夠後，系統會自該代墊人的個人帳戶執行扣減，並將代墊款項記入共同待結帳目中。
@@ -1965,10 +2108,10 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                 padding: '16px'
               }}>
                 <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  ✦ 代墊款項結清與審計追蹤
+                  代墊款項結清與審計追蹤
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  前往「財務資料庫」可查閱全時間（All Time）未結清之代墊明細。點選「結清」後，系統會自動自「共同現金」帳戶撥款並加回原代墊人的個人帳戶中。此操作會在背景寫入該時間點的資產分佈快照（Audit Trail），為後續對帳與帳務變更提供完整的審計歷史紀錄。
+                  前往「財務資料庫」可查閱全時間未結清之代墊明細。點選「結清」後，系統會自動自「共同現金」帳戶撥款並加回原代墊人的個人帳戶中。此操作會在背景寫入該時間點的資產分佈快照（Audit Trail），為後續對帳與帳務變更提供完整的審計歷史紀錄。
                 </p>
               </div>
               <div style={{
@@ -1978,10 +2121,10 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                 padding: '16px'
               }}>
                 <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  ✦ 投資庫存與先進先出 (FIFO) 估算
+                  投資庫存與先進先出 (FIFO) 估算
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  於投資交易介面中，利用股票代號自動完成（Autocomplete）欄位輸入標的，即可暫存並批次提交交易紀錄。當執行「賣出 (Sell)」時，系統會自動依據「先進先出 (FIFO)」原則重構歷史批次 (lots) 陣列，自動預填歷史取得之台幣或美金成本，藉此推算庫存損益與歷史持有均價。
+                  於投資交易介面中，利用股票代號自動完成欄位輸入標的，即可暫存並批次提交交易紀錄。當執行「賣出」時，系統會自動預填歷史取得之台幣或美金成本，藉此推算庫存損益與歷史持有均價。
                 </p>
               </div>
             </div>
@@ -2025,7 +2168,7 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                   Q：為什麼美股部位的未實現損益，跟券商 App（如投資先生）顯示的有一點點落差？
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：本系統是以實際歷史批次 (lots) 交易紀錄進行先進先出 (FIFO) 之精準成本估算，且市值已自動扣除預估的複委託手續費。若與券商 App 存在微幅落差，屬合理計算景深，您亦可利用資產操作面板中的「校正回歸」功能進行微調。
+                  A：本系統是以實際歷史批次交易紀錄進行先進先出 (FIFO) 之精準成本估算，且市值已自動扣除預估的複委託手續費。若與券商 App 存在微幅落差，屬合理計算景深，您亦可利用資產操作面板中的「校正回歸」功能進行微調。
                 </p>
               </div>
               <div style={{
@@ -2038,7 +2181,7 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                   Q：什麼是「餘額校正」，它會影響我本月的收支預算進度嗎？
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：「餘額校正」（校正回歸）僅用於修正零星匯差、非預期手續費等帳面誤差。此操作在會計科目上歸類為獨立修正屬性，絕對不會計入當月的日常支出預算或現金流統計。
+                  A：「餘額校正」（校正回歸）僅用於修正零星匯差、非預期手續費等帳面誤差。此操作在會計科目上歸類為獨立修正屬性，不會計入當月的日常支出預算或現金流統計。
                 </p>
               </div>
               <div style={{
@@ -2051,7 +2194,7 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                   Q：定期帳單的「一鍵認列」是如何運作的？會自動扣款嗎？
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：此功能為「半自動提醒機制」，不會自動執行銀行扣款。點擊認列後，系統會於當日產生實質支出分錄，並透過時區安全演算法將下一次扣款日依週期（如每月或每年）遞增，防止日期偏移。若該期為變動金額（如水電費），系統會彈出輸入欄位提示，以利手動填寫實際金額。
+                  A：點擊認列後，系統會於當日產生實質支出分錄，並自動將下一次扣款日依週期（如每月或每年）遞增。若該期為變動金額（如水電費），系統會彈出輸入欄位提示，以利手動填寫實際金額。
                 </p>
               </div>
             </div>
@@ -2078,14 +2221,14 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                     ))}
                   </div>
                   {hasMoreLogs && (
-                    <button 
-                      onClick={() => fetchLogs(false)} 
+                    <button
+                      onClick={() => fetchLogs(false)}
                       disabled={loadingLogs}
-                      className="glass-btn" 
-                      style={{ 
-                        width: '100%', 
-                        padding: '10px', 
-                        borderRadius: '12px', 
+                      className="glass-btn"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '12px',
                         fontSize: '0.8rem',
                         color: 'var(--text-primary)',
                         background: 'rgba(255, 255, 255, 0.05)',
@@ -2134,9 +2277,9 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
           )}
         </div>
 
-        <button 
-          onClick={onClose} 
-          className="liquid-modal-btn liquid-btn-confirm" 
+        <button
+          onClick={onClose}
+          className="liquid-modal-btn liquid-btn-confirm"
           style={{ width: '100%', marginTop: '10px', flexShrink: 0 }}
         >
           我瞭解了

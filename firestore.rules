@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /finance/{document} {
+      // 僅限經過 Firebase Auth 驗證的特定成員帳號（大狗狗與阿陞）可讀寫財務資料庫
+      allow read, write: if request.auth != null && (
+        request.auth.token.email == "endertsai146@gmail.com" || 
+        request.auth.token.email == "partner@example.com"
+      );
+      
+      // 遞迴允許對日誌等子集合進行存取
+      match /{allSubcollections=**} {
+        allow read, write: if request.auth != null && (
+          request.auth.token.email == "endertsai146@gmail.com" || 
+          request.auth.token.email == "partner@example.com"
+        );
+      }
+    }
+  }
+}

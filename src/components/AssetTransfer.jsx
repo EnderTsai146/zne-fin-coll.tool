@@ -633,15 +633,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
         </button>
       </div>
 
-      {/* 📅 Date Selection Grouped Inset Card */}
-      <div className="inset-group-card" style={{ marginBottom: '18px' }}>
-        <div className="inset-group-row">
-          <span className="inset-group-label" style={{ fontWeight: '600' }}>📅 交易日期</span>
-          <span className="inset-group-value">
-            <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
-          </span>
-        </div>
-      </div>
+
 
       {/* 📈 投資面板 */}
       {activeTab === 'invest' && (
@@ -655,6 +647,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           </h3>
 
           <div className="inset-group-card">
+            <div className="inset-group-row">
+              <span className="inset-group-label">📅 交易日期</span>
+              <span className="inset-group-value">
+                <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+              </span>
+            </div>
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>操作帳戶</span>
               <SegmentedControl options={[{ label: '共同帳戶 🏫', value: 'jointCash' }, { label: '大狗狗 🐕', value: 'userA' }, { label: '阿陞 🐶', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
@@ -860,6 +858,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           </h3>
 
           <div className="inset-group-card">
+            <div className="inset-group-row">
+              <span className="inset-group-label">📅 交易日期</span>
+              <span className="inset-group-value">
+                <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+              </span>
+            </div>
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>操作帳戶</span>
               <SegmentedControl options={[{ label: '共同帳戶 🏫', value: 'jointCash' }, { label: '大狗狗 🐕', value: 'userA' }, { label: '阿陞 🐶', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
@@ -901,6 +905,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.5' }}>用於修正帳務手續費或小數點匯差。此操作僅校正水位，<strong style={{ color: 'var(--accent-orange)' }}>不會</strong>認列入當月收支預算。</p>
 
           <div className="inset-group-card">
+            <div className="inset-group-row">
+              <span className="inset-group-label">📅 交易日期</span>
+              <span className="inset-group-value">
+                <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+              </span>
+            </div>
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>校正帳戶</span>
               <SegmentedControl options={[{ label: '共同帳戶 🏫', value: 'jointCash' }, { label: '大狗狗 🐕', value: 'userA' }, { label: '阿陞 🐶', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
@@ -950,6 +960,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           </h3>
 
           <div className="inset-group-card">
+            <div className="inset-group-row">
+              <span className="inset-group-label">📅 交易日期</span>
+              <span className="inset-group-value">
+                <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+              </span>
+            </div>
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>上繳來源</span>
               <SegmentedControl options={[{ label: `大狗狗 🐕`, value: 'userA' }, { label: `阿陞 🐶`, value: 'userB' }]} value={transSource} onChange={setTransSource} />
@@ -979,6 +995,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           </h3>
 
           <div className="inset-group-card">
+            <div className="inset-group-row">
+              <span className="inset-group-label">📅 交易日期</span>
+              <span className="inset-group-value">
+                <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+              </span>
+            </div>
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>入帳戶頭</span>
               <SegmentedControl options={[{ label: `大狗狗 🐕`, value: 'userA' }, { label: `阿陞 🐶`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} />
