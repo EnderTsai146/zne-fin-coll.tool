@@ -9,7 +9,7 @@ import ExpenseEntry from './components/ExpenseEntry';
 import ReviewView from './components/ReviewView';
 import './index.css';
 import { db, auth } from './firebase';
-import { doc, onSnapshot, setDoc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MAKE_WEBHOOK_URL } from './config';
 
@@ -101,44 +101,94 @@ const BottomNav = ({ currentPage, onPageChange, assets }) => {
 
 const CHANGELOG_DATA = [
   {
+    version: 'v2.4.0',
+    date: '2026-06-29',
+    highlights: [
+      {
+        emoji: '✦',
+        color: 'rgba(0, 122, 255, 0.15)',
+        title: '自訂分類標籤配置',
+        desc: '開放使用者動態設定自訂分類標籤，解除系統預設之硬編碼限制，提供更靈活的記帳彈性。'
+      },
+      {
+        emoji: '✦',
+        color: 'rgba(52, 199, 89, 0.15)',
+        title: '全新視覺化圖表',
+        desc: '新增跨月度開銷對比長條圖與長期資產動態配置堆疊圖，協助深度分析資產變動趨勢。'
+      },
+      {
+        emoji: '✦',
+        color: 'rgba(255, 149, 0, 0.15)',
+        title: '動態預算即時預警',
+        desc: '於日常記帳認列與暫存購物車送出時，當總支出達預算之 70%、90% 及 100% 時，系統將即時彈出對話視窗提示。'
+      },
+      {
+        emoji: '✦',
+        color: 'rgba(48, 209, 88, 0.15)',
+        title: 'LINE 通知內容強化',
+        desc: 'LINE 增強型通知自動整合動態預算進度文字，讓您即時掌握預算執行狀態。'
+      },
+      {
+        emoji: '✦',
+        color: 'rgba(175, 82, 222, 0.15)',
+        title: '跨時區日期修正',
+        desc: '修正因跨時區結算而導致定期帳單日期產生幽靈偏移之競爭條件（Race Condition）。'
+      }
+    ],
+    tutorials: [
+      {
+        title: '設定自訂分類標籤',
+        content: '前往「設定」，點選「自訂標籤」，即可新增或編輯您的專屬交易分類，系統將即時更新記帳表單的下拉選單。'
+      },
+      {
+        title: '查看跨月開銷對比',
+        content: '切換至「分析」或「回顧」頁面，系統會自動比對本月與上月各分類之開銷差額，並以長條圖呈現波動情況。'
+      },
+      {
+        title: '啟用動態預算預警',
+        content: '於「預算設定」中填寫上限值。記帳或批次送出購物車時，若累計金額觸及門檻（70%/90%/100%），將自動彈出預警對話視窗進行安全阻斷。'
+      }
+    ]
+  },
+  {
     version: 'v2.0.0',
     date: '2026-06-29',
     highlights: [
       {
-        emoji: '🎨',
+        emoji: '✦',
         color: 'rgba(0, 122, 255, 0.15)',
         title: 'Apple HIG 原生視覺與極簡重構',
         desc: '表單與設定全面升級為 iOS「設定」風格的圓角分組清單 (Grouped Inset Cards)，欄位水平排版、標籤靠左、數值靠右。'
       },
       {
-        emoji: '📱',
+        emoji: '✦',
         color: 'rgba(52, 199, 89, 0.15)',
         title: 'iOS Bottom Action Sheet 快捷選單',
         desc: '流水帳列表移除繁雜明文按鈕，點擊行項目即從螢幕底部平滑滑出 iOS 風格 Action Sheet 快顯功能表，提供修改與作廢。'
       },
       {
-        emoji: '📐',
+        emoji: '✦',
         color: 'rgba(255, 149, 0, 0.15)',
         title: 'iOS Card Sheet 底部滑出面板',
-        desc: '文字修改彈窗與對帳明細升級為 Card Sheet，頂部備有灰色 Drag Handle 手勢指示條與「取消/儲存」左右文字控制按鈕。'
+        desc: '文字修改對話視窗與對帳明細升級為 Card Sheet，頂部備有灰色 Drag Handle 手勢指示條與「取消/儲存」左右文字控制按鈕。'
       },
       {
-        emoji: '🎨',
+        emoji: '✦',
         color: 'rgba(175, 82, 222, 0.15)',
         title: 'SF Symbols 風格向量圖示替換',
         desc: '所有彩色表情符號 Emoji 替換為線條幾何嚴謹、純色的 SVG 向量圖示，致敬 Apple 系統圖示質感。'
       },
       {
-        emoji: '📈',
+        emoji: '✦',
         color: 'rgba(48, 209, 88, 0.15)',
         title: '資產配置堆疊圖與跨月花費對比',
-        desc: '總覽頁新增「配置比例」切換，支援 Stacked Area 堆疊圖查看科目移轉；回顧與資料庫加入上月 vs 本月同分類跨月開銷對比柱狀圖。'
+        desc: '總覽頁新增「配置比例」切換，支援 Stacked Area 堆疊圖查看科目移轉；回顧與資料庫加入上月 vs 本月同分類跨月開銷對比長條圖。'
       },
       {
-        emoji: '⚙️',
+        emoji: '✦',
         color: 'rgba(255, 59, 48, 0.15)',
         title: '系統設定與操作歷史雲端備份',
-        desc: '新增「🥔管家」設定按鈕，支援查看基本資訊、說明、常見問題與詳細「使用者操作歷史紀錄」，且支援隨其他財務帳務資料一起打包無感備份到雲端。'
+        desc: '新增「馬鈴薯管家」設定按鈕，支援檢視基本資訊、說明、常見問題與詳細「使用者操作歷史紀錄」，且支援隨其他財務帳務資料一起打包無感備份到雲端。'
       }
     ],
     tutorials: [
@@ -148,11 +198,11 @@ const CHANGELOG_DATA = [
       },
       {
         title: '切換資產配置堆疊圖',
-        content: '在「總覽」頁的「資產變動與配置趨勢」圖表上方，可點擊「配置比例」切換為 Stacked Area 堆疊圖，即時分析現金、股票等科目成長消長。'
+        content: '在「總覽」頁的「資產變動與配置趨勢」圖表上方，可點擊「配置比例」切換為 Stacked Area 堆疊圖，即時分析現金、股票等科目成長與消長。'
       },
       {
         title: '使用管家設定與操作日誌',
-        content: '點選左上角「🥔管家」按鈕即可打開「管家設定」卡片，在裡面可以查閱「操作歷史紀錄」並隨時與雲端試算表進行同步。'
+        content: '點選左上角「馬鈴薯管家」按鈕即可打開「管家設定」卡片，在裡面可以查閱「操作歷史紀錄」並隨時與雲端進行同步。'
       }
     ]
   },
@@ -161,31 +211,31 @@ const CHANGELOG_DATA = [
     date: '2026-06-25',
     highlights: [
       {
-        emoji: '🔢',
+        emoji: '✦',
         color: 'rgba(0, 122, 255, 0.15)',
         title: '金額輸入千分位與貨幣符號',
         desc: '金額欄位輸入時即時自動套用 $ 和千分位逗號。後台無感轉換為數值，輸入更直覺。'
       },
       {
-        emoji: '🛒',
+        emoji: '✦',
         color: 'rgba(52, 199, 89, 0.15)',
         title: '暫存購物車排版防護與響應式',
-        desc: '優化手機寬度下的備註與標籤折行，金額與刪除按鈕始終完美對齊，再窄的螢幕都不跑版。'
+        desc: '最佳化手機寬度下的備註與標籤折行，金額與刪除按鈕始終完美對齊，再窄的螢幕都不跑版。'
       },
       {
-        emoji: '📈',
+        emoji: '✦',
         color: 'rgba(255, 149, 0, 0.15)',
         title: '先進先出 (FIFO) 成本估算',
         desc: '賣出股票時自動依據買入紀錄回估並預填投入本金，極大簡化損益紀錄程序。'
       },
       {
-        emoji: '☁️',
+        emoji: '✦',
         color: 'rgba(48, 209, 88, 0.15)',
         title: '全自動雲端試算表備份',
-        desc: '每日首次打開網頁時自動於背景將資料備份到 Google 雲端，守護您的資產數據。'
+        desc: '每日首次開啟應用程式時，自動於背景將資料備份至 Google 雲端硬碟，保護您的資產數據。'
       },
       {
-        emoji: '🔑',
+        emoji: '✦',
         color: 'rgba(175, 82, 222, 0.15)',
         title: '全磨砂玻璃化 (Liquid Glass) 升級',
         desc: '移除總覽、回顧、投資分頁中的實色方塊，全面升級為透亮半透明玻璃質感。'
@@ -194,7 +244,7 @@ const CHANGELOG_DATA = [
     tutorials: [
       {
         title: '暫存此筆與批次合併記帳',
-        content: '在輸入金額後點擊「➕ 暫存此筆」可連續記帳。若暫存區總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截提示，防止餘額透支。'
+        content: '在輸入金額後點選「暫存此筆」可連續記帳。若暫存區總支出超過該帳戶可用餘額，最後點擊「確認記帳」時防呆系統將自動攔截提示，防止餘額透支。'
       },
       {
         title: '即時台美股報價更新',
@@ -809,8 +859,15 @@ function App() {
       action: actionType,
       detail
     };
-    const logs = [logEntry, ...(newAssets.userOperationsLog || [])].slice(0, 150);
-    newAssets.userOperationsLog = logs;
+    try {
+      const logsRef = collection(db, "finance", "data", "operationsLog");
+      addDoc(logsRef, logEntry).catch(err => console.error("Firestore Log Fail:", err));
+    } catch (e) {
+      console.error("Log error:", e);
+    }
+    if (newAssets.userOperationsLog) {
+      delete newAssets.userOperationsLog;
+    }
     return newAssets;
   };
 
@@ -1545,10 +1602,10 @@ function App() {
                     letterSpacing: '-0.02em',
                     wordBreak: 'break-all'
                   }}>
-                    馬鈴薯管家 新功能
+                    馬鈴薯管家 系統更新
                   </h2>
                   <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0, wordBreak: 'break-all' }}>
-                    為您打造更流暢、直覺且美觀的記帳與投資體驗
+                    提供更完整的資產最佳化工具與系統穩定度改善
                   </p>
                 </div>
                 
@@ -1591,9 +1648,9 @@ function App() {
                 </div>
                 
                 <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, wordBreak: 'break-all' }}>
-                  您的資產數據與隱私皆安全儲存於私有 Firebase 中。<br />
+                  資產數據與隱私資訊已進行安全傳輸並儲存於私有資料庫中。<br />
                   <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('tutorial')}>
-                    查看簡易使用指南...
+                    檢視操作指南
                   </span>
                 </div>
 
@@ -1637,10 +1694,10 @@ function App() {
                     letterSpacing: '-0.02em',
                     wordBreak: 'break-all'
                   }}>
-                    簡易使用指南
+                    系統操作指南
                   </h2>
                   <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0, wordBreak: 'break-all' }}>
-                    幫助您更高效地掌握管家核心操作
+                    協助掌握核心資產管理與交易操作步驟
                   </p>
                 </div>
                 
@@ -1674,7 +1731,7 @@ function App() {
                 
                 <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, wordBreak: 'break-all' }}>
                   <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('whatsnew')}>
-                    返回新功能介紹...
+                    返回系統更新日誌
                   </span>
                 </div>
 
@@ -1787,10 +1844,65 @@ const CustomModal = ({ modalConfig, onConfirm, onCancel }) => {
 // ★ SystemSettingsModal (Declared outside to avoid hook/re-focus nesting errors)
 const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName }) => {
   const [activeTab, setActiveTab] = useState('guide');
+  const [dbLogs, setDbLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [lastVisibleDoc, setLastVisibleDoc] = useState(null);
+  const [hasMoreLogs, setHasMoreLogs] = useState(true);
+
+  const fetchLogs = async (isInitial = false) => {
+    if (loadingLogs) return;
+    setLoadingLogs(true);
+    try {
+      const logsRef = collection(db, "finance", "data", "operationsLog");
+      let q;
+      if (isInitial) {
+        q = query(logsRef, orderBy("timestamp", "desc"), limit(30));
+      } else if (lastVisibleDoc) {
+        q = query(logsRef, orderBy("timestamp", "desc"), startAfter(lastVisibleDoc), limit(30));
+      } else {
+        setLoadingLogs(false);
+        return;
+      }
+      
+      const querySnapshot = await getDocs(q);
+      const newLogs = [];
+      querySnapshot.forEach((doc) => {
+        newLogs.push({ id: doc.id, ...doc.data() });
+      });
+      
+      if (querySnapshot.docs.length < 30) {
+        setHasMoreLogs(false);
+      } else {
+        setHasMoreLogs(true);
+      }
+      
+      if (querySnapshot.docs.length > 0) {
+        setLastVisibleDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      }
+      
+      if (isInitial) {
+        setDbLogs(newLogs);
+      } else {
+        setDbLogs(prev => [...prev, ...newLogs]);
+      }
+    } catch (err) {
+      console.error("Error fetching logs: ", err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (show && activeTab === 'logs') {
+      fetchLogs(true);
+    } else if (!show) {
+      setDbLogs([]);
+      setLastVisibleDoc(null);
+      setHasMoreLogs(true);
+    }
+  }, [show, activeTab]);
 
   if (!show) return null;
-
-  const logs = assets.userOperationsLog || [];
 
   const formatTimestamp = (isoStr) => {
     if (!isoStr) return '';
@@ -1816,73 +1928,173 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
     <div className="liquid-modal-overlay" onClick={onClose} onTouchMove={e => e.preventDefault()}>
       <div className="settings-modal-card" onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.02em' }}>🥔 系統管理與指南</h3>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.02em' }}>系統管理與操作指南</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '1.2rem', cursor: 'pointer', padding: '4px' }}>✖</button>
         </div>
 
         <div className="settings-tabs" style={{ flexShrink: 0 }}>
-          <button className={`settings-tab-btn ${activeTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveTab('guide')}>📖 指南</button>
-          <button className={`settings-tab-btn ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveTab('faq')}>❓ FAQ</button>
-          <button className={`settings-tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>📜 軌跡</button>
-          <button className={`settings-tab-btn ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>ℹ️ 資訊</button>
+          <button className={`settings-tab-btn ${activeTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveTab('guide')}>操作指南</button>
+          <button className={`settings-tab-btn ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveTab('faq')}>常見問題</button>
+          <button className={`settings-tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>歷史軌跡</button>
+          <button className={`settings-tab-btn ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>系統資訊</button>
         </div>
 
         <div className="settings-tab-content">
           {activeTab === 'guide' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.84rem', lineHeight: '1.5', color: 'var(--text-secondary)' }}>
-              <div>
-                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>共同記帳模式</h4>
-                <p style={{ margin: 0 }}>雙方皆可透過共同現金或個人墊付，涉及代墊時系統將自動推算代墊債務，並在當月明細中點擊「結清」完成撥款平衡。</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  ✦ 個人記帳與共同代墊之分流
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  登錄交易時，須於「付款方式」欄位選定帳戶。若屬個人私帳，請選擇個人帳戶，該筆金額將直接自個人帳戶扣除。若為共同支出且由個人（大狗狗或阿陞）代墊，系統在暫存或送出時會先啟動「前端餘額阻斷校驗」，檢查代墊人帳戶之可用餘額是否足夠；確認足夠後，系統會自該代墊人的個人帳戶執行扣減，並將代墊款項記入共同待結帳目中。
+                </p>
               </div>
-              <div>
-                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>個人記帳模式</h4>
-                <p style={{ margin: 0 }}>記錄專屬個人的私帳，該金額會直接自該使用者的台幣個人戶頭扣除，且不計入代墊與共同支出分配。</p>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  ✦ 代墊款項結清與審計追蹤
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  前往「財務資料庫」可查閱全時間（All Time）未結清之代墊明細。點選「結清」後，系統會自動自「共同現金」帳戶撥款並加回原代墊人的個人帳戶中。此操作會在背景寫入該時間點的資產分佈快照（Audit Trail），為後續對帳與帳務變更提供完整的審計歷史紀錄。
+                </p>
               </div>
-              <div>
-                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>資產與劃撥</h4>
-                <p style={{ margin: 0 }}>支援戶頭劃撥、外幣兌換、資產校正。所有的劃撥與記帳都整合了先進的 auditTrail 區塊級快照以防止帳務錯亂。</p>
-              </div>
-              <div>
-                <h4 style={{ margin: '0 0 6px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '700' }}>投資記帳與 FIFO</h4>
-                <p style={{ margin: 0 }}>股票持倉使用先進先出 (FIFO) 算法實時計量。買入與賣出時，美股支援美金/台幣交割帳戶扣減並以成交匯率進行財務對帳。</p>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  ✦ 投資庫存與先進先出 (FIFO) 估算
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  於投資交易介面中，利用股票代號自動完成（Autocomplete）欄位輸入標的，即可暫存並批次提交交易紀錄。當執行「賣出 (Sell)」時，系統會自動依據「先進先出 (FIFO)」原則重構歷史批次 (lots) 陣列，自動預填歷史取得之台幣或美金成本，藉此推算庫存損益與歷史持有均價。
+                </p>
               </div>
             </div>
           )}
 
           {activeTab === 'faq' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.84rem', lineHeight: '1.5', color: 'var(--text-secondary)' }}>
-              <div>
-                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '0.9rem' }}>Q1: 為什麼有時候數據更新有延遲？</h4>
-                <p style={{ margin: 0 }}>本系統採用 Firestore 即時連線。若在網絡中斷或防火牆封鎖環境中，系統會啟用本地 Cache 緩衝快取，並在連線恢復時自動推送覆蓋。</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
+                  Q：為什麼系統禁止我直接修改歷史紀錄的「金額」或「帳戶」？
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  A：為確保會計帳務之安全性與資料一致性，系統設有防護機制，禁止直接修改已寫入的歷史交易金額或關聯帳戶。直接修改歷史資料會破壞前後期帳務審計，並產生無法對帳的「幽靈帳」。維持原始數據（Raw Data）的不可變性是確保資產追蹤平順之核心基礎。
+                </p>
               </div>
-              <div>
-                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '0.9rem' }}>Q2: 資料如何備份至 Google 試算表？</h4>
-                <p style={{ margin: 0 }}>每次您儲存資料或送出交易時，系統會在背景以 Google Apps Script 將整份資料加密無感備份到您的 Google 雲端試算表。</p>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
+                  Q：如果記錯金額或扣錯帳戶，我該如何修正？
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  A：請使用「作廢退款」之二階段修正機制：點選該筆紀錄右側的垃圾桶圖示，並填寫作廢原因。系統將自動產生一筆方向相反的沖銷分錄，將資金全數退回原始錢包；沖銷完成後，請重新登錄正確的交易帳目。
+                </p>
               </div>
-              <div>
-                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '0.9rem' }}>Q3: 軌跡紀錄可以保留多久？</h4>
-                <p style={{ margin: 0 }}>為了防止單一文件體積膨脹，操作歷史軌跡採用 150 筆的先進先出滑動視窗限制。這能保證紀錄長期可供追溯，且不影響網頁加載速度。</p>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
+                  Q：為什麼美股部位的未實現損益，跟券商 App（如投資先生）顯示的有一點點落差？
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  A：本系統是以實際歷史批次 (lots) 交易紀錄進行先進先出 (FIFO) 之精準成本估算，且市值已自動扣除預估的複委託手續費。若與券商 App 存在微幅落差，屬合理計算景深，您亦可利用資產操作面板中的「校正回歸」功能進行微調。
+                </p>
+              </div>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
+                  Q：什麼是「餘額校正」，它會影響我本月的收支預算進度嗎？
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  A：「餘額校正」（校正回歸）僅用於修正零星匯差、非預期手續費等帳面誤差。此操作在會計科目上歸類為獨立修正屬性，絕對不會計入當月的日常支出預算或現金流統計。
+                </p>
+              </div>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '16px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
+                  Q：定期帳單的「一鍵認列」是如何運作的？會自動扣款嗎？
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                  A：此功能為「半自動提醒機制」，不會自動執行銀行扣款。點擊認列後，系統會於當日產生實質支出分錄，並透過時區安全演算法將下一次扣款日依週期（如每月或每年）遞增，防止日期偏移。若該期為變動金額（如水電費），系統會彈出輸入欄位提示，以利手動填寫實際金額。
+                </p>
               </div>
             </div>
           )}
 
           {activeTab === 'logs' && (
-            <div>
-              {logs.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>📭 目前尚無操作紀錄。</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {loadingLogs && dbLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>載入中...</div>
+              ) : dbLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>目前尚無操作紀錄。</div>
               ) : (
-                <div className="timeline-list">
-                  {logs.map((log, idx) => (
-                    <div key={idx} className="timeline-item">
-                      <div className={getTimelineDotClass(log.action)} />
-                      <div className="timeline-meta">
-                        <span className="timeline-operator">{log.operator}</span>
-                        <span>{formatTimestamp(log.timestamp)}</span>
+                <>
+                  <div className="timeline-list" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+                    {dbLogs.map((log, idx) => (
+                      <div key={log.id || idx} className="timeline-item">
+                        <div className={getTimelineDotClass(log.action)} />
+                        <div className="timeline-meta">
+                          <span className="timeline-operator">{log.operator}</span>
+                          <span>{formatTimestamp(log.timestamp)}</span>
+                        </div>
+                        <div className="timeline-desc">{log.detail}</div>
                       </div>
-                      <div className="timeline-desc">{log.detail}</div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  {hasMoreLogs && (
+                    <button 
+                      onClick={() => fetchLogs(false)} 
+                      disabled={loadingLogs}
+                      className="glass-btn" 
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px', 
+                        borderRadius: '12px', 
+                        fontSize: '0.8rem',
+                        color: 'var(--text-primary)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        cursor: 'pointer',
+                        marginTop: '8px'
+                      }}
+                    >
+                      {loadingLogs ? '載入中...' : '載入先前軌跡'}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1891,12 +2103,12 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
                 <span>系統版本</span>
-                <span style={{ color: '#ffffff', fontWeight: '600' }}>v1.2.0 ( potato-steward-glass )</span>
+                <span style={{ color: '#ffffff', fontWeight: '600' }}>v2.4.0 ( potato-steward-hig )</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
                 <span>資料庫狀態</span>
                 <span style={{ color: window.location.hostname === 'localhost' ? 'var(--accent-orange)' : 'var(--accent-green)', fontWeight: '600' }}>
-                  {window.location.hostname === 'localhost' ? '🔌 本地模擬開發模式' : '🟢 雲端 Firestore 連線中'}
+                  {window.location.hostname === 'localhost' ? '本地模擬開發模式' : '雲端 Firestore 連線中'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
@@ -1908,8 +2120,8 @@ const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName 
                 <span style={{ color: '#ffffff', fontWeight: '600', fontSize: '0.78rem' }}>{currentUser?.email || '無'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-                <span>軌跡紀錄長度</span>
-                <span style={{ color: '#ffffff', fontWeight: '600' }}>{logs.length} / 150 筆</span>
+                <span>系統操作軌跡</span>
+                <span style={{ color: '#ffffff', fontWeight: '600' }}>雲端獨立儲存 (保留所有歷史紀錄)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>歷史明細總數</span>

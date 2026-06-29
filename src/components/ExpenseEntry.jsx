@@ -656,9 +656,9 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 付款方式</span>
               <SegmentedControl 
                 options={[
-                  { label: '共同直接付', value: 'jointCash' }, 
-                  { label: '大狗狗代墊', value: 'userA' }, 
-                  { label: '阿陞代墊', value: 'userB' }
+                  { label: '共同直接付 🏫', value: 'jointCash' }, 
+                  { label: '大狗狗代墊 🐕', value: 'userA' }, 
+                  { label: '阿陞代墊 🐶', value: 'userB' }
                 ]} 
                 value={jointAdvanced} 
                 onChange={setJointAdvanced} 
@@ -744,7 +744,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>👤 記誰的帳？</span>
-              <SegmentedControl options={[{ label: '大狗狗', value: 'userA' }, { label: '阿陞', value: 'userB' }]} value={persUser} onChange={setPersUser} />
+              <SegmentedControl options={[{ label: '大狗狗 🐕', value: 'userA' }, { label: '阿陞 🐶', value: 'userB' }]} value={persUser} onChange={setPersUser} />
             </div>
 
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
@@ -832,7 +832,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
 
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>帳單歸屬</span>
-                  <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗個人', value: 'userA' }, { label: '阿陞個人', value: 'userB' }]} value={billPayer} onChange={(v) => { setBillPayer(v); setBillScope(v === 'jointCash' ? 'joint' : 'personal'); }} />
+                  <SegmentedControl options={[{ label: '共同帳戶 🏫', value: 'jointCash' }, { label: '大狗狗個人 🐕', value: 'userA' }, { label: '阿陞個人 🐶', value: 'userB' }]} value={billPayer} onChange={(v) => { setBillPayer(v); setBillScope(v === 'jointCash' ? 'joint' : 'personal'); }} />
                 </div>
 
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>

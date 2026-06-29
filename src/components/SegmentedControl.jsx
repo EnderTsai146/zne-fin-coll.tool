@@ -32,15 +32,22 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
   return (
     <div
       ref={containerRef}
+      className="segmented-control-container"
       style={{
         display: 'flex',
         background: 'rgba(255, 255, 255, 0.06)',
         borderRadius: '14px',
         padding: '3px',
         gap: '3px',
-        flexWrap: 'wrap',
         position: 'relative',
         isolation: 'isolate',
+        overflowX: 'auto',
+        flexWrap: 'nowrap',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        WebkitOverflowScrolling: 'touch',
+        width: '100%',
+        boxSizing: 'border-box'
       }}
     >
       {/* Liquid sliding pill */}
@@ -69,15 +76,15 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
             key={opt.value}
             onClick={() => !isDisabled && onChange(opt.value)}
             style={{
-              flex: 1,
+              flex: '1 0 auto',
               textAlign: 'center',
-              padding: '9px 6px',
+              padding: '9px 12px',
               borderRadius: '11px',
               fontSize: '0.84rem',
               fontWeight: isSelected ? '600' : '500',
               fontFamily: 'var(--font-family)',
               cursor: isDisabled ? 'not-allowed' : 'pointer',
-              minWidth: '56px',
+              minWidth: 'fit-content',
               position: 'relative',
               zIndex: 1,
 

@@ -2595,3 +2595,12 @@ div {
     transform: translateY(0);
   }
 }
+
+/* Hide scrollbar for SegmentedControl horizontal scrolling */
+.segmented-control-container::-webkit-scrollbar {
+  display: none !important;
+}
+.segmented-control-container {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}

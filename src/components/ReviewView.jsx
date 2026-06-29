@@ -340,9 +340,9 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
                 <AnimNum value={stats.totalIncome} />
               </div>
               <div className="review-hero-sub" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                <span className="nobrk">大狗狗: {formatMoney(stats.incomeUserA)}</span>
+                <span className="nobrk">大狗狗 🐕: {formatMoney(stats.incomeUserA)}</span>
                 <span className="nobrk">｜</span>
-                <span className="nobrk">阿陞: {formatMoney(stats.incomeUserB)}</span>
+                <span className="nobrk">阿陞 🐶: {formatMoney(stats.incomeUserB)}</span>
               </div>
             </div>
             <div className="review-hero-item review-hero-expense">
@@ -456,9 +456,9 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
         <div className="glass-card">
           <h3 style={{ margin: '0 0 16px 0', fontWeight: 700, fontSize: '1.05rem' }}>👥 雙人帳戶消費分析</h3>
           {[
-            { label: '大狗狗', total: stats.expenseUserA, items: stats.topUserA, color: 'var(--accent-pink)', borderColor: 'rgba(255,45,85,0.25)' },
-            { label: '阿陞', total: stats.expenseUserB, items: stats.topUserB, color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.25)' },
-            { label: '共同帳戶', total: stats.expenseJoint, items: stats.topJoint, color: 'var(--accent-orange)', borderColor: 'rgba(255,149,0,0.25)' },
+            { label: '大狗狗 🐕', total: stats.expenseUserA, items: stats.topUserA, color: 'var(--accent-pink)', borderColor: 'rgba(255,45,85,0.25)' },
+            { label: '阿陞 🐶', total: stats.expenseUserB, items: stats.topUserB, color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.25)' },
+            { label: '共同帳戶 🏫', total: stats.expenseJoint, items: stats.topJoint, color: 'var(--accent-orange)', borderColor: 'rgba(255,149,0,0.25)' },
           ].map((acc, idx) => (
             <div key={idx} className="review-account-block" style={{ borderColor: acc.borderColor }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>

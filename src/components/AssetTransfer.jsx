@@ -657,7 +657,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           <div className="inset-group-card">
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>操作帳戶</span>
-              <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗', value: 'userA' }, { label: '阿陞', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
+              <SegmentedControl options={[{ label: '共同帳戶 🏫', value: 'jointCash' }, { label: '大狗狗 🐕', value: 'userA' }, { label: '阿陞 🐶', value: 'userB' }]} value={investAccount} onChange={(val) => { setInvestAccount(val); if (val === 'jointCash' && investAction === 'day_trade') setInvestAction('buy'); }} />
             </div>
 
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
@@ -862,7 +862,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           <div className="inset-group-card">
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>操作帳戶</span>
-              <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗', value: 'userA' }, { label: '阿陞', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
+              <SegmentedControl options={[{ label: '共同帳戶 🏫', value: 'jointCash' }, { label: '大狗狗 🐕', value: 'userA' }, { label: '阿陞 🐶', value: 'userB' }]} value={exchangeSource} onChange={setExchangeSource} />
             </div>
 
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
@@ -903,7 +903,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           <div className="inset-group-card">
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>校正帳戶</span>
-              <SegmentedControl options={[{ label: '共同帳戶', value: 'jointCash' }, { label: '大狗狗', value: 'userA' }, { label: '阿陞', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
+              <SegmentedControl options={[{ label: '共同帳戶 🏫', value: 'jointCash' }, { label: '大狗狗 🐕', value: 'userA' }, { label: '阿陞 🐶', value: 'userB' }]} value={calibAccount} onChange={setCalibAccount} />
             </div>
 
             {calibAccount && (
@@ -952,7 +952,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           <div className="inset-group-card">
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>上繳來源</span>
-              <SegmentedControl options={[{ label: `大狗狗`, value: 'userA' }, { label: `阿陞`, value: 'userB' }]} value={transSource} onChange={setTransSource} />
+              <SegmentedControl options={[{ label: `大狗狗 🐕`, value: 'userA' }, { label: `阿陞 🐶`, value: 'userB' }]} value={transSource} onChange={setTransSource} />
             </div>
 
             <div className="inset-group-row">
@@ -981,7 +981,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           <div className="inset-group-card">
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>入帳戶頭</span>
-              <SegmentedControl options={[{ label: `大狗狗`, value: 'userA' }, { label: `阿陞`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} />
+              <SegmentedControl options={[{ label: `大狗狗 🐕`, value: 'userA' }, { label: `阿陞 🐶`, value: 'userB' }]} value={incomeUser} onChange={setIncomeUser} />
             </div>
 
             <div className="inset-group-row">

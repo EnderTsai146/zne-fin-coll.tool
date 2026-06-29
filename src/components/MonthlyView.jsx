@@ -98,7 +98,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const getDebtList = (userKey) => history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false);
 
     const handleSettle = async (targetUser) => {
-        const targetName = targetUser === 'userA' ? '大狗狗' : '阿陞';
+        const targetName = targetUser === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
         const debtAmount = calculateDebt(targetUser);
         if (debtAmount === 0) return await customAlert("目前沒有未結清的款項喔！");
         if (assets.jointCash < debtAmount) return await customAlert(`❌ 共同現金餘額不足以結清 (需 $${debtAmount.toLocaleString()})！`);
@@ -542,7 +542,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         </h3>
                         {['userA', 'userB'].map(user => {
                             const debt = calculateDebt(user);
-                            const name = user === 'userA' ? '大狗狗' : '阿陞';
+                            const name = user === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
                             return (
                                 <div key={user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
                                     <div>
@@ -586,9 +586,9 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             <span className="inset-group-value">
                                 <select style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.88rem', fontFamily: 'var(--font-family)', direction: 'rtl' }} value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
                                     <option value="all">全部對象</option>
-                                    <option value="joint">共同帳戶</option>
-                                    <option value="userA">大狗狗</option>
-                                    <option value="userB">阿陞</option>
+                                    <option value="joint">共同帳戶 🏫</option>
+                                    <option value="userA">大狗狗 🐕</option>
+                                    <option value="userB">阿陞 🐶</option>
                                 </select>
                             </span>
                         </div>
@@ -619,6 +619,17 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '30px' }}><p>📭 沒有符合篩選條件的交易紀錄。</p></div>
                     ) : (
                         <>
+                            <div style={{
+                                fontSize: '0.78rem',
+                                color: 'var(--text-tertiary)',
+                                marginBottom: '10px',
+                                paddingLeft: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}>
+                                <span>✦ 輕觸任意紀錄可進行修改備註或作廢沖銷</span>
+                            </div>
                             {visibleHistory.map((record) => {
                                 let showSign = ''; let amountColor = 'var(--text-primary)';
                                 if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) { showSign = '+'; amountColor = '#30d158'; }
@@ -656,7 +667,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                                 <span style={{ fontSize: '0.72rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>{record.category}</span>
                                                 {record.advancedBy && (
                                                     <span style={{ fontSize: '0.72rem', border: record.isSettled ? '1px solid #30d158' : '1px solid #ff9f0a', color: record.isSettled ? '#30d158' : '#ff9f0a', padding: '1px 6px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', fontWeight: '700' }}>
-                                                        {record.advancedBy === 'userA' ? '大狗狗' : '阿陞'}代墊 {record.isSettled ? ' (已結)' : ' (未結)'}
+                                                        {record.advancedBy === 'userA' ? '大狗狗 🐕' : '阿陞 🐶'}代墊 {record.isSettled ? ' (已結)' : ' (未結)'}
                                                     </span>
                                                 )}
                                             </div>
@@ -719,11 +730,11 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
             {/* HIG 2: Action Sheet Sliding Menu */}
             {activeActionRecord && createPortal(
-                <div className="action-sheet-overlay active" onClick={() => setActiveActionRecord(null)}>
-                    <div className="action-sheet active" onClick={e => e.stopPropagation()}>
+                <div className="action-sheet-overlay" onClick={() => setActiveActionRecord(null)}>
+                    <div className="action-sheet-container" onClick={e => e.stopPropagation()}>
                         <div className="action-sheet-group">
                             <div className="action-sheet-title">此筆交易之管理動作</div>
-                            <button className="action-sheet-button" onClick={() => {
+                            <button className="action-sheet-btn" onClick={() => {
                                 const record = activeActionRecord;
                                 setActiveActionRecord(null);
                                 setEditModalData({ context: record._context, index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note });
@@ -731,7 +742,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                 ✏️ 修改備註與日期
                             </button>
                             {activeActionRecord.category !== '作廢退款' && (
-                                <button className="action-sheet-button action-sheet-button-danger" onClick={async () => {
+                                <button className="action-sheet-btn destructive" onClick={async () => {
                                     const record = activeActionRecord;
                                     setActiveActionRecord(null);
                                     if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
@@ -743,7 +754,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             )}
                         </div>
                         <div className="action-sheet-group">
-                            <button className="action-sheet-button action-sheet-button-cancel" onClick={() => setActiveActionRecord(null)}>
+                            <button className="action-sheet-btn action-sheet-cancel" onClick={() => setActiveActionRecord(null)}>
                                 取消
                             </button>
                         </div>
@@ -802,7 +813,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         <div className="card-sheet-indicator" />
                         <div className="card-sheet-header">
                             <button className="card-sheet-btn-text" onClick={() => setShowSettlementModal(false)}>關閉</button>
-                            <span className="card-sheet-title">{settlementTarget === 'userA' ? '大狗狗' : '阿陞'} 的代墊明細</span>
+                            <span className="card-sheet-title">{settlementTarget === 'userA' ? '大狗狗 🐕' : '阿陞 🐶'} 的代墊明細</span>
                             <span style={{ width: '40px' }} />
                         </div>
 
