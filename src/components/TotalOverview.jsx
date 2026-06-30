@@ -491,7 +491,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             legend: {
                 display: true,
                 position: 'top',
-                labels: { color: 'var(--text-secondary)', font: { size: 10 } }
+                labels: { color: 'rgba(255, 255, 255, 0.85)', font: { size: 10 } }
             },
             tooltip: {
                 mode: 'index',
@@ -511,12 +511,12 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
         scales: {
             x: {
                 grid: { display: false },
-                ticks: { color: 'var(--text-tertiary)', font: { size: 9 } }
+                ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 9 } }
             },
             y: {
                 stacked: true,
                 grid: { color: 'rgba(255, 255, 255, 0.06)' },
-                ticks: { color: 'var(--text-tertiary)', font: { size: 9 } }
+                ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 9 } }
             }
         }
     };

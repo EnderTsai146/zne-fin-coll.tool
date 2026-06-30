@@ -521,7 +521,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                         maintainAspectRatio: false,
                                         plugins: {
                                             legend: {
-                                                labels: { color: 'var(--text-secondary)', font: { size: 10 } }
+                                                labels: { color: 'rgba(255, 255, 255, 0.85)', font: { size: 10 } }
                                             },
                                             tooltip: {
                                                 backgroundColor: 'rgba(28, 28, 30, 0.95)',
@@ -567,7 +567,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                         maintainAspectRatio: false,
                                         plugins: {
                                             legend: {
-                                                labels: { color: 'var(--text-secondary)', font: { size: 10 } }
+                                                labels: { color: 'rgba(255, 255, 255, 0.85)', font: { size: 10 } }
                                             },
                                             tooltip: {
                                                 backgroundColor: 'rgba(28, 28, 30, 0.95)',
@@ -580,8 +580,8 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                             }
                                         },
                                         scales: {
-                                            x: { grid: { display: false }, ticks: { color: 'var(--text-tertiary)', font: { size: 10 } } },
-                                            y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: 'var(--text-tertiary)', font: { size: 10 } } }
+                                            x: { grid: { display: false }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 10 } } },
+                                            y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 10 } } }
                                         }
                                     }} />
                                 </div>
@@ -604,8 +604,8 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                         }
                                     },
                                     scales: {
-                                        x: { grid: { display: false }, ticks: { color: 'var(--text-tertiary)', font: { size: 9 } } },
-                                        y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: 'var(--text-tertiary)', font: { size: 9 } } }
+                                        x: { grid: { display: false }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 9 } } },
+                                        y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 9 } } }
                                     }
                                 }} /></div>
                             </div>
