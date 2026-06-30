@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { auth } from '../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
-const Login = () => {
+const Login = ({ autoLogoutReason, clearAutoLogoutReason }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -11,6 +11,7 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (clearAutoLogoutReason) clearAutoLogoutReason();
     setLoading(true);
     setError('');
 
@@ -29,6 +30,27 @@ const Login = () => {
         <div className="login-logo">🥔</div>
         <div className="login-title">馬鈴薯管家</div>
 
+        {autoLogoutReason && (
+          <div style={{
+            color: 'var(--accent-orange)',
+            marginBottom: '20px',
+            background: 'rgba(255, 149, 0, 0.08)',
+            padding: '12px 14px',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.88rem',
+            fontWeight: '600',
+            border: '1px solid rgba(255, 149, 0, 0.18)',
+            animation: 'slideDown 0.3s ease-out',
+            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}>
+            {autoLogoutReason}
+          </div>
+        )}
+
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: '16px', textAlign: 'left' }}>
             <label style={{
@@ -44,7 +66,7 @@ const Login = () => {
               inputMode="email"
               className="glass-input"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); if (clearAutoLogoutReason) clearAutoLogoutReason(); }}
               placeholder="請輸入 Email"
               required
               autoComplete="username"
@@ -65,7 +87,7 @@ const Login = () => {
               type="password"
               className="glass-input"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); if (clearAutoLogoutReason) clearAutoLogoutReason(); }}
               placeholder="請輸入密碼"
               required
               autoComplete="current-password"

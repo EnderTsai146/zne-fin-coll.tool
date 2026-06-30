@@ -710,10 +710,8 @@ h4 {
 }
 
 /* Modal Layers */
-html.modal-open,
 body.modal-open {
   overflow: hidden !important;
-  height: 100dvh !important;
 }
 
 .modal-backdrop {
@@ -2432,24 +2430,23 @@ div {
 .action-sheet-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   z-index: 10500;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   animation: liquid-fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .action-sheet-container {
-  width: 94%;
-  max-width: 440px;
-  margin-bottom: 24px;
+  width: 90%;
+  max-width: 400px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  animation: action-sheet-slide-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  gap: 16px;
+  animation: action-sheet-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .action-sheet-group {
@@ -2603,4 +2600,26 @@ div {
 .segmented-control-container {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
+}
+
+@keyframes action-sheet-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.action-sheet-preview-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  transform: scale(1.03);
+  transition: transform 0.3s ease;
 }

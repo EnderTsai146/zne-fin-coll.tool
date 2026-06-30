@@ -328,6 +328,7 @@ function App() {
   // --- Inactivity & Session Security Protection (Task 2 & 3) ---
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
   const [timeoutCountdown, setTimeoutCountdown] = useState(15);
+  const [autoLogoutReason, setAutoLogoutReason] = useState('');
   const inactivityTimerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
@@ -347,11 +348,11 @@ function App() {
     }
 
     if (reason === 'inactivity') {
-      customAlert("操作逾時已自動登出");
+      setAutoLogoutReason("操作逾時已自動登出 🛡️");
     } else if (reason === '3days') {
-      customAlert("已達 3 天安全會話限制，請重新登入。");
+      setAutoLogoutReason("已達 3 天安全會話限制，請重新登入 🛡️");
     }
-  }, [customAlert]);
+  }, []);
 
   const resetInactivityTimer = useCallback(() => {
     if (!currentUser) return;
@@ -604,7 +605,7 @@ function App() {
             if (daysElapsed >= 3) {
               localStorage.removeItem('loginTimestamp');
               signOut(auth);
-              customAlert("已達 3 天安全會話限制，請重新登入。");
+              setAutoLogoutReason("已達 3 天安全會話限制，請重新登入 🛡️");
               return;
             }
           } else {
@@ -613,6 +614,7 @@ function App() {
         }
         setCurrentUser(user);
         setOperatorName(USER_MAPPING[user.email] || user.email.split('@')[0]);
+        setAutoLogoutReason('');
         // ★ 不要在此設 loading=false，等 Firestore 資料到位後再解鎖
       } else {
         localStorage.removeItem('loginTimestamp');
@@ -1529,7 +1531,7 @@ function App() {
       {splashPhase === 'exit' && <div className="splash-flash-overlay" />}
     </div>
   );
-  if (!currentUser) return <Login />;
+  if (!currentUser) return <Login autoLogoutReason={autoLogoutReason} clearAutoLogoutReason={() => setAutoLogoutReason('')} />;
 
   // ★ Fix: 不再定義為 render 內的元件，改為預計算變數 + 內嵌 JSX，避免輸入時元件重建導致失焦
   const currentMonth_tb = new Date().toISOString().slice(0, 7);

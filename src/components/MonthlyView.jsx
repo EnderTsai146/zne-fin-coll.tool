@@ -366,6 +366,75 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         return () => observer.disconnect();
     }, [filteredHistory.length]);
 
+    const renderActionRecordPreview = (record) => {
+        if (!record) return null;
+        const isDeleted = record.isDeleted;
+        const textDeco = isDeleted ? 'line-through' : 'none';
+        const borderColor = getTypeColor(record.type);
+
+        let amountColor = '#ff453a';
+        let showSign = '-';
+        if (record.type === 'income') {
+            amountColor = '#30d158';
+            showSign = '+';
+        } else if (record.type === 'calibrate') {
+            amountColor = 'var(--text-tertiary)';
+            showSign = record.total >= 0 ? '+' : '-';
+        } else if (record.type.includes('invest_sell') || record.type === 'liquidate' || record.type === 'personal_invest_profit') {
+            amountColor = '#30d158';
+            showSign = '+';
+        } else if (record.type === 'personal_invest_loss') {
+            amountColor = '#ff453a';
+            showSign = '-';
+        } else if (record.type === 'spend' || record.type === 'expense' || record.type.includes('invest_buy') || record.type === 'exchange' || record.type === 'transfer') {
+            amountColor = '#ff453a';
+            showSign = '-';
+        }
+
+        return (
+            <div 
+                className="glass-card action-sheet-preview-card" 
+                style={{ 
+                    borderLeft: `4px solid ${borderColor}`, 
+                    position: 'relative', 
+                    padding: '14px 16px', 
+                    width: '100%',
+                    boxShadow: `0 12px 30px rgba(0, 0, 0, 0.25), 0 0 15px ${borderColor}2b`,
+                    textAlign: 'left',
+                    pointerEvents: 'none'
+                }}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: '700', fontSize: '0.95rem', color: 'var(--text-primary)', textDecoration: textDeco }}>{record.date || record.month}</span>
+                        <span style={{ fontSize: '0.72rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>{record.category}</span>
+                        {record.advancedBy && (
+                            <span style={{ fontSize: '0.72rem', border: record.isSettled ? '1px solid #30d158' : '1px solid #ff9f0a', color: record.isSettled ? '#30d158' : '#ff9f0a', padding: '1px 6px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', fontWeight: '700' }}>
+                                {record.advancedBy === 'userA' ? '大狗狗 🐕' : '阿陞 🐶'}代墊 {record.isSettled ? ' (已結)' : ' (未結)'}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <span style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: '600', textDecoration: textDeco }}>{record.note === '月結記帳' ? '日常記帳' : record.note}</span>
+                    <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '1.4rem', fontWeight: '900', color: amountColor, textDecoration: textDeco, fontFamily: 'monospace' }}>{showSign}{formatMoney(record.total)}</span>
+                        {record.usdAmount && (
+                            <div style={{ fontSize: '0.8rem', color: '#ff9f0a', fontWeight: '600', textDecoration: textDeco }}>
+                                (含美金 ${record.usdAmount.toFixed(2)} USD)
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                    {record.payer === '共同帳戶' ? <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '6px' }}>共同出資</span> : <span style={{ background: 'rgba(10,132,255,0.08)', color: '#409eff', padding: '2px 6px', borderRadius: '6px' }}>👤 {record.payer}</span>}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
@@ -749,35 +818,41 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                 </>
             )}
 
-            {/* HIG 2: Action Sheet Sliding Menu */}
+            {/* HIG 2: Centered Floating Action Menu with Context Highlight Preview */}
             {activeActionRecord && createPortal(
                 <div className="action-sheet-overlay" onClick={() => setActiveActionRecord(null)}>
                     <div className="action-sheet-container" onClick={e => e.stopPropagation()}>
-                        <div className="action-sheet-group">
-                            <div className="action-sheet-title">此筆交易之管理動作</div>
-                            <button className="action-sheet-btn" onClick={() => {
-                                const record = activeActionRecord;
-                                setActiveActionRecord(null);
-                                setEditModalData({ context: record._context, index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note });
-                            }}>
-                                ✏️ 修改備註與日期
-                            </button>
-                            {activeActionRecord.category !== '作廢退款' && (
-                                <button className="action-sheet-btn destructive" onClick={async () => {
+                        {/* Selected Item Preview Card */}
+                        {renderActionRecordPreview(activeActionRecord)}
+
+                        {/* Floating Action Menu Card */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                            <div className="action-sheet-group" style={{ background: 'rgba(30, 30, 32, 0.95)', border: '1px solid rgba(255, 255, 255, 0.12)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)' }}>
+                                <div className="action-sheet-title" style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>選擇操作</div>
+                                <button className="action-sheet-btn" onClick={() => {
                                     const record = activeActionRecord;
                                     setActiveActionRecord(null);
-                                    if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
-                                        onDelete(record._context);
-                                    }
+                                    setEditModalData({ context: record._context, index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note });
                                 }}>
-                                    🗑️ 作廢此筆交易 (產生反向沖銷)
+                                    ✏️ 修改備註與日期
                                 </button>
-                            )}
-                        </div>
-                        <div className="action-sheet-group">
-                            <button className="action-sheet-btn action-sheet-cancel" onClick={() => setActiveActionRecord(null)}>
-                                取消
-                            </button>
+                                {activeActionRecord.category !== '作廢退款' && (
+                                    <button className="action-sheet-btn destructive" onClick={async () => {
+                                        const record = activeActionRecord;
+                                        setActiveActionRecord(null);
+                                        if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
+                                            onDelete(record._context);
+                                        }
+                                    }}>
+                                        🗑️ 作廢此筆交易 (產生反向沖銷)
+                                    </button>
+                                )}
+                            </div>
+                            <div className="action-sheet-group" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)' }}>
+                                <button className="action-sheet-btn action-sheet-cancel" onClick={() => setActiveActionRecord(null)}>
+                                    取消
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>,
