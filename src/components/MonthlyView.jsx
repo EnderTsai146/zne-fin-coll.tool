@@ -386,6 +386,10 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         } else if (record.type === 'personal_invest_loss') {
             amountColor = '#ff453a';
             showSign = '-';
+        } else if (record.type.includes('invest_day_trade')) {
+            const isProfit = record.note && record.note.includes('獲利');
+            amountColor = isProfit ? '#30d158' : '#ff453a';
+            showSign = isProfit ? '+' : '-';
         } else if (record.type === 'spend' || record.type === 'expense' || record.type.includes('invest_buy') || record.type === 'exchange' || record.type === 'transfer') {
             amountColor = '#ff453a';
             showSign = '-';
@@ -724,6 +728,11 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                 let showSign = ''; let amountColor = 'var(--text-primary)';
                                 if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) { showSign = '+'; amountColor = '#30d158'; }
                                 else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy', 'personal_invest_buy'].includes(record.type)) { showSign = '-'; amountColor = 'var(--text-primary)'; }
+                                else if (record.type.includes('invest_day_trade')) {
+                                    const isProfit = record.note && record.note.includes('獲利');
+                                    showSign = isProfit ? '+' : '-';
+                                    amountColor = isProfit ? '#30d158' : 'var(--text-primary)';
+                                }
                                 else if (['settle', 'transfer', 'exchange', 'calibrate'].includes(record.type)) {
                                     showSign = '🔄 ';
                                     amountColor = record.type === 'calibrate' ? 'var(--text-tertiary)' : '#0a84ff';

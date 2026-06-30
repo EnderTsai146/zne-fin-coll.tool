@@ -22,6 +22,7 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
   const safeUserB = assets.userInvestments?.userB || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const currentData = activeTab === 'jointCash' ? safeJoint : (activeTab === 'userA' ? safeUserA : safeUserB);
+  const currentHistoryFilter = activeTab === 'jointCash' ? '共同' : (activeTab === 'userA' ? '大狗狗' : '阿陞');
   
   const matchesPayer = (payer) => {
     if (!payer) return false;
@@ -94,7 +95,7 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
         const shares = Number(r.shares) || 0;
         const totalTwd = Number(r.total) || 0;
         const totalUsd = Number(r.usdAmount) || 0;
-        const buyPriceUsd = Number(r.buyPrice) || 0;
+        const buyPriceUsd = Number(r.price) || 0;
 
         h.lots.push({
           shares,

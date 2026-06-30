@@ -330,11 +330,11 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     if (isTwdToUsd) {
       newAssets[exchangeSource] -= twd;
       newAssets[usdKey] = (newAssets[usdKey] || 0) + usd;
-      onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `台幣換美金 (買入 $${usd} USD)`, date: txDate });
+      onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `台幣換美金 (買入 $${usd} USD)`, date: txDate, month: txDate.slice(0, 7) });
     } else {
       newAssets[exchangeSource] += twd;
       newAssets[usdKey] = (newAssets[usdKey] || 0) - usd;
-      onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `美金換台幣 (賣出 $${usd} USD)`, date: txDate });
+      onTransaction(newAssets, { type: 'exchange', category: '貨幣換匯', payer: accountName, accountKey: exchangeSource, total: twd, usdAmount: usd, note: `美金換台幣 (賣出 $${usd} USD)`, date: txDate, month: txDate.slice(0, 7) });
     }
 
     setExchangeTwd('');
@@ -363,8 +363,9 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     onTransaction(newAssets, {
       type: 'calibrate', category: '餘額校正', payer: accountName, accountKey: calibAccount,
       total: Math.abs(diffTwd), usdAmount: Math.abs(diffUsd),
+      twdDiff: diffTwd, usdDiff: diffUsd,
       note: `帳戶校正 (台幣異動: ${diffTwd >= 0 ? '+' : ''}${formatMoney(diffTwd)}，美金異動: ${diffUsd >= 0 ? '+' : ''}$${diffUsd.toFixed(2)} USD)`,
-      date: txDate
+      date: txDate, month: txDate.slice(0, 7)
     });
 
     setCalibTwd('');
@@ -486,6 +487,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
         price: item.stockPrice || 0,
         market: item.stockMarket || 'TW',
         symbol: item.stockSymbol || '',
+        settleCurrency: item.settleCurrency || 'TWD',
         category: '投資理財'
       };
 

@@ -1020,11 +1020,15 @@ function App() {
       else if (historyRecord.type === 'calibrate') { color = "#95a5a6"; title = "餘額校正"; }
       else if (historyRecord.type.includes('invest_sell')) { color = "#f1c40f"; title = "投資變現"; }
       else if (historyRecord.type.includes('invest_buy')) { color = "#8e44ad"; title = "買入投資"; }
+      else if (historyRecord.type.includes('invest_day_trade')) { color = "#af52de"; title = "當沖結算"; }
 
       let signPrefix = '';
       if (['income', 'joint_invest_sell', 'personal_invest_sell', 'personal_invest_profit', 'liquidate'].includes(historyRecord.type)) { signPrefix = '+'; }
       else if (['spend', 'expense', 'joint_invest_buy', 'personal_invest_buy', 'personal_invest_loss'].includes(historyRecord.type)) { signPrefix = '-'; }
       else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
+      else if (historyRecord.type.includes('invest_day_trade')) {
+        signPrefix = (historyRecord.note && historyRecord.note.includes('獲利')) ? '+' : '-';
+      }
 
       const usdNote = historyRecord.usdAmount ? ` (含 $${historyRecord.usdAmount} USD)` : '';
       const payload = { title: title, amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`, category: historyRecord.category, note: `${historyRecord.note || '無'}${usdNote}`, date: historyRecord.date, color: color, operator: operatorName };
@@ -1302,7 +1306,7 @@ function App() {
         }
         break;
       case 'joint_invest_buy':
-        if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) + record.usdAmount;
+        if (record.settleCurrency === 'USD') newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) + record.usdAmount;
         else newAssets.jointCash += record.total;
 
         if (record.investType && newAssets.jointInvestments[record.investType] !== undefined) {
@@ -1311,7 +1315,7 @@ function App() {
         break;
       case 'personal_invest_buy':
         if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
-          if (record.usdAmount) {
+          if (record.settleCurrency === 'USD') {
             newAssets[`${record.accountKey}_usd`] = (newAssets[`${record.accountKey}_usd`] || 0) + record.usdAmount;
           } else {
             newAssets[record.accountKey] += record.total;
@@ -1321,7 +1325,7 @@ function App() {
         break;
       case 'joint_invest_sell':
       case 'liquidate': {
-        if (record.usdAmount) newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
+        if (record.settleCurrency === 'USD') newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
         else newAssets.jointCash -= record.total;
 
         const sellType = record.investType || (record.note && record.note.split(' ')[1]);
@@ -1332,12 +1336,20 @@ function App() {
       }
       case 'personal_invest_sell':
         if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
-          if (record.usdAmount) {
+          if (record.settleCurrency === 'USD') {
             newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
           } else {
             newAssets[record.accountKey] -= record.total;
           }
           newAssets.userInvestments[record.accountKey][record.investType] += (record.principal || record.total);
+        }
+        break;
+      case 'personal_invest_day_trade':
+      case 'joint_invest_day_trade':
+        if (record.note && record.note.includes('獲利')) {
+          newAssets[record.accountKey] -= record.total;
+        } else if (record.note && record.note.includes('虧損')) {
+          newAssets[record.accountKey] += record.total;
         }
         break;
       default: break;
