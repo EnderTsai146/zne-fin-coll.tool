@@ -449,11 +449,15 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
       const isJoint = item.investAccount === 'jointCash';
       const payerName = isJoint ? '共同帳戶' : (item.investAccount === 'userA' ? '大狗狗🐕' : '阿陞🐶');
       const usdKey = `${item.investAccount}_usd`;
+      const invTypeKey = item.investType === 'fund' ? 'fund' : (item.investType === 'deposit' ? 'deposit' : (item.investType === 'other' ? 'other' : 'stock'));
 
       let record = {
         date: txDate, month: txDate.slice(0, 7),
         type: `${item.investAccount === 'jointCash' ? 'joint' : 'personal'}_invest_${item.investAction}`,
         payer: payerName,
+        accountKey: item.investAccount,
+        investType: invTypeKey,
+        principal: item.investPrincipal || 0,
         total: item.investAmount,
         usdAmount: item.usTotalUsd || 0,
         shares: item.stockShares || 0,
@@ -466,17 +470,35 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
       if (item.investAction === 'buy') {
         if (item.stockMarket === 'US' && item.settleCurrency === 'USD') {
           newAssets[usdKey] -= item.usTotalUsd;
-          newAssets.jointInvestments.stock += Math.round(item.usTotalUsd * (currentFxRate || 31.5));
-          record.total = Math.round(item.usTotalUsd * (currentFxRate || 31.5));
+          const converted = Math.round(item.usTotalUsd * (currentFxRate || 31.5));
+          if (isJoint) {
+            newAssets.jointInvestments.stock += converted;
+          } else {
+            if (!newAssets.userInvestments) newAssets.userInvestments = { userA: {}, userB: {} };
+            if (!newAssets.userInvestments[item.investAccount]) newAssets.userInvestments[item.investAccount] = {};
+            newAssets.userInvestments[item.investAccount].stock = (newAssets.userInvestments[item.investAccount].stock || 0) + converted;
+          }
+          record.total = converted;
           record.note = `美股買入 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 美金交割)`;
         } else if (item.stockMarket === 'US' && item.settleCurrency === 'TWD') {
           newAssets[item.investAccount] -= item.investAmount;
-          newAssets.jointInvestments.stock += item.investAmount;
+          if (isJoint) {
+            newAssets.jointInvestments.stock += item.investAmount;
+          } else {
+            if (!newAssets.userInvestments) newAssets.userInvestments = { userA: {}, userB: {} };
+            if (!newAssets.userInvestments[item.investAccount]) newAssets.userInvestments[item.investAccount] = {};
+            newAssets.userInvestments[item.investAccount].stock = (newAssets.userInvestments[item.investAccount].stock || 0) + item.investAmount;
+          }
           record.note = `美股買入 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 台幣交割, 匯率: ${item.usFxRate})`;
         } else {
           newAssets[item.investAccount] -= item.investAmount;
-          const invKey = item.investType === 'fund' ? 'fund' : (item.investType === 'deposit' ? 'deposit' : 'stock');
-          newAssets.jointInvestments[invKey] += item.investAmount;
+          if (isJoint) {
+            newAssets.jointInvestments[invTypeKey] += item.investAmount;
+          } else {
+            if (!newAssets.userInvestments) newAssets.userInvestments = { userA: {}, userB: {} };
+            if (!newAssets.userInvestments[item.investAccount]) newAssets.userInvestments[item.investAccount] = {};
+            newAssets.userInvestments[item.investAccount][invTypeKey] = (newAssets.userInvestments[item.investAccount][invTypeKey] || 0) + item.investAmount;
+          }
           record.note = `${item.investType === 'fund' ? '基金' : item.investType === 'deposit' ? '定存' : '台股'}買入 (${item.stockSymbol ? `代碼: ${item.stockSymbol}, ` : ''}${item.stockShares ? `${item.stockShares}股 @ $${item.stockPrice}, ` : ''}台幣支出)`;
         }
       } else if (item.investAction === 'sell') {
@@ -484,17 +506,34 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
         if (item.stockMarket === 'US' && item.settleCurrency === 'USD') {
           newAssets[usdKey] += item.usTotalUsd;
           principalTwd = Math.round(item.usInvestPrincipalUsd * (currentFxRate || 31.5));
-          newAssets.jointInvestments.stock -= principalTwd;
+          if (isJoint) {
+            newAssets.jointInvestments.stock -= principalTwd;
+          } else {
+            if (!newAssets.userInvestments) newAssets.userInvestments = { userA: {}, userB: {} };
+            if (!newAssets.userInvestments[item.investAccount]) newAssets.userInvestments[item.investAccount] = {};
+            newAssets.userInvestments[item.investAccount].stock = (newAssets.userInvestments[item.investAccount].stock || 0) - principalTwd;
+          }
           record.total = Math.round(item.usTotalUsd * (currentFxRate || 31.5));
           record.note = `美股賣出 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 美金交割, 實現本金 $${item.usInvestPrincipalUsd} USD)`;
         } else if (item.stockMarket === 'US' && item.settleCurrency === 'TWD') {
           newAssets[item.investAccount] += item.investAmount;
-          newAssets.jointInvestments.stock -= principalTwd;
+          if (isJoint) {
+            newAssets.jointInvestments.stock -= principalTwd;
+          } else {
+            if (!newAssets.userInvestments) newAssets.userInvestments = { userA: {}, userB: {} };
+            if (!newAssets.userInvestments[item.investAccount]) newAssets.userInvestments[item.investAccount] = {};
+            newAssets.userInvestments[item.investAccount].stock = (newAssets.userInvestments[item.investAccount].stock || 0) - principalTwd;
+          }
           record.note = `美股賣出 (代碼: ${item.stockSymbol}, ${item.stockShares}股 @ $${item.stockPrice} USD, 台幣交割, 匯率: ${item.usFxRate}, 實現本金 $${principalTwd})`;
         } else {
           newAssets[item.investAccount] += item.investAmount;
-          const invKey = item.investType === 'fund' ? 'fund' : (item.investType === 'deposit' ? 'deposit' : 'stock');
-          newAssets.jointInvestments[invKey] -= principalTwd;
+          if (isJoint) {
+            newAssets.jointInvestments[invTypeKey] -= principalTwd;
+          } else {
+            if (!newAssets.userInvestments) newAssets.userInvestments = { userA: {}, userB: {} };
+            if (!newAssets.userInvestments[item.investAccount]) newAssets.userInvestments[item.investAccount] = {};
+            newAssets.userInvestments[item.investAccount][invTypeKey] = (newAssets.userInvestments[item.investAccount][invTypeKey] || 0) - principalTwd;
+          }
           record.note = `${item.investType === 'fund' ? '基金' : item.investType === 'deposit' ? '定存' : '台股'}賣出 (${item.stockSymbol ? `代碼: ${item.stockSymbol}, ` : ''}拿回台幣 ${item.investAmount}, 原本金 ${principalTwd})`;
         }
       } else if (item.investAction === 'day_trade') {

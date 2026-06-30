@@ -22,7 +22,14 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
   const safeUserB = assets.userInvestments?.userB || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const currentData = activeTab === 'jointCash' ? safeJoint : (activeTab === 'userA' ? safeUserA : safeUserB);
-  const currentHistoryFilter = activeTab === 'jointCash' ? '共同帳戶 🏫' : (activeTab === 'userA' ? '大狗狗 🐕' : '阿陞 🐶');
+  
+  const matchesPayer = (payer) => {
+    if (!payer) return false;
+    if (activeTab === 'jointCash') return payer.includes('共同');
+    if (activeTab === 'userA') return payer.includes('大狗狗');
+    if (activeTab === 'userB') return payer.includes('阿陞');
+    return false;
+  };
 
   // ★ 修正核心：使用 FIFO 計算正確的持倉成本（含歸檔基底支援）
   const stockHoldings = useMemo(() => {
@@ -39,10 +46,15 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
           actualSym = parts.slice(1).join('_');
         }
 
-        // Map the owner to the currentHistoryFilter ('用戶1', '用戶2', '共同帳戶')
-        const ownerMatch = owner.replace(/🐶|🐕/g, '');
+        const matchesOwner = (ownerStr) => {
+          if (!ownerStr) return false;
+          if (activeTab === 'jointCash') return ownerStr.includes('共同');
+          if (activeTab === 'userA') return ownerStr.includes('大狗狗');
+          if (activeTab === 'userB') return ownerStr.includes('阿陞');
+          return false;
+        };
 
-        if (data.market && currentHistoryFilter.includes(ownerMatch)) {
+        if (data.market && matchesOwner(owner)) {
           holdings[actualSym] = {
             shares: data.shares || 0,
             market: data.market,
@@ -61,7 +73,7 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
     }
     // 按日期排序，確保 FIFO 正確
     const sorted = [...history]
-      .filter(r => !r.isDeleted && r.symbol && r.payer && r.payer.includes(currentHistoryFilter))
+      .filter(r => !r.isDeleted && r.symbol && r.payer && matchesPayer(r.payer))
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || '').localeCompare(b.timestamp || ''));
 
     sorted.forEach(r => {
