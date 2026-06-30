@@ -284,6 +284,28 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     setTransSource(null);
   };
 
+  const handleExchangeTwdChange = (val) => {
+    setExchangeTwd(formatInputMoney(val));
+    const cleanTwd = parseMoney(val);
+    if (cleanTwd > 0 && currentFxRate > 0) {
+      const computedUsd = cleanTwd / currentFxRate;
+      setExchangeUsd(formatInputMoney(Number(computedUsd.toFixed(2)).toString()));
+    } else if (cleanTwd === 0) {
+      setExchangeUsd('');
+    }
+  };
+
+  const handleExchangeUsdChange = (val) => {
+    setExchangeUsd(formatInputMoney(val));
+    const cleanUsd = parseMoney(val);
+    if (cleanUsd > 0 && currentFxRate > 0) {
+      const computedTwd = Math.round(cleanUsd * currentFxRate);
+      setExchangeTwd(formatInputMoney(computedTwd.toString()));
+    } else if (cleanUsd === 0) {
+      setExchangeTwd('');
+    }
+  };
+
   const handleExchange = async () => {
     if (!exchangeSource) return await customAlert("請選擇換匯帳戶！");
     if (!exchangeDir) return await customAlert("請選擇換匯方向！");
@@ -924,14 +946,14 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
             <div className="inset-group-row">
               <span className="inset-group-label">台幣總額</span>
               <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                <input type="text" inputMode="numeric" className="inset-group-input" value={exchangeTwd} onChange={e => setExchangeTwd(formatInputMoney(e.target.value))} placeholder="$0" />
+                <input type="text" inputMode="numeric" className="inset-group-input" value={exchangeTwd} onChange={e => handleExchangeTwdChange(e.target.value)} placeholder="$0" />
               </span>
             </div>
 
             <div className="inset-group-row">
               <span className="inset-group-label">美金總額 (USD)</span>
               <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                <input type="text" inputMode="decimal" className="inset-group-input" value={exchangeUsd} onChange={e => setExchangeUsd(formatInputMoney(e.target.value))} placeholder="$0.00" />
+                <input type="text" inputMode="decimal" className="inset-group-input" value={exchangeUsd} onChange={e => handleExchangeUsdChange(e.target.value)} placeholder="$0.00" />
               </span>
             </div>
           </div>
