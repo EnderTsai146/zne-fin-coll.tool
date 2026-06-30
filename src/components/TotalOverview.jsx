@@ -296,13 +296,13 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
             chartDataPoints[d] = currentBal;
 
-            // Reconstruct categories
-            const twdCashVal = currentBalances.userA + currentBalances.userB + currentBalances.jointCash;
-            const usdCashVal = Math.round((currentBalances.userA_usd + currentBalances.userB_usd + currentBalances.jointCash_usd) * currentFxRate);
-            const stockVal = (currentBalances.userInvestments?.userA?.stock || 0) + (currentBalances.userInvestments?.userB?.stock || 0) + (currentBalances.jointInvestments?.stock || 0);
-            const fundVal = (currentBalances.userInvestments?.userA?.fund || 0) + (currentBalances.userInvestments?.userB?.fund || 0) + (currentBalances.jointInvestments?.fund || 0);
-            const depositVal = (currentBalances.userInvestments?.userA?.deposit || 0) + (currentBalances.userInvestments?.userB?.deposit || 0) + (currentBalances.jointInvestments?.deposit || 0);
-            const otherVal = (currentBalances.userInvestments?.userA?.other || 0) + (currentBalances.userInvestments?.userB?.other || 0) + (currentBalances.jointInvestments?.other || 0);
+            // Reconstruct categories (clamped to 0)
+            const twdCashVal = Math.max(0, currentBalances.userA + currentBalances.userB + currentBalances.jointCash);
+            const usdCashVal = Math.max(0, Math.round((currentBalances.userA_usd + currentBalances.userB_usd + currentBalances.jointCash_usd) * currentFxRate));
+            const stockVal = Math.max(0, (currentBalances.userInvestments?.userA?.stock || 0) + (currentBalances.userInvestments?.userB?.stock || 0) + (currentBalances.jointInvestments?.stock || 0));
+            const fundVal = Math.max(0, (currentBalances.userInvestments?.userA?.fund || 0) + (currentBalances.userInvestments?.userB?.fund || 0) + (currentBalances.jointInvestments?.fund || 0));
+            const depositVal = Math.max(0, (currentBalances.userInvestments?.userA?.deposit || 0) + (currentBalances.userInvestments?.userB?.deposit || 0) + (currentBalances.jointInvestments?.deposit || 0));
+            const otherVal = Math.max(0, (currentBalances.userInvestments?.userA?.other || 0) + (currentBalances.userInvestments?.userB?.other || 0) + (currentBalances.jointInvestments?.other || 0));
 
             categoriesDataPoints.cash[d] = twdCashVal;
             categoriesDataPoints.usd[d] = usdCashVal;
@@ -344,7 +344,30 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 }
             });
 
-            currentBal -= dayNetChange;
+            // Clamp balances to 0 to prevent negative values from audit trail mismatches or manual calibrations
+            currentBalances.userA = Math.max(0, currentBalances.userA);
+            currentBalances.userA_usd = Math.max(0, currentBalances.userA_usd);
+            currentBalances.userB = Math.max(0, currentBalances.userB);
+            currentBalances.userB_usd = Math.max(0, currentBalances.userB_usd);
+            currentBalances.jointCash = Math.max(0, currentBalances.jointCash);
+            currentBalances.jointCash_usd = Math.max(0, currentBalances.jointCash_usd);
+            
+            if (currentBalances.userInvestments) {
+                ['userA', 'userB'].forEach(usr => {
+                    if (currentBalances.userInvestments[usr]) {
+                        ['stock', 'fund', 'deposit', 'other'].forEach(k => {
+                            currentBalances.userInvestments[usr][k] = Math.max(0, currentBalances.userInvestments[usr][k]);
+                        });
+                    }
+                });
+            }
+            if (currentBalances.jointInvestments) {
+                ['stock', 'fund', 'deposit', 'other'].forEach(k => {
+                    currentBalances.jointInvestments[k] = Math.max(0, currentBalances.jointInvestments[k]);
+                });
+            }
+
+            currentBal = Math.max(0, currentBal - dayNetChange);
         }
 
         let labels = Object.keys(chartDataPoints).sort();
