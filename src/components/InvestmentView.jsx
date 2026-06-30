@@ -563,7 +563,7 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontWeight: '700', fontSize: '1.05rem', color: amountColor }}>{amountStr}</div>
-                  {r.usdAmount && <div style={{ fontSize: '0.73rem', color: 'var(--accent-orange)', fontWeight: '600' }}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
+                  {!!r.usdAmount && <div style={{ fontSize: '0.73rem', color: 'var(--accent-orange)', fontWeight: '600' }}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
                   {profitStr && <div style={{ fontSize: '0.73rem', color: profitStr.includes('賺') ? 'var(--accent-green)' : 'var(--accent-red)' }}>{profitStr}</div>}
                 </div>
               </div>
