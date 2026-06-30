@@ -2515,38 +2515,35 @@ div {
 .card-sheet-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   z-index: 10200;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   animation: liquid-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.card-sheet-container {
-  width: 100%;
-  max-width: 600px;
-  height: 82dvh;
-  background: rgba(20, 20, 22, 0.92);
-  border-radius: 20px 20px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.3);
-  padding: 16px 20px 24px 20px;
+.card-sheet {
+  width: 92%;
+  max-width: 500px;
+  height: auto;
+  max-height: 85dvh;
+  background: rgba(20, 20, 22, 0.95);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  padding: 24px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  animation: card-sheet-slide-up 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: action-sheet-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
+.card-sheet-indicator,
 .card-sheet-drag-handle {
-  width: 36px;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 2.5px;
-  margin: 0 auto 16px auto;
-  flex-shrink: 0;
+  display: none !important;
 }
 
 .card-sheet-header {
@@ -2577,6 +2574,7 @@ div {
   font-weight: 700;
 }
 
+.card-sheet-content,
 .card-sheet-body {
   flex: 1;
   overflow-y: auto;

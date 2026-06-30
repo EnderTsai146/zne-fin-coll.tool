@@ -417,11 +417,11 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                    <span style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: '600', textDecoration: textDeco }}>{record.note === '月結記帳' ? '日常記帳' : record.note}</span>
-                    <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '1.4rem', fontWeight: '900', color: amountColor, textDecoration: textDeco, fontFamily: 'monospace' }}>{showSign}{formatMoney(record.total)}</span>
+                    <span style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: '600', textDecoration: textDeco, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{record.note === '月結記帳' ? '日常記帳' : record.note}</span>
+                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
+                        <span style={{ fontSize: '1.4rem', fontWeight: '900', color: amountColor, textDecoration: textDeco, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{showSign}{formatMoney(record.total)}</span>
                         {record.usdAmount && (
-                            <div style={{ fontSize: '0.8rem', color: '#ff9f0a', fontWeight: '600', textDecoration: textDeco }}>
+                            <div style={{ fontSize: '0.8rem', color: '#ff9f0a', fontWeight: '600', textDecoration: textDeco, whiteSpace: 'nowrap' }}>
                                 (含美金 ${record.usdAmount.toFixed(2)} USD)
                             </div>
                         )}
@@ -767,11 +767,11 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                         </div>
 
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                                            <span style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: '600', textDecoration: textDeco }}>{record.note === '月結記帳' ? '日常記帳' : record.note}</span>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: amountColor, textDecoration: textDeco, fontFamily: 'monospace' }}>{showSign}{formatMoney(record.total)}</span>
+                                            <span style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: '600', textDecoration: textDeco, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{record.note === '月結記帳' ? '日常記帳' : record.note}</span>
+                                            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
+                                                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: amountColor, textDecoration: textDeco, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{showSign}{formatMoney(record.total)}</span>
                                                 {record.usdAmount && (
-                                                    <div style={{ fontSize: '0.8rem', color: isDeleted ? 'var(--text-tertiary)' : '#ff9f0a', fontWeight: '600', textDecoration: textDeco }}>
+                                                    <div style={{ fontSize: '0.8rem', color: isDeleted ? 'var(--text-tertiary)' : '#ff9f0a', fontWeight: '600', textDecoration: textDeco, whiteSpace: 'nowrap' }}>
                                                         (含美金 ${record.usdAmount.toFixed(2)} USD)
                                                     </div>
                                                 )}
