@@ -1,5 +1,6 @@
 // src/components/ReviewView.jsx
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { getBudgetForMonth } from '../utils/budgetUtils';
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 
@@ -197,11 +198,6 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
       } else if (r.type === 'expense' || r.type === 'spend') {
         totalExpense += r.total;
 
-        // Necessity accumulation
-        const necessity = r.necessity || 'need';
-        if (necessity === 'want') wantTotal += r.total;
-        else needTotal += r.total;
-
         // Track biggest single spend
         if (!biggestSpend || r.total > biggestSpend.total) biggestSpend = r;
 
@@ -242,6 +238,20 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
         }
       }
     });
+
+    // Dynamic necessity calculation
+    const monthlyBudgets = getBudgetForMonth(assets, selectedMonth);
+    let calculatedNeedTotal = 0;
+    let calculatedWantTotal = 0;
+    Object.keys(catTotals).forEach(cat => {
+      const spent = catTotals[cat] || 0;
+      const budget = monthlyBudgets[cat] !== undefined ? monthlyBudgets[cat] : 0;
+      const needVal = Math.min(spent, budget);
+      calculatedNeedTotal += needVal;
+      calculatedWantTotal += (spent - needVal);
+    });
+    needTotal = calculatedNeedTotal;
+    wantTotal = calculatedWantTotal;
 
     const totalExpForPct = totalExpense || 1;
     const needPercent = Math.round((needTotal / totalExpForPct) * 100);

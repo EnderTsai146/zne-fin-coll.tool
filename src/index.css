@@ -2621,3 +2621,40 @@ div {
   transform: scale(1.03);
   transition: transform 0.3s ease;
 }
+
+/* Elevated circular center navigation button */
+.nav-item.center-nav-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  margin-top: -12px;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.nav-item.center-nav-btn.active {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.12) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  box-shadow: 0 8px 24px rgba(0, 122, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px) scale(1.06);
+}
+
+.nav-item.center-nav-btn .nav-icon {
+  font-size: 1.48rem !important;
+  margin-bottom: 0px !important;
+  filter: grayscale(0) !important;
+}
+
+.nav-item.center-nav-btn .nav-label {
+  font-size: 0.58rem !important;
+  margin-top: 1px !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  font-weight: 600 !important;
+}

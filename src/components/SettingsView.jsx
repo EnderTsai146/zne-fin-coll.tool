@@ -1,0 +1,622 @@
+// src/components/SettingsView.jsx
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+import { db } from '../firebase';
+import { collection, query, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
+import { getBudgetForMonth } from '../utils/budgetUtils';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
+const SettingsView = ({
+  assets,
+  saveToCloud,
+  currentUser,
+  operatorName,
+  customAlert,
+  customConfirm,
+  activeSubTab,
+  setActiveSubTab
+}) => {
+  
+  // --- 1. 預算設定 State ---
+  const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const [selectedBudgetMonth, setSelectedBudgetMonth] = useState(currentMonthStr);
+  
+  // Category inputs
+  const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
+  const [budgetInputs, setBudgetInputs] = useState({});
+
+  // Populate inputs when month or assets changes
+  useEffect(() => {
+    const monthlyBudgets = getBudgetForMonth(assets, selectedBudgetMonth);
+    const initialInputs = {};
+    dynamicCategories.forEach(cat => {
+      initialInputs[cat] = monthlyBudgets[cat] !== undefined ? monthlyBudgets[cat] : 0;
+    });
+    setBudgetInputs(initialInputs);
+  }, [selectedBudgetMonth, assets, dynamicCategories]);
+
+  const isPastMonth = selectedBudgetMonth < currentMonthStr;
+
+  const handleInputChange = (cat, val) => {
+    const num = Number(val.replace(/[^\d]/g, '')) || 0;
+    setBudgetInputs(prev => ({
+      ...prev,
+      [cat]: num
+    }));
+  };
+
+  const handleSaveBudget = async () => {
+    if (isPastMonth) {
+      await customAlert("⚠️ 歷史預算已鎖定，不可修改！");
+      return;
+    }
+    
+    const updatedBudgets = {
+      ...(assets.budgets || {}),
+      [selectedBudgetMonth]: budgetInputs
+    };
+
+    const finalAssets = {
+      ...assets,
+      budgets: updatedBudgets
+    };
+
+    saveToCloud(finalAssets);
+    await customAlert(`💾 【${selectedBudgetMonth}】預算設定儲存成功！`);
+  };
+
+  // Build past 6 months list for the line chart
+  const chartMonths = useMemo(() => {
+    const list = [];
+    const d = new Date();
+    // Show 4 months in past, current month, and 1 month in future
+    for (let i = 4; i >= -1; i--) {
+      const temp = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      list.push(temp.toISOString().slice(0, 7));
+    }
+    return list;
+  }, []);
+
+  const chartData = useMemo(() => {
+    const colors = {
+      "餐費": { border: '#ff9f0a', bg: 'rgba(255, 159, 10, 0.05)' },
+      "購物": { border: '#0a84ff', bg: 'rgba(10, 132, 255, 0.05)' },
+      "娛樂": { border: '#30d158', bg: 'rgba(48, 209, 88, 0.05)' },
+      "其他": { border: '#bf5af2', bg: 'rgba(191, 90, 242, 0.05)' }
+    };
+
+    const datasets = dynamicCategories.map(cat => {
+      const catColor = colors[cat] || { border: '#8e8e93', bg: 'rgba(142, 142, 147, 0.05)' };
+      return {
+        label: cat,
+        data: chartMonths.map(m => {
+          const budgets = getBudgetForMonth(assets, m);
+          return budgets[cat] || 0;
+        }),
+        borderColor: catColor.border,
+        backgroundColor: catColor.bg,
+        borderWidth: 2,
+        tension: 0.2,
+        fill: false,
+        pointBackgroundColor: catColor.border,
+        pointHoverRadius: 6
+      };
+    });
+
+    return {
+      labels: chartMonths,
+      datasets
+    };
+  }, [chartMonths, assets, dynamicCategories]);
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: { color: 'rgba(255,255,255,0.7)', font: { size: 10, family: 'var(--font-family)' } }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(18, 18, 18, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: 'rgba(255,255,255,0.85)',
+        borderColor: 'rgba(255,255,255,0.15)',
+        borderWidth: 1,
+        titleFont: { family: 'var(--font-family)' },
+        bodyFont: { family: 'var(--font-family)' },
+        callbacks: {
+          label: function(context) {
+            return ` ${context.dataset.label}: $${context.parsed.y.toLocaleString()}`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255,255,255,0.06)' },
+        ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10, family: 'var(--font-family)' } }
+      },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.06)' },
+        ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10, family: 'var(--font-family)' } }
+      }
+    }
+  };
+
+  // --- 2. LINE Settings State & Logic ---
+  const lineCount_tb = assets.lineNotifCount?.month === currentMonthStr ? (assets.lineNotifCount?.count || 0) : 0;
+  const isBatch_ls = assets.lineConfig?.batchMode || false;
+  const LINE_NOTIFICATIONS_DISABLED = true; // 系統預設停用，保留 UI 顯示
+  const [tempLineCount, setTempLineCount] = useState(lineCount_tb);
+
+  useEffect(() => {
+    setTempLineCount(lineCount_tb);
+  }, [lineCount_tb]);
+
+  const handleToggleBatchMode = () => {
+    const willBeBatch = !isBatch_ls;
+    if (!willBeBatch) {
+      // Flush batch logic (would trigger notifications, keeping logic mock-safe)
+      if (assets.pendingLineNotifications?.length > 0) {
+        alert(`📤 已為您發出共 ${assets.pendingLineNotifications.length} 筆暫存通知！`);
+      }
+      saveToCloud({
+        ...assets,
+        pendingLineNotifications: [],
+        lineConfig: { ...assets.lineConfig, batchMode: false }
+      });
+    } else {
+      saveToCloud({
+        ...assets,
+        lineConfig: { ...assets.lineConfig, batchMode: true }
+      });
+    }
+  };
+
+  const handleSaveLineCount = async () => {
+    saveToCloud({
+      ...assets,
+      lineNotifCount: { month: currentMonthStr, count: Number(tempLineCount) || 0 }
+    });
+    await customAlert("💾 LINE 統計計數已更新！");
+  };
+
+  // --- 3. Operation Logs State & Logic ---
+  const [dbLogs, setDbLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [lastVisibleDoc, setLastVisibleDoc] = useState(null);
+  const [hasMoreLogs, setHasMoreLogs] = useState(true);
+
+  const fetchLogs = async (isInitial = false) => {
+    if (loadingLogs) return;
+    setLoadingLogs(true);
+    try {
+      const logsRef = collection(db, "finance", "data", "operationsLog");
+      let q;
+      if (isInitial) {
+        q = query(logsRef, orderBy("timestamp", "desc"), limit(20));
+      } else if (lastVisibleDoc) {
+        q = query(logsRef, orderBy("timestamp", "desc"), startAfter(lastVisibleDoc), limit(20));
+      } else {
+        setLoadingLogs(false);
+        return;
+      }
+
+      const querySnapshot = await getDocs(q);
+      const newLogs = [];
+      querySnapshot.forEach((doc) => {
+        newLogs.push({ id: doc.id, ...doc.data() });
+      });
+
+      if (querySnapshot.docs.length < 20) {
+        setHasMoreLogs(false);
+      } else {
+        setHasMoreLogs(true);
+      }
+
+      if (querySnapshot.docs.length > 0) {
+        setLastVisibleDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
+      }
+
+      if (isInitial) {
+        setDbLogs(newLogs);
+      } else {
+        setDbLogs(prev => [...prev, ...newLogs]);
+      }
+    } catch (err) {
+      console.error("Error fetching logs: ", err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'logs') {
+      fetchLogs(true);
+    } else {
+      setDbLogs([]);
+      setLastVisibleDoc(null);
+      setHasMoreLogs(true);
+    }
+  }, [activeSubTab]);
+
+  const formatTimestamp = (isoStr) => {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dateVal = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${dateVal} ${h}:${min}:${s}`;
+  };
+
+  const getTimelineDotClass = (action) => {
+    if (action === 'delete') return 'timeline-dot delete';
+    if (action === 'settle' || action === 'income') return 'timeline-dot settle';
+    if (action === 'transfer' || action === 'exchange') return 'timeline-dot transfer';
+    if (action === 'calibrate') return 'timeline-dot calibrate';
+    return 'timeline-dot';
+  };
+
+  return (
+    <div className="page-transition-enter" style={{ padding: '0 16px' }}>
+      <h1 className="page-title">管家設定</h1>
+
+      {/* Settings Navigation Sub-Tabs */}
+      <div className="settings-tabs" style={{ marginBottom: '20px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+        <button className={`settings-tab-btn ${activeSubTab === 'budget' ? 'active' : ''}`} onClick={() => setActiveSubTab('budget')}>預算設定</button>
+        <button className={`settings-tab-btn ${activeSubTab === 'line' ? 'active' : ''}`} onClick={() => setActiveSubTab('line')}>LINE設定</button>
+        <button className={`settings-tab-btn ${activeSubTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveSubTab('guide')}>操作指南</button>
+        <button className={`settings-tab-btn ${activeSubTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveSubTab('faq')}>常見問題</button>
+        <button className={`settings-tab-btn ${activeSubTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveSubTab('logs')}>歷史軌跡</button>
+        <button className={`settings-tab-btn ${activeSubTab === 'info' ? 'active' : ''}`} onClick={() => setActiveSubTab('info')}>系統資訊</button>
+      </div>
+
+      {/* Tab Contents */}
+      <div className="settings-tab-content" style={{ paddingBottom: '30px' }}>
+        
+        {/* === 1. 預算設定 === */}
+        {activeSubTab === 'budget' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* Historical Budget Chart */}
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '12px', color: '#fff' }}>📈 歷史預算變化趨勢</div>
+              <div style={{ height: '180px', position: 'relative' }}>
+                <Line data={chartData} options={chartOptions} />
+              </div>
+            </div>
+
+            {/* Monthly Budget Editor Card */}
+            <div className="glass-card" style={{ padding: '20px', position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ fontWeight: '700', fontSize: '1rem', color: '#fff' }}>🎯 類別預算設定</div>
+                <input 
+                  type="month" 
+                  value={selectedBudgetMonth}
+                  onChange={(e) => setSelectedBudgetMonth(e.target.value)}
+                  className="glass-input" 
+                  style={{ width: '130px', margin: 0, padding: '4px 8px', fontSize: '0.85rem' }} 
+                />
+              </div>
+
+              {isPastMonth && (
+                <div style={{
+                  background: 'rgba(255, 69, 58, 0.12)',
+                  color: '#ff453a',
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem',
+                  fontWeight: '600',
+                  marginBottom: '16px',
+                  border: '1px solid rgba(255, 69, 58, 0.25)'
+                }}>
+                  🔒 歷史預算已鎖定，超過當月份不可修改。
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {dynamicCategories.map(cat => (
+                  <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
+                      {cat === '餐費' ? '🍲 ' : cat === '購物' ? '🛍️ ' : cat === '娛樂' ? '✨ ' : '⚙️ '}
+                      {cat} 預算
+                    </span>
+                    <input 
+                      type="text"
+                      inputMode="numeric"
+                      value={budgetInputs[cat] !== undefined ? `$${budgetInputs[cat].toLocaleString()}` : '$0'}
+                      onChange={(e) => handleInputChange(cat, e.target.value)}
+                      disabled={isPastMonth}
+                      className="glass-input"
+                      style={{
+                        width: '120px',
+                        textAlign: 'right',
+                        margin: 0,
+                        fontWeight: '700',
+                        fontSize: '0.95rem',
+                        color: isPastMonth ? 'var(--text-tertiary)' : '#fff',
+                        background: isPastMonth ? 'rgba(255,255,255,0.02)' : undefined,
+                        border: isPastMonth ? '1px dashed rgba(255,255,255,0.08)' : undefined
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {!isPastMonth && (
+                <button 
+                  onClick={handleSaveBudget} 
+                  className="glass-btn glass-btn-cta" 
+                  style={{ width: '100%', marginTop: '20px', fontWeight: '700' }}
+                >
+                  確認儲存 {selectedBudgetMonth} 預算設定
+                </button>
+              )}
+            </div>
+
+            {/* Budget Details Table */}
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '10px', color: '#fff' }}>📋 預算明細清單</div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                      <th style={{ padding: '6px 4px' }}>月份</th>
+                      {dynamicCategories.map(cat => <th key={cat} style={{ padding: '6px 4px', textAlign: 'right' }}>{cat}</th>)}
+                      <th style={{ padding: '6px 4px', textAlign: 'right', color: '#fff' }}>總預算</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chartMonths.map(m => {
+                      const budgets = getBudgetForMonth(assets, m);
+                      const total = Object.values(budgets).reduce((s, v) => s + Number(v || 0), 0);
+                      const isMonthPast = m < currentMonthStr;
+                      return (
+                        <tr key={m} style={{ borderBottom: '0.5px solid rgba(255,255,255,0.05)' }}>
+                          <td style={{ padding: '8px 4px', fontWeight: '600', color: isMonthPast ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
+                            {m} {isMonthPast ? '🔒' : ''}
+                          </td>
+                          {dynamicCategories.map(cat => (
+                            <td key={cat} style={{ padding: '8px 4px', textAlign: 'right' }}>
+                              ${(budgets[cat] || 0).toLocaleString()}
+                            </td>
+                          ))}
+                          <td style={{ padding: '8px 4px', textAlign: 'right', fontWeight: '700', color: 'var(--accent-blue)' }}>
+                            ${total.toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === 2. LINE 設定 === */}
+        {activeSubTab === 'line' && (
+          <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '16px' }}>
+            {/* 🚧 此功能暫停使用。遮罩色塊 */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(18, 18, 18, 0.75)',
+              backdropFilter: 'blur(3px)',
+              zIndex: 10,
+              color: '#ffffff',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: '1rem',
+              fontWeight: 'bold',
+            }}>
+              <span style={{ fontSize: '2.2rem', marginBottom: '6px' }}>🚧</span>
+              <span>此功能暫停使用。</span>
+            </div>
+
+            <div className="glass-card" style={{ padding: '20px' }}>
+              <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '1rem', fontWeight: '700' }}>💬 系統通知管理</h3>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>手動校正當月計數</label>
+                <input 
+                  type="number" 
+                  inputMode="numeric" 
+                  className="glass-input" 
+                  value={tempLineCount} 
+                  onChange={e => setTempLineCount(e.target.value)} 
+                  placeholder="強制覆寫系統已發送數量" 
+                  style={{ marginBottom: 0 }} 
+                />
+              </div>
+              <div style={{ marginBottom: '22px', padding: '16px', background: 'rgba(120,120,128,0.06)', borderRadius: 'var(--radius-md)', border: isBatch_ls ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition: 'all 0.3s ease' }}>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                  <span style={{ fontWeight: '600', fontSize: '0.88rem', color: isBatch_ls ? 'var(--accent-blue)' : 'var(--text-primary)' }}>
+                    {isBatch_ls ? '📦 已暫停 Line 推播並開始收集' : '📦 暫停推播並開始收集新通知'}
+                  </span>
+                  <input type="checkbox" checked={isBatch_ls} onChange={handleToggleBatchMode} style={{ transform: 'scale(1.2)', accentColor: 'var(--accent-blue)' }} />
+                </label>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '8px', lineHeight: '1.5' }}>
+                  開啟此開關以暫停每筆獨立提醒，所有的操作將存入雲端等候名單。當你將此開關「關閉」時，會一次性合開發送所有等候中的變動。
+                </p>
+                {isBatch_ls && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--accent-orange)', marginTop: '8px', fontWeight: '600' }}>
+                    🛒 等待發送的通知數量：{assets.pendingLineNotifications?.length || 0} 筆
+                  </div>
+                )}
+              </div>
+              <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleSaveLineCount}>確認儲存設定</button>
+            </div>
+          </div>
+        )}
+
+        {/* === 3. 操作指南 === */}
+        {activeSubTab === 'guide' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '600' }}>
+                個人記帳與共同代墊之分流
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                登錄交易時，須於「付款方式」欄位選定帳戶。若屬個人私帳，請選擇個人帳戶，該筆金額將直接自個人帳戶扣除。若為共同支出且由個人（大狗狗或阿陞）代墊，系統在暫存或送出時會先啟動「前端餘額阻斷校驗」，檢查代墊人帳戶之可用餘額是否足夠；確認足夠後，系統會自該代墊人的個人帳戶執行扣減，並將代墊款項記入共同待結帳目中。
+              </p>
+            </div>
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '600' }}>
+                代墊款項結清與審計追蹤
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                前往「回顧與資料庫」的「財務資料庫」子分頁可查閱全時間未結清之代墊明細。點選「結清」後，系統會自動自「共同現金」帳戶撥款並加回原代墊人的個人帳戶中。此操作會在背景寫入該時間點的資產分佈快照（Audit Trail），為後續對帳與帳務變更提供完整的審計歷史紀錄。
+              </p>
+            </div>
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '600' }}>
+                投資庫存與先進先出 (FIFO) 估算
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                於投資交易介面中，利用股票代號自動完成欄位輸入標的，即可暫存並批次提交交易紀錄。當執行「賣出」時，系統會自動預填歷史取得之台幣或美金成本，藉此推算庫存損益與歷史持有均價。
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* === 4. 常見問題 === */}
+        {activeSubTab === 'faq' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
+                Q：為什麼系統禁止我直接修改歷史紀錄的「金額」或「帳戶」？
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                A：為確保會計帳務之安全性與資料一致性，系統設有防護機制，禁止直接修改已寫入的歷史交易金額或關聯帳戶。直接修改歷史資料會破壞前後期帳務審計，並產生無法對帳的「幽靈帳」。維持原始數據（Raw Data）的不可變性是確保資產追蹤平順之核心基礎。
+              </p>
+            </div>
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
+                Q：如果記錯金額或扣錯帳戶，我該如何修正？
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                A：請使用「作廢退款」之二階段修正機制：點選該筆紀錄右側的垃圾桶圖示，並填寫作廢原因。系統將自動產生一筆方向相反的沖銷分錄，將資金全數退回原始錢包；沖銷完成後，請重新登錄正確的交易帳目。
+              </p>
+            </div>
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
+                Q：為什麼美股部位的未實現損益，跟券商 App 顯示的有一點點落差？
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                A：本系統是以實際歷史批次交易紀錄進行先進先出 (FIFO) 之精準成本估算，且市值已自動扣除預估的複委託手續費。若與券商 App 存在微幅落差，屬合理計算景深，您亦可利用資產操作面板中的「校正回歸」功能進行微調。
+              </p>
+            </div>
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
+                Q：什麼是「餘額校正」，它會影響我本月的收支預算進度嗎？
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
+                A：「餘額校正」（校正回歸）僅用於修正零星匯差、非預期手續費等帳面誤差。此操作在會計科目上歸類為獨立修正屬性，不會計入當月的日常支出預算或現金流統計。
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* === 5. 歷史軌跡 === */}
+        {activeSubTab === 'logs' && (
+          <div className="glass-card" style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {loadingLogs && dbLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>載入中...</div>
+              ) : dbLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>目前尚無操作紀錄。</div>
+              ) : (
+                <>
+                  <div className="timeline-list" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+                    {dbLogs.map((log, idx) => (
+                      <div key={log.id || idx} className="timeline-item">
+                        <div className={getTimelineDotClass(log.action)} />
+                        <div className="timeline-meta">
+                          <span className="timeline-operator">{log.operator}</span>
+                          <span>{formatTimestamp(log.timestamp)}</span>
+                        </div>
+                        <div className="timeline-desc">{log.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {hasMoreLogs && (
+                    <button
+                      onClick={() => fetchLogs(false)}
+                      disabled={loadingLogs}
+                      className="glass-btn"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        color: 'var(--text-primary)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        cursor: 'pointer',
+                        marginTop: '8px'
+                      }}
+                    >
+                      {loadingLogs ? '載入中...' : '載入先前軌跡'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* === 6. 系統資訊 === */}
+        {activeSubTab === 'info' && (
+          <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+              <span>系統版本</span>
+              <span style={{ color: '#ffffff', fontWeight: '600' }}>v2.5.0 ( potato-steward-budget )</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+              <span>資料庫狀態</span>
+              <span style={{ color: window.location.hostname === 'localhost' ? 'var(--accent-orange)' : 'var(--accent-green)', fontWeight: '600' }}>
+                {window.location.hostname === 'localhost' ? '本地模擬開發模式' : '雲端 Firestore 連線中'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+              <span>目前操作者</span>
+              <span style={{ color: '#ffffff', fontWeight: '600' }}>{operatorName}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+              <span>綁定帳號</span>
+              <span style={{ color: '#ffffff', fontWeight: '600', fontSize: '0.78rem' }}>{currentUser?.email || '無'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>歷史明細總數</span>
+              <span style={{ color: '#ffffff', fontWeight: '600' }}>{assets.monthlyExpenses?.length || 0} 筆</span>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};
+
+export default SettingsView;

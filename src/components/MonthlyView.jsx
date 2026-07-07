@@ -1,6 +1,7 @@
 // src/components/MonthlyView.jsx
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { computeDynamicNecessities } from '../utils/budgetUtils';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
 
@@ -48,6 +49,10 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
     const [editModalData, setEditModalData] = useState(null);
     const [activeActionRecord, setActiveActionRecord] = useState(null); // HIG 2 Action Sheet state
+
+    const dynamicNecessityMap = useMemo(() => {
+        return computeDynamicNecessities(historyWithIndex, assets);
+    }, [historyWithIndex, assets]);
 
     // ★ 當選擇儀表板或列表篩選月份時自動去庫調取歷史檔案
     useEffect(() => {
@@ -315,7 +320,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
             else if (filterUser === 'userB') { if (!payer.includes('阿陞') && !payer.includes('用戶2') && !payer.includes('userB')) return false; }
         }
         if (filterNecessity !== 'all') {
-            const recNecessity = record.necessity || 'need';
+            const recNecessity = dynamicNecessityMap[record.originalIndex] || 'need';
             if (recNecessity !== filterNecessity) return false;
         }
         
@@ -434,6 +439,17 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
                     {record.payer === '共同帳戶' ? <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '6px' }}>共同出資</span> : <span style={{ background: 'rgba(10,132,255,0.08)', color: '#409eff', padding: '2px 6px', borderRadius: '6px' }}>👤 {record.payer}</span>}
+                    {(record.type === 'expense' || record.type === 'spend') && (
+                        <span style={{
+                            background: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? 'rgba(255, 149, 0, 0.08)' : 'rgba(10, 132, 255, 0.08)',
+                            color: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '#ff9f0a' : '#0a84ff',
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            fontWeight: '700'
+                        }}>
+                            {(dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '選擇性 ✨' : '必要 🍲'}
+                        </span>
+                    )}
                 </div>
             </div>
         );
@@ -798,6 +814,17 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
                                         <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
                                             {record.payer === '共同帳戶' ? <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '6px' }}>共同出資</span> : <span style={{ background: 'rgba(10,132,255,0.08)', color: '#409eff', padding: '2px 6px', borderRadius: '6px' }}>👤 {record.payer}</span>}
+                                            {(record.type === 'expense' || record.type === 'spend') && (
+                                                <span style={{
+                                                    background: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? 'rgba(255, 149, 0, 0.08)' : 'rgba(10, 132, 255, 0.08)',
+                                                    color: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '#ff9f0a' : '#0a84ff',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '6px',
+                                                    fontWeight: '700'
+                                                }}>
+                                                    {(dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '選擇性 ✨' : '必要 🍲'}
+                                                </span>
+                                            )}
                                         </div>
 
                                         {isDeleted && record.deleteReason && (<div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#ff453a', background: 'rgba(255,69,58,0.05)', padding: '8px', borderRadius: '8px', border: '1px dashed rgba(255,69,58,0.15)' }}><strong>作廢原因：</strong> {record.deleteReason}</div>)}

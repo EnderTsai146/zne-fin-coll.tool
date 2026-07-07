@@ -958,20 +958,6 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     <button onClick={() => handleToggleHistory('userA')} className={activeHistory === 'userA' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
                 </div>
 
-                <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-green)', background: activeHistory === 'userB' ? 'rgba(52,199,89,0.04)' : undefined }}>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span className="nobrk">阿陞🐶</span>
-                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依即時市值)</span>
-                    </div>
-                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser2 + Math.round(usdUser2 * currentFxRate) + liveInvestUser2)}</div>
-                    <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom: '10px', lineHeight: '1.4' }}>
-                        <span className="nobrk">現 {formatMoney(twdUser2)}</span><br />
-                        <span className="nobrk">美 ${usdUser2.toFixed(2)}</span><br />
-                        <span className="nobrk">值 {formatMoney(liveInvestUser2)}</span>
-                    </div>
-                    <button onClick={() => handleToggleHistory('userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
-                </div>
-
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-orange)', background: activeHistory === 'jointCash' ? 'rgba(255,149,0,0.04)' : undefined }}>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span className="nobrk">🏫 共同</span>
@@ -984,6 +970,20 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         <span className="nobrk">值 {formatMoney(liveInvestJoint)}</span>
                     </div>
                     <button onClick={() => handleToggleHistory('jointCash')} className={activeHistory === 'jointCash' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'jointCash' ? '收起' : '🔍 紀錄'}</button>
+                </div>
+
+                <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-green)', background: activeHistory === 'userB' ? 'rgba(52,199,89,0.04)' : undefined }}>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span className="nobrk">阿陞🐶</span>
+                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依即時市值)</span>
+                    </div>
+                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser2 + Math.round(usdUser2 * currentFxRate) + liveInvestUser2)}</div>
+                    <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom: '10px', lineHeight: '1.4' }}>
+                        <span className="nobrk">現 {formatMoney(twdUser2)}</span><br />
+                        <span className="nobrk">美 ${usdUser2.toFixed(2)}</span><br />
+                        <span className="nobrk">值 {formatMoney(liveInvestUser2)}</span>
+                    </div>
+                    <button onClick={() => handleToggleHistory('userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
                 </div>
             </div>
 

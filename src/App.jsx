@@ -8,6 +8,9 @@ import InvestmentView from './components/InvestmentView';
 import ExpenseEntry from './components/ExpenseEntry';
 import ReviewView from './components/ReviewView';
 import './index.css';
+import ReviewAndDatabaseView from './components/ReviewAndDatabaseView';
+import SettingsView from './components/SettingsView';
+import { getBudgetForMonth } from './utils/budgetUtils';
 import { db, auth } from './firebase';
 import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter, runTransaction } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -40,24 +43,31 @@ const USER_MAPPING = {
 
 // ★ Module‑level — stable reference so React doesn't remount
 const NAV_ITEMS = [
-  { id: 'overview', icon: '🏠', label: '總覽' },
-  { id: 'monthly', icon: '📊', label: '紀錄' },
-  { id: 'review', icon: '📖', label: '回顧' },
+  { id: 'monthly', icon: '📊', label: '回顧與資料庫' },
   { id: 'invest', icon: '📈', label: '投資' },
+  { id: 'center', icon: '', label: '' }, // Handled specially
   { id: 'transfer', icon: '🛠️', label: '操作' },
-  { id: 'expense', icon: '✍️', label: '記帳' }
+  { id: 'settings', icon: '⚙️', label: '設定' }
 ];
 
 // ★ Liquid‑glass bottom nav with sliding pill
-const BottomNav = ({ currentPage, onPageChange, assets }) => {
+const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) => {
   const navRef = useRef(null);
   const [pillStyle, setPillStyle] = useState({ opacity: 0 });
 
+  const getNavIndex = (pageId) => {
+    if (pageId === 'overview' || pageId === 'expense') return 2;
+    if (pageId === 'monthly') return 0;
+    if (pageId === 'invest') return 1;
+    if (pageId === 'transfer') return 3;
+    if (pageId === 'settings') return 4;
+    return -1;
+  };
+
   useLayoutEffect(() => {
     if (!navRef.current) return;
-    const idx = NAV_ITEMS.findIndex(item => item.id === currentPage);
+    const idx = getNavIndex(currentPage);
     if (idx < 0) return;
-    // children[0] = pill div, children[1+] = nav‑items
     const child = navRef.current.children[idx + 1];
     if (!child) return;
     setPillStyle({
@@ -65,6 +75,7 @@ const BottomNav = ({ currentPage, onPageChange, assets }) => {
       height: child.offsetHeight,
       transform: `translateX(${child.offsetLeft}px)`,
       opacity: 1,
+      borderRadius: (currentPage === 'overview' || currentPage === 'expense') ? '50%' : '16px',
     });
   }, [currentPage]);
 
@@ -73,26 +84,58 @@ const BottomNav = ({ currentPage, onPageChange, assets }) => {
     return Math.ceil((new Date(b.nextDate) - new Date(todayStr)) / (1000 * 60 * 60 * 24)) <= 3;
   });
 
+  const handleCenterClick = () => {
+    if (currentPage === 'overview') {
+      onPageChange('expense');
+    } else if (currentPage === 'expense') {
+      onPageChange('overview');
+    } else {
+      onPageChange(lastActiveCenterTab || 'overview');
+    }
+  };
+
   return (
     <div className="bottom-nav" ref={navRef}>
       {/* Liquid glass sliding pill */}
       <div className="nav-pill" style={pillStyle} />
-      {NAV_ITEMS.map(item => (
-        <div
-          key={item.id}
-          className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-          onClick={() => onPageChange(item.id)}
-          style={{ position: 'relative' }}
-        >
-          <div className="nav-icon">
-            {item.icon}
-            {item.id === 'expense' && hasPendingBills && (
-              <span className="nav-warning-dot" />
-            )}
+      {NAV_ITEMS.map((item, idx) => {
+        if (item.id === 'center') {
+          const isCenterActive = currentPage === 'overview' || currentPage === 'expense';
+          const displayLabel = currentPage === 'expense' ? '記帳' : '總覽';
+          const displayIcon = currentPage === 'expense' ? '✍️' : '🏠';
+          
+          return (
+            <div
+              key="center"
+              className={`nav-item center-nav-btn ${isCenterActive ? 'active' : ''}`}
+              onClick={handleCenterClick}
+              style={{ position: 'relative' }}
+            >
+              <div className="nav-icon">
+                {displayIcon}
+                {currentPage === 'overview' && hasPendingBills && (
+                  <span className="nav-warning-dot" />
+                )}
+              </div>
+              <div className="nav-label">{displayLabel}</div>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            key={item.id}
+            className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+            onClick={() => onPageChange(item.id)}
+            style={{ position: 'relative' }}
+          >
+            <div className="nav-icon">
+              {item.icon}
+            </div>
+            <div className="nav-label">{item.label}</div>
           </div>
-          <div className="nav-label">{item.label}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -326,8 +369,10 @@ function App() {
   };
 
   const [currentPage, setCurrentPage] = useState('overview');
+  const [lastActiveCenterTab, setLastActiveCenterTab] = useState('overview');
+  const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('review');
+  const [settingsSubTab, setSettingsSubTab] = useState('budget');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
-  const [showSystemSettings, setShowSystemSettings] = useState(false);
 
   // --- Inactivity & Session Security Protection (Task 2 & 3) ---
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
@@ -927,6 +972,13 @@ function App() {
     // eslint-disable-next-line
   }, [currentUser, dataReady]);
 
+  const handlePageChange = (pageId) => {
+    if (pageId === 'overview' || pageId === 'expense') {
+      setLastActiveCenterTab(pageId);
+    }
+    setCurrentPage(pageId);
+  };
+
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
     setAssets(newAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
@@ -941,8 +993,9 @@ function App() {
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
 
   const getBudgetProgressText = (newAssets, nextSpendAmount = 0) => {
-    const budget = newAssets.monthlyBudget || 25000;
     const currentMonth = new Date().toISOString().slice(0, 7);
+    const budgets = getBudgetForMonth(newAssets, currentMonth);
+    const budget = Object.values(budgets).reduce((sum, val) => sum + Number(val || 0), 0) || newAssets.monthlyBudget || 25000;
     const jointSpend = (newAssets.monthlyExpenses || [])
       .filter(r => !r.isDeleted && r.month === currentMonth && r.type === 'spend')
       .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
@@ -1103,6 +1156,7 @@ function App() {
       setCurrentPage('invest');
     } else {
       setNewlyAddedRecordTimestamp(timestamp);
+      setMonthlyViewSubTab('database');
       setCurrentPage('monthly');
     }
   };
@@ -1144,6 +1198,7 @@ function App() {
 
     saveToCloud(finalAssetsWithLog);
     setNewlyAddedRecordTimestamp(targetTimestamp);
+    setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
     if (!isBatch) sendLineNotification(payload);
   };
@@ -1202,6 +1257,7 @@ function App() {
 
     saveToCloud(finalAssetsWithLog);
     setNewlyAddedRecordTimestamp(targetTimestamp);
+    setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
     if (!isBatch) sendLineNotification(payload);
   };
@@ -1646,7 +1702,7 @@ function App() {
       {/* ★ Topbar — 內嵌 JSX */}
       <nav className="glass-nav" style={{ borderRadius: '0 0 20px 20px', marginBottom: '16px' }}>
         <button
-          onClick={() => setShowSystemSettings(true)}
+          onClick={() => { setSettingsSubTab('budget'); handlePageChange('settings'); }}
           className="brand-glass-btn"
         >
           <span style={{ fontSize: '1.18rem' }}>🥔</span>
@@ -1654,7 +1710,7 @@ function App() {
           <span style={{ fontSize: '0.68rem', fontWeight: '500', color: 'rgba(255,255,255,0.6)', marginLeft: '1px' }}>({operatorName})</span>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={() => { setTempLineCount(lineCount_tb); setShowLineSettings(true); }} style={{ fontSize: '0.72rem', fontFamily: 'var(--font-family)', background: limitWarning_tb ? 'rgba(255,59,48,0.08)' : 'rgba(120,120,128,0.08)', color: limitWarning_tb ? 'var(--accent-red)' : 'var(--text-secondary)', padding: '6px 12px', borderRadius: 'var(--radius-pill)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: limitWarning_tb ? '700' : '500', border: limitWarning_tb ? '1px solid rgba(255,59,48,0.25)' : '1px solid transparent', animation: limitWarning_tb ? 'pulseRed 1.5s infinite' : 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+          <button onClick={() => { setSettingsSubTab('line'); handlePageChange('settings'); }} style={{ fontSize: '0.72rem', fontFamily: 'var(--font-family)', background: limitWarning_tb ? 'rgba(255,59,48,0.08)' : 'rgba(120,120,128,0.08)', color: limitWarning_tb ? 'var(--accent-red)' : 'var(--text-secondary)', padding: '6px 12px', borderRadius: 'var(--radius-pill)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: limitWarning_tb ? '700' : '500', border: limitWarning_tb ? '1px solid rgba(255,59,48,0.25)' : '1px solid transparent', animation: limitWarning_tb ? 'pulseRed 1.5s infinite' : 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
             {LINE_NOTIFICATIONS_DISABLED ? '💬 停用中' : `💬 ${lineCount_tb}/200`}
             {!LINE_NOTIFICATIONS_DISABLED && limitWarning_tb && <span>⚠️</span>}
           </button>
@@ -1711,24 +1767,23 @@ function App() {
         )}
 
         {currentPage === 'monthly' && (
-          <MonthlyView
-            key="monthly"
+          <ReviewAndDatabaseView
             assets={assets}
             combinedHistory={combinedHistory}
             loadArchiveMonth={loadArchiveMonth}
+            isFetchingArchive={isFetchingArchive}
             setAssets={handleAssetsUpdate}
-            onDelete={handleDeleteTransaction}
-            onEdit={handleEditTransaction}
-            sendLineNotification={sendLineNotification}
-            currentUser={operatorName}
+            currentFxRate={currentFxRate}
+            onTransaction={handleTransaction}
             customAlert={customAlert}
             customConfirm={customConfirm}
-            logOperation={logOperation}
+            customPrompt={customPrompt}
             newlyAddedRecordTimestamp={newlyAddedRecordTimestamp}
+            subTab={monthlyViewSubTab}
+            onChangeSubTab={setMonthlyViewSubTab}
           />
         )}
 
-        {currentPage === 'review' && <ReviewView key="review" assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} />}
         {currentPage === 'invest' && (
           <InvestmentView
             key="invest"
@@ -1740,75 +1795,22 @@ function App() {
         )}
         {currentPage === 'transfer' && <AssetTransfer key="transfer" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} customAlert={customAlert} customConfirm={customConfirm} />}
         {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} />}
+        {currentPage === 'settings' && (
+          <SettingsView
+            assets={assets}
+            saveToCloud={handleAssetsUpdate}
+            currentUser={currentUser}
+            operatorName={operatorName}
+            customAlert={customAlert}
+            customConfirm={customConfirm}
+            activeSubTab={settingsSubTab}
+            setActiveSubTab={setSettingsSubTab}
+          />
+        )}
       </div>
 
-      {/* ★ LineSettingsModal — 內嵌 JSX，避免元件重建導致輸入框失焦 */}
-      {showLineSettings && (
-        <div className="modal-backdrop" onClick={() => setShowLineSettings(false)} onTouchMove={e => e.preventDefault()}>
-          <div className="modal-content glass-card" style={{ padding: '28px', position: 'relative', touchAction: 'pan-y', overscrollBehavior: 'contain' }} onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
-            <button onClick={() => setShowLineSettings(false)} style={{ position: 'absolute', right: '16px', top: '12px', background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--text-tertiary)', fontWeight: '300', zIndex: 11 }}>&times;</button>
-
-            {/* 🚧 此功能暫停使用。遮罩色塊 */}
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(128, 128, 128, 0.65)',
-              backdropFilter: 'blur(2px)',
-              borderRadius: 'inherit',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              zIndex: 10,
-              color: '#ffffff',
-              fontSize: '1.25rem',
-              fontWeight: 'bold',
-              pointerEvents: 'auto'
-            }}>
-              <span style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🚧</span>
-              <span>此功能暫停使用。</span>
-            </div>
-
-            <h3 style={{ marginTop: 0, marginBottom: '20px', fontWeight: '700', letterSpacing: '-0.01em' }}>💬 系統通知管理</h3>
-            <div style={{ marginBottom: '18px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>手動校正當月計數</label>
-              <input type="number" inputMode="numeric" className="glass-input" value={tempLineCount} onChange={e => setTempLineCount(e.target.value)} placeholder="強制覆寫系統已發送數量" style={{ marginBottom: 0 }} />
-            </div>
-            <div style={{ marginBottom: '22px', padding: '16px', background: 'rgba(120,120,128,0.06)', borderRadius: 'var(--radius-md)', border: isBatch_ls ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition: 'all 0.3s ease' }}>
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                <span style={{ fontWeight: '600', fontSize: '0.92rem', color: isBatch_ls ? 'var(--accent-blue)' : 'var(--text-primary)' }}>
-                  {isBatch_ls ? '📦 已暫停 Line 推播並開始收集' : '📦 暫停推播並開始收集新通知'}
-                </span>
-                <input type="checkbox" checked={isBatch_ls} onChange={handleToggleBatchMode} style={{ transform: 'scale(1.3)', accentColor: 'var(--accent-blue)' }} />
-              </label>
-              <p style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginTop: '10px', lineHeight: '1.6' }}>
-                開啟此開關以暫停每筆獨立提醒，所有的操作將存入雲端等候名單。當你將此開關「關閉」時，會一次性合開發送所有等候中的變動。
-              </p>
-              {isBatch_ls && (
-                <div style={{ fontSize: '0.82rem', color: 'var(--accent-orange)', marginTop: '10px', fontWeight: '600', animation: 'slideUpFade 0.3s ease-out' }}>
-                  🛒 等待發送的通知數量：{assets.pendingLineNotifications?.length || 0} 筆
-                </div>
-              )}
-            </div>
-            <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={() => {
-              saveToCloud({ ...assets, lineNotifCount: { month: new Date().toISOString().slice(0, 7), count: Number(tempLineCount) || 0 } });
-              setShowLineSettings(false);
-            }}>確認儲存設定</button>
-          </div>
-        </div>
-      )}
-      <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} assets={assets} />
+      <BottomNav currentPage={currentPage} onPageChange={handlePageChange} assets={assets} lastActiveCenterTab={lastActiveCenterTab} />
       <CustomModal modalConfig={modalConfig} onConfirm={handleConfirmModal} onCancel={handleCancelModal} />
-      <SystemSettingsModal
-        show={showSystemSettings}
-        onClose={() => setShowSystemSettings(false)}
-        assets={assets}
-        currentUser={currentUser}
-        operatorName={operatorName}
-      />
       {showTimeoutWarning && (
         <div className="liquid-modal-overlay" style={{ zIndex: 9999 }}>
           <div className="liquid-modal-card" style={{ maxWidth: '380px', padding: '24px 20px', textAlign: 'center', background: 'rgba(28,28,30,0.95)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -2095,305 +2097,4 @@ const CustomModal = ({ modalConfig, onConfirm, onCancel }) => {
 };
 
 // ★ SystemSettingsModal (Declared outside to avoid hook/re-focus nesting errors)
-const SystemSettingsModal = ({ show, onClose, assets, currentUser, operatorName }) => {
-  const [activeTab, setActiveTab] = useState('guide');
-  const [dbLogs, setDbLogs] = useState([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
-  const [lastVisibleDoc, setLastVisibleDoc] = useState(null);
-  const [hasMoreLogs, setHasMoreLogs] = useState(true);
-
-  const fetchLogs = async (isInitial = false) => {
-    if (loadingLogs) return;
-    setLoadingLogs(true);
-    try {
-      const logsRef = collection(db, "finance", "data", "operationsLog");
-      let q;
-      if (isInitial) {
-        q = query(logsRef, orderBy("timestamp", "desc"), limit(30));
-      } else if (lastVisibleDoc) {
-        q = query(logsRef, orderBy("timestamp", "desc"), startAfter(lastVisibleDoc), limit(30));
-      } else {
-        setLoadingLogs(false);
-        return;
-      }
-
-      const querySnapshot = await getDocs(q);
-      const newLogs = [];
-      querySnapshot.forEach((doc) => {
-        newLogs.push({ id: doc.id, ...doc.data() });
-      });
-
-      if (querySnapshot.docs.length < 30) {
-        setHasMoreLogs(false);
-      } else {
-        setHasMoreLogs(true);
-      }
-
-      if (querySnapshot.docs.length > 0) {
-        setLastVisibleDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
-      }
-
-      if (isInitial) {
-        setDbLogs(newLogs);
-      } else {
-        setDbLogs(prev => [...prev, ...newLogs]);
-      }
-    } catch (err) {
-      console.error("Error fetching logs: ", err);
-    } finally {
-      setLoadingLogs(false);
-    }
-  };
-
-  useEffect(() => {
-    if (show && activeTab === 'logs') {
-      fetchLogs(true);
-    } else if (!show) {
-      setDbLogs([]);
-      setLastVisibleDoc(null);
-      setHasMoreLogs(true);
-    }
-  }, [show, activeTab]);
-
-  if (!show) return null;
-
-  const formatTimestamp = (isoStr) => {
-    if (!isoStr) return '';
-    const d = new Date(isoStr);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dateVal = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    const s = String(d.getSeconds()).padStart(2, '0');
-    return `${y}-${m}-${dateVal} ${h}:${min}:${s}`;
-  };
-
-  const getTimelineDotClass = (action) => {
-    if (action === 'delete') return 'timeline-dot delete';
-    if (action === 'settle' || action === 'income') return 'timeline-dot settle';
-    if (action === 'transfer' || action === 'exchange') return 'timeline-dot transfer';
-    if (action === 'calibrate') return 'timeline-dot calibrate';
-    return 'timeline-dot';
-  };
-
-  return (
-    <div className="liquid-modal-overlay" onClick={onClose} onTouchMove={e => e.preventDefault()}>
-      <div className="settings-modal-card" onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.02em' }}>系統管理與操作指南</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '1.2rem', cursor: 'pointer', padding: '4px' }}>✖</button>
-        </div>
-
-        <div className="settings-tabs" style={{ flexShrink: 0 }}>
-          <button className={`settings-tab-btn ${activeTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveTab('guide')}>操作指南</button>
-          <button className={`settings-tab-btn ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveTab('faq')}>常見問題</button>
-          <button className={`settings-tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>歷史軌跡</button>
-          <button className={`settings-tab-btn ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>系統資訊</button>
-        </div>
-
-        <div className="settings-tab-content">
-          {activeTab === 'guide' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  個人記帳與共同代墊之分流
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  登錄交易時，須於「付款方式」欄位選定帳戶。若屬個人私帳，請選擇個人帳戶，該筆金額將直接自個人帳戶扣除。若為共同支出且由個人（大狗狗或阿陞）代墊，系統在暫存或送出時會先啟動「前端餘額阻斷校驗」，檢查代墊人帳戶之可用餘額是否足夠；確認足夠後，系統會自該代墊人的個人帳戶執行扣減，並將代墊款項記入共同待結帳目中。
-                </p>
-              </div>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  代墊款項結清與審計追蹤
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  前往「財務資料庫」可查閱全時間未結清之代墊明細。點選「結清」後，系統會自動自「共同現金」帳戶撥款並加回原代墊人的個人帳戶中。此操作會在背景寫入該時間點的資產分佈快照（Audit Trail），為後續對帳與帳務變更提供完整的審計歷史紀錄。
-                </p>
-              </div>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  投資庫存與先進先出 (FIFO) 估算
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  於投資交易介面中，利用股票代號自動完成欄位輸入標的，即可暫存並批次提交交易紀錄。當執行「賣出」時，系統會自動預填歷史取得之台幣或美金成本，藉此推算庫存損益與歷史持有均價。
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'faq' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
-                  Q：為什麼系統禁止我直接修改歷史紀錄的「金額」或「帳戶」？
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：為確保會計帳務之安全性與資料一致性，系統設有防護機制，禁止直接修改已寫入的歷史交易金額或關聯帳戶。直接修改歷史資料會破壞前後期帳務審計，並產生無法對帳的「幽靈帳」。維持原始數據（Raw Data）的不可變性是確保資產追蹤平順之核心基礎。
-                </p>
-              </div>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
-                  Q：如果記錯金額或扣錯帳戶，我該如何修正？
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：請使用「作廢退款」之二階段修正機制：點選該筆紀錄右側的垃圾桶圖示，並填寫作廢原因。系統將自動產生一筆方向相反的沖銷分錄，將資金全數退回原始錢包；沖銷完成後，請重新登錄正確的交易帳目。
-                </p>
-              </div>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
-                  Q：為什麼美股部位的未實現損益，跟券商 App（如投資先生）顯示的有一點點落差？
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：本系統是以實際歷史批次交易紀錄進行先進先出 (FIFO) 之精準成本估算，且市值已自動扣除預估的複委託手續費。若與券商 App 存在微幅落差，屬合理計算景深，您亦可利用資產操作面板中的「校正回歸」功能進行微調。
-                </p>
-              </div>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
-                  Q：什麼是「餘額校正」，它會影響我本月的收支預算進度嗎？
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：「餘額校正」（校正回歸）僅用於修正零星匯差、非預期手續費等帳面誤差。此操作在會計科目上歸類為獨立修正屬性，不會計入當月的日常支出預算或現金流統計。
-                </p>
-              </div>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.92rem', fontWeight: '600', lineHeight: '1.4' }}>
-                  Q：定期帳單的「一鍵認列」是如何運作的？會自動扣款嗎？
-                </h4>
-                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: '400', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                  A：點擊認列後，系統會於當日產生實質支出分錄，並自動將下一次扣款日依週期（如每月或每年）遞增。若該期為變動金額（如水電費），系統會彈出輸入欄位提示，以利手動填寫實際金額。
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'logs' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {loadingLogs && dbLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>載入中...</div>
-              ) : dbLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>目前尚無操作紀錄。</div>
-              ) : (
-                <>
-                  <div className="timeline-list" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
-                    {dbLogs.map((log, idx) => (
-                      <div key={log.id || idx} className="timeline-item">
-                        <div className={getTimelineDotClass(log.action)} />
-                        <div className="timeline-meta">
-                          <span className="timeline-operator">{log.operator}</span>
-                          <span>{formatTimestamp(log.timestamp)}</span>
-                        </div>
-                        <div className="timeline-desc">{log.detail}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {hasMoreLogs && (
-                    <button
-                      onClick={() => fetchLogs(false)}
-                      disabled={loadingLogs}
-                      className="glass-btn"
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        borderRadius: '12px',
-                        fontSize: '0.8rem',
-                        color: 'var(--text-primary)',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        cursor: 'pointer',
-                        marginTop: '8px'
-                      }}
-                    >
-                      {loadingLogs ? '載入中...' : '載入先前軌跡'}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'info' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-                <span>系統版本</span>
-                <span style={{ color: '#ffffff', fontWeight: '600' }}>v2.4.0 ( potato-steward-hig )</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-                <span>資料庫狀態</span>
-                <span style={{ color: window.location.hostname === 'localhost' ? 'var(--accent-orange)' : 'var(--accent-green)', fontWeight: '600' }}>
-                  {window.location.hostname === 'localhost' ? '本地模擬開發模式' : '雲端 Firestore 連線中'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-                <span>目前操作者</span>
-                <span style={{ color: '#ffffff', fontWeight: '600' }}>{operatorName}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-                <span>綁定帳號</span>
-                <span style={{ color: '#ffffff', fontWeight: '600', fontSize: '0.78rem' }}>{currentUser?.email || '無'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-                <span>系統操作軌跡</span>
-                <span style={{ color: '#ffffff', fontWeight: '600' }}>雲端獨立儲存 (保留所有歷史紀錄)</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>歷史明細總數</span>
-                <span style={{ color: '#ffffff', fontWeight: '600' }}>{assets.monthlyExpenses?.length || 0} 筆</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <button
-          onClick={onClose}
-          className="liquid-modal-btn liquid-btn-confirm"
-          style={{ width: '100%', marginTop: '10px', flexShrink: 0 }}
-        >
-          我瞭解了
-        </button>
-      </div>
-    </div>
-  );
-};
-
 export default App;

@@ -439,15 +439,6 @@ const InvestmentView = ({ assets, isFetchingArchive, newlyAddedInvestSymbol, new
       <h1 className="page-title">投資部位</h1>
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
-        <button className={`glass-btn ${activeTab === 'jointCash' ? '' : 'inactive'}`} onClick={() => setActiveTab('jointCash')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
-          共同 🏫
-        </button>
         <button className={`glass-btn ${activeTab === 'userA' ? '' : 'inactive'}`} onClick={() => setActiveTab('userA')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
             <circle cx="12" cy="12" r="10" />
@@ -456,6 +447,15 @@ const InvestmentView = ({ assets, isFetchingArchive, newlyAddedInvestSymbol, new
             <line x1="15" y1="9" x2="15.01" y2="9" />
           </svg>
           大狗狗 🐕
+        </button>
+        <button className={`glass-btn ${activeTab === 'jointCash' ? '' : 'inactive'}`} onClick={() => setActiveTab('jointCash')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          共同 🏫
         </button>
         <button className={`glass-btn ${activeTab === 'userB' ? '' : 'inactive'}`} onClick={() => setActiveTab('userB')} style={{ flex: 1, padding: '10px 0', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
