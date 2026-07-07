@@ -28,7 +28,7 @@ const parseMoney = (valStr) => {
 
 const generateSettleId = () => `settle_${Date.now()}`;
 
-const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, sendLineNotification, currentUser, customAlert, customConfirm, logOperation }) => {
+const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, sendLineNotification, currentUser, customAlert, customConfirm, logOperation, newlyAddedRecordTimestamp }) => {
     const history = useMemo(() => combinedHistory || [], [combinedHistory]);
 
     const [viewMode, setViewMode] = useState('chart');
@@ -739,6 +739,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                 }
 
                                 const isDeleted = record.isDeleted;
+                                const isNewlyAdded = record.timestamp && record.timestamp === newlyAddedRecordTimestamp;
                                 const opacity = isDeleted ? 0.5 : 1;
                                 const textDeco = isDeleted ? 'line-through' : 'none';
                                 if (isDeleted) amountColor = '#8e8e93';
@@ -757,13 +758,21 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                             padding: '14px 16px', 
                                             opacity: opacity,
                                             cursor: isDeleted ? 'default' : 'pointer',
-                                            transition: 'transform 0.2s ease, background 0.2s ease'
+                                            transition: 'transform 0.2s ease, background 0.2s ease',
+                                            border: isNewlyAdded ? '1px solid rgba(0, 122, 255, 0.6)' : undefined,
+                                            animation: isNewlyAdded ? 'pulseGlow 1.5s infinite' : undefined,
+                                            boxShadow: isNewlyAdded ? '0 0 10px rgba(0,122,255,0.4)' : undefined
                                         }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                                 <span style={{ fontWeight: '700', fontSize: '0.95rem', color: 'var(--text-primary)', textDecoration: textDeco }}>{record.date || record.month}</span>
                                                 <span style={{ fontSize: '0.72rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>{record.category}</span>
+                                                {isNewlyAdded && (
+                                                    <span style={{ fontSize: '0.72rem', color: 'white', background: '#0a84ff', padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>
+                                                        剛剛新增的紀錄
+                                                    </span>
+                                                )}
                                                 {record.advancedBy && (
                                                     <span style={{ fontSize: '0.72rem', border: record.isSettled ? '1px solid #30d158' : '1px solid #ff9f0a', color: record.isSettled ? '#30d158' : '#ff9f0a', padding: '1px 6px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', fontWeight: '700' }}>
                                                         {record.advancedBy === 'userA' ? '大狗狗 🐕' : '阿陞 🐶'}代墊 {record.isSettled ? ' (已結)' : ' (未結)'}

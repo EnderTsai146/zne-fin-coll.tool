@@ -9,7 +9,7 @@ import ExpenseEntry from './components/ExpenseEntry';
 import ReviewView from './components/ReviewView';
 import './index.css';
 import { db, auth } from './firebase';
-import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter, runTransaction } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MAKE_WEBHOOK_URL } from './config';
 
@@ -267,6 +267,10 @@ function App() {
   const [splashPhase, setSplashPhase] = useState('loading');
   const dataReadyForSplash = useRef(false);
   const [modalConfig, setModalConfig] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [newlyAddedRecordTimestamp, setNewlyAddedRecordTimestamp] = useState(null);
+  const [newlyAddedInvestSymbol, setNewlyAddedInvestSymbol] = useState(null);
+  const [newlyAddedInvestPayer, setNewlyAddedInvestPayer] = useState(null);
 
   const customAlert = (message, title = '提示') => {
     return new Promise((resolve) => {
@@ -589,6 +593,36 @@ function App() {
   }, [assets.monthlyExpenses, archivedRecords]);
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (newlyAddedRecordTimestamp) {
+      const timer = setTimeout(() => {
+        setNewlyAddedRecordTimestamp(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [newlyAddedRecordTimestamp]);
+
+  useEffect(() => {
+    if (newlyAddedInvestSymbol) {
+      const timer = setTimeout(() => {
+        setNewlyAddedInvestSymbol(null);
+        setNewlyAddedInvestPayer(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [newlyAddedInvestSymbol]);
+
+  useEffect(() => {
     if (window.location.hostname === 'localhost') {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentUser({ email: 'ender.tsai@gmail.com' });
@@ -750,59 +784,60 @@ function App() {
                     console.log(`✅ 已安全合併歸檔 ${month}，共儲存 ${existingMap.size} 筆`);
                   }
 
-                  // 2. 所有歷史檔案都確定寫入成功後，重新抓取最新的主檔案進行清理
+                  // 2. 所有歷史檔案都確定寫入成功後，重新抓取最新的主檔案進行清理，改為使用事務（Transaction）以防覆蓋 race condition
                   const mainDocRef = doc(db, "finance", "data");
-                  const mainSnap = await getDoc(mainDocRef);
-                  if (mainSnap.exists()) {
-                    const mainData = mainSnap.data();
-                    const safeMonthly = (mainData.monthlyExpenses || []).filter(r => !archivedTimestamps.has(r.timestamp));
+                  await runTransaction(db, async (transaction) => {
+                    const mainSnap = await transaction.get(mainDocRef);
+                    if (mainSnap.exists()) {
+                      const mainData = mainSnap.data();
+                      const safeMonthly = (mainData.monthlyExpenses || []).filter(r => !archivedTimestamps.has(r.timestamp));
 
-                    const newSnapshots = { ...(mainData.dailyNetWorth || {}) };
-                    const holdingsBase = mainData.currentStockHoldings ? { ...mainData.currentStockHoldings } : {};
-                    // ★ 防禦性初始化：確保所有現有持股項目都有成本欄位
-                    Object.keys(holdingsBase).forEach(k => {
-                      if (holdingsBase[k] && typeof holdingsBase[k] === 'object') {
-                        if (holdingsBase[k].costTwd === undefined) holdingsBase[k].costTwd = 0;
-                        if (holdingsBase[k].costUsd === undefined) holdingsBase[k].costUsd = 0;
-                      }
-                    });
-
-                    // 根據剛成功歸檔的資料更新快照與持股基準
-                    archiveMonths.forEach(month => {
-                      toArchive[month].forEach(r => {
-                        if (!r.isDeleted && r.auditTrail?.after && r.date && !newSnapshots[r.date]) {
-                          newSnapshots[r.date] = sumAssets(r.auditTrail.after);
-                        }
-                        if (!r.isDeleted && r.symbol) {
-                          const sym = r.symbol;
-                          const payer = r.payer ? r.payer.replace(/🐶|🐕/g, '') : '共同帳戶';
-                          const key = `${payer}_${sym}`;
-                          if (!holdingsBase[key]) holdingsBase[key] = { shares: 0, market: r.market || 'TW', costTwd: 0, costUsd: 0 };
-                          if (r.type?.includes('buy')) {
-                            holdingsBase[key].shares += (Number(r.shares) || 0);
-                            holdingsBase[key].costTwd += (Number(r.total) || 0);
-                            holdingsBase[key].costUsd += (Number(r.usdAmount) || 0);
-                          } else if (r.type?.includes('sell')) {
-                            const sellShares = Number(r.shares) || 0;
-                            const ratio = holdingsBase[key].shares > 0 ? sellShares / holdingsBase[key].shares : 0;
-                            holdingsBase[key].costTwd -= (holdingsBase[key].costTwd * ratio);
-                            holdingsBase[key].costUsd -= (holdingsBase[key].costUsd * ratio);
-                            holdingsBase[key].shares -= sellShares;
-                          }
+                      const newSnapshots = { ...(mainData.dailyNetWorth || {}) };
+                      const holdingsBase = mainData.currentStockHoldings ? { ...mainData.currentStockHoldings } : {};
+                      // ★ 防禦性初始化：確保所有現有持股項目都有成本欄位
+                      Object.keys(holdingsBase).forEach(k => {
+                        if (holdingsBase[k] && typeof holdingsBase[k] === 'object') {
+                          if (holdingsBase[k].costTwd === undefined) holdingsBase[k].costTwd = 0;
+                          if (holdingsBase[k].costUsd === undefined) holdingsBase[k].costUsd = 0;
                         }
                       });
-                    });
 
-                    Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
+                      // 根據剛成功歸檔的資料更新快照與持股基準
+                      archiveMonths.forEach(month => {
+                        toArchive[month].forEach(r => {
+                          if (!r.isDeleted && r.auditTrail?.after && r.date && !newSnapshots[r.date]) {
+                            newSnapshots[r.date] = sumAssets(r.auditTrail.after);
+                          }
+                          if (!r.isDeleted && r.symbol) {
+                            const sym = r.symbol;
+                            const payer = r.payer ? r.payer.replace(/🐶|🐕/g, '') : '共同帳戶';
+                            const key = `${payer}_${sym}`;
+                            if (!holdingsBase[key]) holdingsBase[key] = { shares: 0, market: r.market || 'TW', costTwd: 0, costUsd: 0 };
+                            if (r.type?.includes('buy')) {
+                              holdingsBase[key].shares += (Number(r.shares) || 0);
+                              holdingsBase[key].costTwd += (Number(r.total) || 0);
+                              holdingsBase[key].costUsd += (Number(r.usdAmount) || 0);
+                            } else if (r.type?.includes('sell')) {
+                              const sellShares = Number(r.shares) || 0;
+                              const ratio = holdingsBase[key].shares > 0 ? sellShares / holdingsBase[key].shares : 0;
+                              holdingsBase[key].costTwd -= (holdingsBase[key].costTwd * ratio);
+                              holdingsBase[key].costUsd -= (holdingsBase[key].costUsd * ratio);
+                              holdingsBase[key].shares -= sellShares;
+                            }
+                          }
+                        });
+                      });
 
-                    await setDoc(mainDocRef, {
-                      ...mainData,
-                      monthlyExpenses: safeMonthly,
-                      dailyNetWorth: newSnapshots,
-                      currentStockHoldings: holdingsBase
-                    }, { merge: true });
-                    console.log(`🚀 主檔案已成功清理完成，系統永續優化成功`);
-                  }
+                      Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
+
+                      transaction.update(mainDocRef, {
+                        monthlyExpenses: safeMonthly,
+                        dailyNetWorth: newSnapshots,
+                        currentStockHoldings: holdingsBase
+                      });
+                      console.log(`🚀 主檔案已成功清理完成，系統永續優化成功`);
+                    }
+                  });
                 } catch (error) {
                   console.error("❌ 歸檔引擎中途連線失敗，已中止清理主流程。確保資料不會遺失:", error);
                 } finally {
@@ -894,9 +929,9 @@ function App() {
 
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
+    setAssets(newAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
     if (window.location.hostname === 'localhost') {
       console.log("[DEV MOCK] saveToCloud:", newAssets);
-      setAssets(newAssets);
       return;
     }
     const docRef = doc(db, "finance", "data");
@@ -1053,7 +1088,23 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'transaction', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    setCurrentPage('overview');
+    
+    // 檢查是否有投資交易紀錄
+    const firstInvestRecord = records.find(r => r.type && r.type.includes('invest'));
+    if (firstInvestRecord && firstInvestRecord.symbol) {
+      let investPayer = 'jointCash';
+      if (firstInvestRecord.payer) {
+        const p = firstInvestRecord.payer;
+        if (p.includes('大狗狗') || p.includes('User A') || p.includes('userA')) investPayer = 'userA';
+        else if (p.includes('阿陞') || p.includes('User B') || p.includes('userB')) investPayer = 'userB';
+      }
+      setNewlyAddedInvestSymbol(firstInvestRecord.symbol);
+      setNewlyAddedInvestPayer(investPayer);
+      setCurrentPage('invest');
+    } else {
+      setNewlyAddedRecordTimestamp(timestamp);
+      setCurrentPage('monthly');
+    }
   };
 
   const handleAddExpense = async (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
@@ -1070,6 +1121,7 @@ function App() {
     const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
 
     const isBatch = assets.lineConfig?.batchMode;
+    const targetTimestamp = new Date().toISOString();
     const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssetsTemp,
       ...(updatedBills ? { bills: updatedBills } : {}),
@@ -1078,7 +1130,7 @@ function App() {
         {
           date, month: date.slice(0, 7), type: 'expense', category: '個人支出', details: expenseData,
           total: totalAmount, payer: payerName, operator: operatorName, note: finalNote,
-          timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) },
+          timestamp: targetTimestamp, auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) },
           necessity: 'need'
         }
       ]
@@ -1091,8 +1143,8 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    await customAlert("✅ 記帳完成！");
-    setCurrentPage('overview');
+    setNewlyAddedRecordTimestamp(targetTimestamp);
+    setCurrentPage('monthly');
     if (!isBatch) sendLineNotification(payload);
   };
 
@@ -1126,6 +1178,7 @@ function App() {
     const safeNote = note ? String(note).trim() : '';
     const isBatch = assets.lineConfig?.batchMode;
 
+    const targetTimestamp = new Date().toISOString();
     const finalAssets = getUpdatedAssetsWithLineCount({
       ...newAssets,
       ...(updatedBills ? { bills: updatedBills } : {}),
@@ -1135,7 +1188,7 @@ function App() {
           date, month: date.slice(0, 7), type: 'spend', category: '共同支出', payer: '共同帳戶',
           total: val, note: safeNote ? `${category} - ${safeNote}` : category,
           operator: operatorName, advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
-          isSettled: false, timestamp: new Date().toISOString(), auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) },
+          isSettled: false, timestamp: targetTimestamp, auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) },
           necessity: 'need', subCategory: category
         }
       ]
@@ -1148,8 +1201,8 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    await customAlert(`💸 已記錄共同支出 $${val.toLocaleString()} \n付款方式：${paymentMethodName}`);
-    setCurrentPage('overview');
+    setNewlyAddedRecordTimestamp(targetTimestamp);
+    setCurrentPage('monthly');
     if (!isBatch) sendLineNotification(payload);
   };
 
@@ -1609,6 +1662,37 @@ function App() {
         </div>
       </nav>
 
+      {!isOnline && (
+        <div style={{
+          margin: '0 auto 16px auto',
+          padding: '12px 16px',
+          borderRadius: '16px',
+          background: 'rgba(239, 69, 77, 0.15)',
+          border: '1px solid rgba(239, 69, 77, 0.3)',
+          color: '#ff6b73',
+          fontSize: '0.88rem',
+          fontWeight: '500',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+          animation: 'slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
+          maxWidth: '800px',
+          width: 'calc(100% - 40px)',
+          boxSizing: 'border-box'
+        }}>
+          <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>⚠️</span>
+          <div style={{ lineHeight: '1.5', flexGrow: 1 }}>
+            <strong>目前處於離線狀態</strong>
+            <div style={{ fontSize: '0.78rem', opacity: 0.9, marginTop: '2px' }}>
+              您的記帳資料會先安全存在本機，待恢復連線後自動同步。請勿清除瀏覽器資料或登出，以防資料遺失。
+            </div>
+          </div>
+        </div>
+      )}
+
       <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
 
         {currentPage === 'overview' && (
@@ -1640,11 +1724,20 @@ function App() {
             customAlert={customAlert}
             customConfirm={customConfirm}
             logOperation={logOperation}
+            newlyAddedRecordTimestamp={newlyAddedRecordTimestamp}
           />
         )}
 
         {currentPage === 'review' && <ReviewView key="review" assets={assets} combinedHistory={combinedHistory} loadArchiveMonth={loadArchiveMonth} />}
-        {currentPage === 'invest' && <InvestmentView key="invest" assets={assets} isFetchingArchive={isFetchingArchive} />}
+        {currentPage === 'invest' && (
+          <InvestmentView
+            key="invest"
+            assets={assets}
+            isFetchingArchive={isFetchingArchive}
+            newlyAddedInvestSymbol={newlyAddedInvestSymbol}
+            newlyAddedInvestPayer={newlyAddedInvestPayer}
+          />
+        )}
         {currentPage === 'transfer' && <AssetTransfer key="transfer" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} customAlert={customAlert} customConfirm={customConfirm} />}
         {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} />}
       </div>

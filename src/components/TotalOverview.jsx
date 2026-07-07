@@ -1,5 +1,5 @@
 // src/components/TotalOverview.jsx
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import {
     Chart as ChartJS, ArcElement, Tooltip, Legend,
     CategoryScale, LinearScale, PointElement, LineElement, Title, Filler
@@ -64,6 +64,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const currentLiveMarketNetWorth = (assets.dailyNetWorth && assets.dailyNetWorth[recordDate]) || liveMarketNetWorth;
     // ★ 新增：背景抓取即時報價的 UI 狀態
     const [isFetchingLive, setIsFetchingLive] = useState(false);
+    const [livePrices, setLivePrices] = useState({});
 
     const isBackingUpRef = useRef(false);
     const todayStr = formatDate(today);
@@ -119,6 +120,143 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
     const totalCashConverted = totalTwdCash + Math.round(totalUsdCash * currentFxRate);
 
+    // Helper function to calculate holdings for a specific owner/payer (FIFO logic)
+    // Helper function to calculate holdings for a specific owner/payer (FIFO logic)
+    const getStockHoldingsFor = useCallback((target) => {
+        const holdings = {};
+        
+        // 1. 先載入歸檔紀錄累積的持股基底
+        if (assets.currentStockHoldings) {
+            Object.entries(assets.currentStockHoldings).forEach(([key, data]) => {
+                let owner = '共同帳戶';
+                let actualSym = key;
+                if (key.includes('_')) {
+                    const parts = key.split('_');
+                    owner = parts[0];
+                    actualSym = parts.slice(1).join('_');
+                }
+                const matchesOwner = (ownerStr) => {
+                    if (!ownerStr) return false;
+                    if (target === 'jointCash') return ownerStr.includes('共同');
+                    if (target === 'userA') return ownerStr.includes('大狗狗');
+                    if (target === 'userB') return ownerStr.includes('阿陞');
+                    return false;
+                };
+                if (data.market && matchesOwner(owner)) {
+                    if (!holdings[actualSym]) {
+                        holdings[actualSym] = {
+                            shares: 0,
+                            market: data.market || 'TW',
+                            lots: []
+                        };
+                    }
+                    holdings[actualSym].shares += (data.shares || 0);
+                    holdings[actualSym].lots.push({
+                        shares: data.shares || 0,
+                        costTwd: data.costTwd || 0
+                    });
+                }
+            });
+        }
+
+        // 2. 再疊加目前主文件中的交易紀錄
+        const matchesPayer = (payer) => {
+            if (!payer) return false;
+            if (target === 'jointCash') return payer.includes('共同');
+            if (target === 'userA') return payer.includes('大狗狗');
+            if (target === 'userB') return payer.includes('阿陞');
+            return false;
+        };
+
+        const sorted = [...(assets.monthlyExpenses || [])]
+            .filter(r => !r.isDeleted && r.symbol && r.payer && matchesPayer(r.payer))
+            .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || '').localeCompare(b.timestamp || ''));
+
+        sorted.forEach(r => {
+            const sym = r.symbol;
+            if (!holdings[sym]) {
+                holdings[sym] = {
+                    shares: 0,
+                    market: r.market || 'TW',
+                    lots: []
+                };
+            }
+            const h = holdings[sym];
+            if (r.market) h.market = r.market;
+
+            if (r.type.includes('buy')) {
+                const shares = Number(r.shares) || 0;
+                const totalTwd = Number(r.total) || 0;
+                h.lots.push({ shares, costTwd: totalTwd });
+                h.shares += shares;
+            } else if (r.type.includes('sell')) {
+                const sellShares = Number(r.shares) || 0;
+                let remaining = sellShares;
+                while (remaining > 0 && h.lots.length > 0) {
+                    const lot = h.lots[0];
+                    if (lot.shares <= remaining) {
+                        remaining -= lot.shares;
+                        h.lots.shift();
+                    } else {
+                        const fraction = remaining / lot.shares;
+                        lot.costTwd -= lot.costTwd * fraction;
+                        lot.shares -= remaining;
+                        remaining = 0;
+                    }
+                }
+                h.shares -= sellShares;
+            }
+        });
+
+        // 清理已完全賣出的持倉，並計算成本
+        Object.keys(holdings).forEach(k => {
+            if (holdings[k].shares <= 0.0001) {
+                delete holdings[k];
+            } else {
+                holdings[k].costTwd = holdings[k].lots.reduce((s, l) => s + l.costTwd, 0);
+            }
+        });
+
+        return holdings;
+    }, [assets.monthlyExpenses, assets.currentStockHoldings]);
+
+    const stockHoldingsUser1 = useMemo(() => getStockHoldingsFor('userA'), [getStockHoldingsFor]);
+    const stockHoldingsUser2 = useMemo(() => getStockHoldingsFor('userB'), [getStockHoldingsFor]);
+    const stockHoldingsJoint = useMemo(() => getStockHoldingsFor('jointCash'), [getStockHoldingsFor]);
+
+    const getStockMarketValueFor = useCallback((holdings, prices, fxRate) => {
+        let val = 0;
+        Object.entries(holdings).forEach(([sym, holding]) => {
+            const price = prices[sym];
+            if (price !== undefined && price > 0) {
+                let symVal = price * holding.shares;
+                if (holding.market === 'TW') {
+                    const fee = Math.max(20, Math.floor(symVal * 0.001425 * 0.6));
+                    const tax = Math.floor(symVal * 0.003);
+                    val += (symVal - fee - tax);
+                } else {
+                    const feeUsd = symVal * 0.001;
+                    val += (symVal - feeUsd) * fxRate;
+                }
+            } else {
+                val += (holding.costTwd || 0);
+            }
+        });
+        return Math.round(val);
+    }, []);
+
+    const liveInvestUser1 = getStockMarketValueFor(stockHoldingsUser1, livePrices, currentFxRate) + (assets.userInvestments?.userA?.fund || 0) + (assets.userInvestments?.userA?.deposit || 0) + (assets.userInvestments?.userA?.other || 0);
+    const liveInvestUser2 = getStockMarketValueFor(stockHoldingsUser2, livePrices, currentFxRate) + (assets.userInvestments?.userB?.fund || 0) + (assets.userInvestments?.userB?.deposit || 0) + (assets.userInvestments?.userB?.other || 0);
+    const liveInvestJoint = getStockMarketValueFor(stockHoldingsJoint, livePrices, currentFxRate) + (assets.jointInvestments?.fund || 0) + (assets.jointInvestments?.deposit || 0) + (assets.jointInvestments?.other || 0);
+    const totalInvestLive = liveInvestUser1 + liveInvestUser2 + liveInvestJoint;
+    const totalAssetsLive = totalCashConverted + totalInvestLive;
+
+    const totalStockMarketValue = useMemo(() => {
+        return getStockMarketValueFor(stockHoldingsUser1, livePrices, currentFxRate) +
+               getStockMarketValueFor(stockHoldingsUser2, livePrices, currentFxRate) +
+               getStockMarketValueFor(stockHoldingsJoint, livePrices, currentFxRate);
+    }, [stockHoldingsUser1, stockHoldingsUser2, stockHoldingsJoint, livePrices, currentFxRate, getStockMarketValueFor]);
+
     const sumInvestments = (invObj) => Object.values(invObj || {}).reduce((sum, val) => sum + val, 0);
     const investUser1 = sumInvestments(assets.userInvestments?.userA);
     const investUser2 = sumInvestments(assets.userInvestments?.userB);
@@ -131,7 +269,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const assetTypes = [
         { key: 'cash', label: '台幣現金', color: '#2ecc71', val: totalTwdCash },
         { key: 'usd', label: '美金現鈔', color: '#f1c40f', val: Math.round(totalUsdCash * currentFxRate) },
-        { key: 'stock', label: '股票', color: '#ff9f43', val: (assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0) },
+        { key: 'stock', label: '股票', color: '#ff9f43', val: totalStockMarketValue },
         { key: 'fund', label: '基金', color: '#54a0ff', val: (assets.userInvestments?.userA?.fund || 0) + (assets.userInvestments?.userB?.fund || 0) + (assets.jointInvestments?.fund || 0) },
         { key: 'deposit', label: '定存', color: '#9b59b6', val: (assets.userInvestments?.userA?.deposit || 0) + (assets.userInvestments?.userB?.deposit || 0) + (assets.jointInvestments?.deposit || 0) },
         { key: 'other', label: '其他', color: '#c8d6e5', val: (assets.userInvestments?.userA?.other || 0) + (assets.userInvestments?.userB?.other || 0) + (assets.jointInvestments?.other || 0) }
@@ -182,15 +320,12 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
     useEffect(() => {
         if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
-        if (hasSnapshot || isFetchingSnapshotRef.current) return;
 
-        const runDailySnapshot = async () => {
-            isFetchingSnapshotRef.current = true;
+        const fetchPricesAndSnapshot = async () => {
             setIsFetchingLive(true); // ★ 顯示載入中 UI
             try {
                 const symbols = Object.keys(stockHoldings);
-                let stockMarketValue = 0;
-                let fxRate = 31.5;
+                let fxRate = currentFxRate || 31.5;
 
                 const allSymbols = symbols.length > 0 ? [...symbols, 'TWD=X'].join(',') : 'TWD=X';
                 const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${allSymbols}`, { redirect: 'follow' });
@@ -200,13 +335,18 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 if (data?.quoteResponse?.result) {
                     const quotes = data.quoteResponse.result;
                     const fxQuote = quotes.find(q => q.symbol === 'TWD=X');
-                    if (fxQuote) fxRate = fxQuote.regularMarketPrice || fxQuote.regularMarketPreviousClose || 31.5;
-                    setCurrentFxRate(fxRate);
+                    if (fxQuote) {
+                        fxRate = fxQuote.regularMarketPrice || fxQuote.regularMarketPreviousClose || 31.5;
+                        setCurrentFxRate(fxRate);
+                    }
 
+                    const newPrices = {};
+                    let stockMarketValue = 0;
                     symbols.forEach(sym => {
                         const q = quotes.find(q => q.symbol === sym);
                         if (q) {
                             const price = q.regularMarketPrice || q.regularMarketPreviousClose || 0;
+                            newPrices[sym] = price;
                             const holding = stockHoldings[sym];
                             let val = price * holding.shares;
                             if (holding.market === 'TW') {
@@ -219,25 +359,29 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                             }
                         }
                     });
+                    setLivePrices(newPrices);
+
+                    // 如果今日還沒有快照，且非正在寫入中，則自動快照存檔
+                    if (!hasSnapshot && !isFetchingSnapshotRef.current) {
+                        isFetchingSnapshotRef.current = true;
+                        const usdCashTwd = Math.round(((assets.userA_usd || 0) + (assets.userB_usd || 0) + (assets.jointCash_usd || 0)) * fxRate);
+                        const nonStockInvest = totalInvest - ((assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0));
+                        const finalNetWorth = Math.round(totalTwdCash + usdCashTwd + nonStockInvest + stockMarketValue);
+
+                        setLiveMarketNetWorth(finalNetWorth);
+                        setAssets({ ...assets, dailyNetWorth: { ...(assets.dailyNetWorth || {}), [recordDate]: finalNetWorth } });
+                    }
                 }
-
-                const usdCashTwd = Math.round(((assets.userA_usd || 0) + (assets.userB_usd || 0) + (assets.jointCash_usd || 0)) * fxRate);
-                const nonStockInvest = totalInvest - ((assets.userInvestments?.userA?.stock || 0) + (assets.userInvestments?.userB?.stock || 0) + (assets.jointInvestments?.stock || 0));
-                const finalNetWorth = Math.round(totalTwdCash + usdCashTwd + nonStockInvest + stockMarketValue);
-
-                setLiveMarketNetWorth(finalNetWorth);
-                setAssets({ ...assets, dailyNetWorth: { ...(assets.dailyNetWorth || {}), [recordDate]: finalNetWorth } });
             } catch (e) {
-                console.error("快照失敗:", e);
+                console.error("快照/獲取即時價格失敗:", e);
             } finally {
                 isFetchingSnapshotRef.current = false;
                 setIsFetchingLive(false); // ★ 隱藏載入中 UI
             }
         };
-        runDailySnapshot();
-        // ★ Fix: 移除 assets 依賴，避免 setAssets 後立即重新觸發快照造成無窮迴圈
+        fetchPricesAndSnapshot();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hasSnapshot, recordDate]);
+    }, [hasSnapshot, recordDate, Object.keys(stockHoldings).join(',')]);
 
     // ----------------------------------------------------
     // 3. 繪製折線圖資料
@@ -782,18 +926,18 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     {isFetchingLive && <span className="nobrk" style={{ fontSize: '0.73rem', background: 'rgba(120,120,128,0.12)', padding: '2px 8px', borderRadius: 'var(--radius-pill)', marginLeft: '5px' }}>🔄 更新報價中...</span>}
                 </div>
                 <div style={{ fontSize: '2.4rem', fontWeight: '800', letterSpacing: '-0.02em' }}>
-                    {formatMoney(currentLiveMarketNetWorth > 0 ? currentLiveMarketNetWorth : totalAssets)}
+                    {formatMoney(totalAssetsLive)}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '15px', fontSize: '0.82rem', flexWrap: 'wrap' }}>
                     <div className="nobrk" style={{ background: 'rgba(120,120,128,0.12)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>💰 總現金 {formatMoney(totalCashConverted)}</div>
-                    <div className="nobrk" style={{ background: 'rgba(120,120,128,0.12)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>📥 總投入 {formatMoney(totalInvest)}</div>
+                    <div className="nobrk" style={{ background: 'rgba(120,120,128,0.12)', padding: '5px 14px', borderRadius: 'var(--radius-pill)', backdropFilter: 'blur(4px)' }}>📈 總市值 {formatMoney(totalInvestLive)}</div>
                 </div>
 
-                {currentLiveMarketNetWorth > 0 && currentLiveMarketNetWorth !== totalAssets && (
+                {totalAssetsLive > 0 && totalAssetsLive !== totalAssets && (
                     <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px solid var(--glass-border)', fontSize: '0.84rem', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                        <span className="nobrk">📊 包含股票未實現損益：</span>
-                        <span className="nobrk" style={{ fontWeight: '800', color: currentLiveMarketNetWorth >= totalAssets ? 'var(--accent-green)' : 'var(--accent-red)', fontSize: '1rem' }}>
-                            {currentLiveMarketNetWorth >= totalAssets ? '+' : ''}{formatMoney(currentLiveMarketNetWorth - totalAssets)}
+                        <span className="nobrk">📊 包含投資未實現損益：</span>
+                        <span className="nobrk" style={{ fontWeight: '800', color: totalAssetsLive >= totalAssets ? 'var(--accent-green)' : '#ff6b6b', fontSize: '1rem' }}>
+                            {totalAssetsLive >= totalAssets ? '+' : ''}{formatMoney(totalAssetsLive - totalAssets)}
                         </span>
                     </div>
                 )}
@@ -803,13 +947,13 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-pink)', background: activeHistory === 'userA' ? 'rgba(255,59,48,0.04)' : undefined }}>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span className="nobrk">大狗狗🐕</span>
-                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依投入本金)</span>
+                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依即時市值)</span>
                     </div>
-                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser1 + Math.round(usdUser1 * currentFxRate) + investUser1)}</div>
+                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser1 + Math.round(usdUser1 * currentFxRate) + liveInvestUser1)}</div>
                     <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom: '10px', lineHeight: '1.4' }}>
                         <span className="nobrk">現 {formatMoney(twdUser1)}</span><br />
                         <span className="nobrk">美 ${usdUser1.toFixed(2)}</span><br />
-                        <span className="nobrk">投 {formatMoney(investUser1)}</span>
+                        <span className="nobrk">值 {formatMoney(liveInvestUser1)}</span>
                     </div>
                     <button onClick={() => handleToggleHistory('userA')} className={activeHistory === 'userA' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userA' ? '收起' : '🔍 紀錄'}</button>
                 </div>
@@ -817,13 +961,13 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-green)', background: activeHistory === 'userB' ? 'rgba(52,199,89,0.04)' : undefined }}>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span className="nobrk">阿陞🐶</span>
-                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依投入本金)</span>
+                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依即時市值)</span>
                     </div>
-                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser2 + Math.round(usdUser2 * currentFxRate) + investUser2)}</div>
+                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdUser2 + Math.round(usdUser2 * currentFxRate) + liveInvestUser2)}</div>
                     <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom: '10px', lineHeight: '1.4' }}>
                         <span className="nobrk">現 {formatMoney(twdUser2)}</span><br />
                         <span className="nobrk">美 ${usdUser2.toFixed(2)}</span><br />
-                        <span className="nobrk">投 {formatMoney(investUser2)}</span>
+                        <span className="nobrk">值 {formatMoney(liveInvestUser2)}</span>
                     </div>
                     <button onClick={() => handleToggleHistory('userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
                 </div>
@@ -831,13 +975,13 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 <div className="glass-card card-animate" style={{ flex: 1, minWidth: '105px', padding: '12px', borderTop: '3px solid var(--accent-orange)', background: activeHistory === 'jointCash' ? 'rgba(255,149,0,0.04)' : undefined }}>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span className="nobrk">🏫 共同</span>
-                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依投入本金)</span>
+                        <span className="nobrk" style={{ fontSize: '0.63rem', fontWeight: '400' }}>(依即時市值)</span>
                     </div>
-                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdJoint + Math.round(usdJoint * currentFxRate) + investJoint)}</div>
+                    <div className="nobrk" style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', margin: '5px 0' }}>{formatMoney(twdJoint + Math.round(usdJoint * currentFxRate) + liveInvestJoint)}</div>
                     <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', marginBottom: '10px', lineHeight: '1.4' }}>
                         <span className="nobrk">現 {formatMoney(twdJoint)}</span><br />
                         <span className="nobrk">美 ${usdJoint.toFixed(2)}</span><br />
-                        <span className="nobrk">投 {formatMoney(investJoint)}</span>
+                        <span className="nobrk">值 {formatMoney(liveInvestJoint)}</span>
                     </div>
                     <button onClick={() => handleToggleHistory('jointCash')} className={activeHistory === 'jointCash' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'jointCash' ? '收起' : '🔍 紀錄'}</button>
                 </div>

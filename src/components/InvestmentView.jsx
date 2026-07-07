@@ -5,8 +5,17 @@ import { MY_GOOGLE_API_URL } from '../config';
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const formatUsd = (num) => `$${Number(num).toFixed(2)}`;
 
-const InvestmentView = ({ assets, isFetchingArchive }) => {
+const InvestmentView = ({ assets, isFetchingArchive, newlyAddedInvestSymbol, newlyAddedInvestPayer }) => {
   const [activeTab, setActiveTab] = useState('jointCash');
+  const [prevPayer, setPrevPayer] = useState(null);
+
+  if (newlyAddedInvestPayer !== prevPayer) {
+    setPrevPayer(newlyAddedInvestPayer);
+    if (newlyAddedInvestPayer) {
+      setActiveTab(newlyAddedInvestPayer);
+    }
+  }
+
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [expandedSymbol, setExpandedSymbol] = useState(null);
 
@@ -291,6 +300,7 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
     const isUS = h.market === 'US';
     const isProfit = isUS ? h.profitUsd >= 0 : h.profitTwd >= 0;
     const profitColor = isProfit ? 'var(--accent-green)' : 'var(--accent-red)';
+    const isNewlyAdded = h.sym === newlyAddedInvestSymbol;
 
     return (
       <div
@@ -299,7 +309,9 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
           borderRadius: 'var(--radius-md)',
           marginBottom: '10px',
           overflow: 'hidden',
-          border: '0.5px solid rgba(120,120,128,0.08)',
+          border: isNewlyAdded ? '1px solid rgba(0, 122, 255, 0.6)' : '0.5px solid rgba(120,120,128,0.08)',
+          animation: isNewlyAdded ? 'pulseGlow 1.5s infinite' : undefined,
+          boxShadow: isNewlyAdded ? '0 0 10px rgba(0,122,255,0.4)' : undefined,
           transition: 'all 0.25s ease',
         }}
       >
@@ -320,6 +332,7 @@ const InvestmentView = ({ assets, isFetchingArchive }) => {
             <div style={{ fontWeight: '700', fontSize: '1.05rem', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
               {h.sym}
               {isUS && <span style={{ fontSize: '0.65rem', color: 'var(--accent-orange)', marginLeft: '6px', fontWeight: '500', verticalAlign: 'middle' }}>美國</span>}
+              {isNewlyAdded && <span style={{ fontSize: '0.65rem', color: 'white', background: '#0a84ff', padding: '2px 6px', borderRadius: '10px', marginLeft: '6px', fontWeight: '700', verticalAlign: 'middle' }}>剛剛已更新</span>}
             </div>
           </div>
 
