@@ -597,6 +597,12 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
           return await customAlert("❌ JSON 格式不正確，缺乏必要帳務欄位！");
         }
         if (!await customConfirm("⚠️ 警告：匯入此備份檔案將會覆蓋您當前所有的帳戶餘額與流水帳！確定要繼續嗎？")) return;
+        
+        // Preserve budgets if the imported backup does not have a budgets field
+        if (!imported.budgets && assets.budgets) {
+          imported.budgets = assets.budgets;
+        }
+
         setAssets(imported);
         await customAlert("✅ 備份資料覆蓋匯入成功！");
       } catch (err) {

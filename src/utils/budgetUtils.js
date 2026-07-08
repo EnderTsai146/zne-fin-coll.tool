@@ -12,19 +12,13 @@ export const getBudgetForMonth = (assets, monthStr) => {
       return assets.budgets[closestMonth];
     }
   }
-  // Default fallback: divide monthlyBudget (default 25000) equally among categories
+  // Default fallback: return 0 for all categories since no budget has been set
   const categories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
-  const defaultMapping = {};
-  const totalFallback = assets?.monthlyBudget || 25000;
-  const portion = Math.round(totalFallback / categories.length);
-  categories.forEach((cat, idx) => {
-    if (idx === categories.length - 1) {
-      defaultMapping[cat] = totalFallback - portion * (categories.length - 1);
-    } else {
-      defaultMapping[cat] = portion;
-    }
+  const zeroMapping = {};
+  categories.forEach(cat => {
+    zeroMapping[cat] = 0;
   });
-  return defaultMapping;
+  return zeroMapping;
 };
 
 export const getRecordMainCategory = (r) => {
