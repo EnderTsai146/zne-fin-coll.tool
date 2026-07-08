@@ -31,6 +31,7 @@ const generateSettleId = () => `settle_${Date.now()}`;
 
 const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, currentUser, customAlert, customConfirm, logOperation, newlyAddedRecordTimestamp }) => {
     const history = useMemo(() => combinedHistory || [], [combinedHistory]);
+    const historyWithIndex = useMemo(() => history.map((record, index) => ({ ...record, originalIndex: index })), [history]);
 
     const [viewMode, setViewMode] = useState('chart');
     const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 7));
@@ -292,7 +293,6 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     let progressColor = '#30d158';
     if (budgetPercent >= 90) progressColor = '#ff453a'; else if (budgetPercent >= 70) progressColor = '#ff9f0a';
 
-    const historyWithIndex = history.map((record, index) => ({ ...record, originalIndex: index }));
     const filteredHistory = historyWithIndex.filter(record => {
         const recordMonth = record.month || record.date.slice(0, 7);
         if (recordMonth !== filterDate) return false;
