@@ -1717,10 +1717,6 @@ function App() {
           <span style={{ fontSize: '0.68rem', fontWeight: '500', color: 'rgba(255,255,255,0.6)', marginLeft: '1px' }}>({operatorName})</span>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={() => { setSettingsSubTab('line'); handlePageChange('settings'); }} style={{ fontSize: '0.72rem', fontFamily: 'var(--font-family)', background: limitWarning_tb ? 'rgba(255,59,48,0.08)' : 'rgba(120,120,128,0.08)', color: limitWarning_tb ? 'var(--accent-red)' : 'var(--text-secondary)', padding: '6px 12px', borderRadius: 'var(--radius-pill)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: limitWarning_tb ? '700' : '500', border: limitWarning_tb ? '1px solid rgba(255,59,48,0.25)' : '1px solid transparent', animation: limitWarning_tb ? 'pulseRed 1.5s infinite' : 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
-            {LINE_NOTIFICATIONS_DISABLED ? '💬 停用中' : `💬 ${lineCount_tb}/200`}
-            {!LINE_NOTIFICATIONS_DISABLED && limitWarning_tb && <span>⚠️</span>}
-          </button>
           <button className="glass-btn glass-btn-danger" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={handleLogout}>登出</button>
         </div>
       </nav>
