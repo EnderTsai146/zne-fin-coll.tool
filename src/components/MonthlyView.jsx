@@ -33,7 +33,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const history = useMemo(() => combinedHistory || [], [combinedHistory]);
     const historyWithIndex = useMemo(() => history.map((record, index) => ({ ...record, originalIndex: index })), [history]);
 
-    const [viewMode, setViewMode] = useState('chart');
+    const [viewMode, setViewMode] = useState('list');
     const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 7));
     const [filterType, setFilterType] = useState('all');
     const [filterUser, setFilterUser] = useState('all');
@@ -44,7 +44,6 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const [minAmount, setMinAmount] = useState('');
     const [maxAmount, setMaxAmount] = useState('');
 
-    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
     const [showSettlementModal, setShowSettlementModal] = useState(false);
     const [settlementTarget, setSettlementTarget] = useState(null);
 
@@ -55,10 +54,22 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         return computeDynamicNecessities(historyWithIndex, assets);
     }, [historyWithIndex, assets]);
 
-    // ★ 當選擇儀表板或列表篩選月份時自動去庫調取歷史檔案
+    // Unify month filter & default to the latest month with data if current month is empty
+    const defaultAttempted = useRef(false);
     useEffect(() => {
-        if (loadArchiveMonth) loadArchiveMonth(selectedMonth);
-    }, [selectedMonth, loadArchiveMonth]);
+        if (defaultAttempted.current || !combinedHistory || combinedHistory.length === 0) return;
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const months = combinedHistory
+            .map(r => r.month || (r.date || '').slice(0, 7))
+            .filter(m => m)
+            .sort();
+            
+        if (months.length > 0 && !months.includes(currentMonth)) {
+            const latestMonth = months[months.length - 1];
+            setFilterDate(latestMonth);
+        }
+        defaultAttempted.current = true;
+    }, [combinedHistory]);
 
     useEffect(() => {
         if (loadArchiveMonth) loadArchiveMonth(filterDate);
@@ -139,7 +150,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     };
 
     const dashboardData = useMemo(() => {
-        const currentMonth = selectedMonth;
+        const currentMonth = filterDate;
         const [yearStr, monthStr] = currentMonth.split('-');
         let date = new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1);
         date.setMonth(date.getMonth() - 1);
@@ -287,7 +298,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         };
 
         return { stats, pieData, barChartData, compChartData, momText, momColor, netCashFlow, savingsRate, leaderboard };
-    }, [history, selectedMonth, assets]);
+    }, [history, filterDate, assets]);
 
     const budgetPercent = Math.min((dashboardData.stats.expense.total / currentBudget) * 100, 100).toFixed(1);
     let progressColor = '#30d158';
@@ -464,7 +475,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         <div className="inset-group-row">
                             <span className="inset-group-label" style={{ fontWeight: '600' }}>📅 分析月份</span>
                             <span className="inset-group-value">
-                                <input type="month" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
+                                <input type="month" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
                             </span>
                         </div>
                     </div>

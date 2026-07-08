@@ -593,7 +593,7 @@ const AssetTransfer = ({ assets, onTransaction, setAssets, currentFxRate, custom
     reader.onload = async (evt) => {
       try {
         const imported = JSON.parse(evt.target.result);
-        if (!imported.userA || !imported.userB || !imported.jointCash) {
+        if (imported.userA === undefined || imported.userB === undefined || imported.jointCash === undefined) {
           return await customAlert("❌ JSON 格式不正確，缺乏必要帳務欄位！");
         }
         if (!await customConfirm("⚠️ 警告：匯入此備份檔案將會覆蓋您當前所有的帳戶餘額與流水帳！確定要繼續嗎？")) return;
