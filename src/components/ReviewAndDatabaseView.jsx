@@ -17,7 +17,12 @@ const ReviewAndDatabaseView = ({
   customPrompt,
   newlyAddedRecordTimestamp,
   subTab,
-  onChangeSubTab
+  onChangeSubTab,
+  onDelete,
+  onEdit,
+  sendLineNotification,
+  currentUser,
+  logOperation
 }) => {
   return (
     <div className="page-transition-enter">
@@ -53,6 +58,11 @@ const ReviewAndDatabaseView = ({
           customConfirm={customConfirm}
           customPrompt={customPrompt}
           newlyAddedRecordTimestamp={newlyAddedRecordTimestamp}
+          onDelete={onDelete}
+          onEdit={onEdit}
+          sendLineNotification={sendLineNotification}
+          currentUser={currentUser}
+          logOperation={logOperation}
         />
       )}
     </div>

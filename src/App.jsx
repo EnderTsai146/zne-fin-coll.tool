@@ -43,7 +43,7 @@ const USER_MAPPING = {
 
 // ★ Module‑level — stable reference so React doesn't remount
 const NAV_ITEMS = [
-  { id: 'monthly', icon: '📊', label: '回顧與資料庫' },
+  { id: 'monthly', icon: '📊', label: '資料庫' },
   { id: 'invest', icon: '📈', label: '投資' },
   { id: 'center', icon: '', label: '' }, // Handled specially
   { id: 'transfer', icon: '🛠️', label: '操作' },
@@ -300,6 +300,64 @@ const CHANGELOG_DATA = [
     ]
   }
 ];
+
+const formatTransactionDetail = (r) => {
+  const amountStr = `$${(Number(r.total) || 0).toLocaleString()}`;
+  const usdStr = r.usdAmount ? ` ($${Number(r.usdAmount).toFixed(2)} USD)` : '';
+  const noteStr = r.note ? ` (備註: ${r.note})` : ' (無備註)';
+  const symbolStr = r.symbol ? ` [標的: ${r.symbol}]` : '';
+
+  if (r.type === 'income') {
+    return `收入入帳 ${amountStr}${usdStr} - 分類: ${r.category}${noteStr}`;
+  }
+  if (r.type === 'transfer') {
+    const from = r.payer || '個人帳戶';
+    return `資產劃撥 ${amountStr} 自 ${from} 轉移至 共同現金${noteStr}`;
+  }
+  if (r.type === 'exchange') {
+    const account = r.payer || '帳戶';
+    return `外幣換匯 ${amountStr}${usdStr} 於 ${account}${noteStr}`;
+  }
+  if (r.type === 'calibrate') {
+    const account = r.payer || '帳戶';
+    const diffText = [];
+    if (r.twdDiff !== undefined) diffText.push(`台幣校正: $${r.twdDiff.toLocaleString()}`);
+    if (r.usdDiff !== undefined) diffText.push(`美金校正: $${r.usdDiff.toFixed(2)} USD`);
+    const diffStr = diffText.length > 0 ? ` [${diffText.join(', ')}]` : '';
+    return `餘額校正 ${amountStr}${diffStr} 於 ${account}${noteStr}`;
+  }
+  if (r.type === 'settle') {
+    const fromUser = r.settledUser === 'userA' ? '大狗狗🐕' : '阿陞🐶';
+    return `系統結算共同支出 ${amountStr}，由共同現金撥付給 ${fromUser}${noteStr}`;
+  }
+
+  // Investment transactions
+  if (r.type.includes('invest') || r.type === 'liquidate') {
+    const payer = r.payer || (r.type.includes('joint') ? '共同帳戶' : '個人帳戶');
+    let actionName = '投資變動';
+    if (r.type.includes('buy')) actionName = '買入投資';
+    else if (r.type.includes('sell')) actionName = '賣出投資';
+    else if (r.type.includes('profit')) actionName = '投資獲利';
+    else if (r.type.includes('loss')) actionName = '投資虧損';
+    else if (r.type.includes('day_trade')) actionName = '投資當沖結算';
+    else if (r.type.includes('liquidate') || r.type === 'liquidate') actionName = '投資清算變現';
+
+    const priceText = r.price ? ` @單價 ${r.price}` : '';
+    const qtyText = r.shares ? ` 數量 ${r.shares}` : '';
+    return `${actionName} ${amountStr}${usdStr} 於 ${payer}${symbolStr}${priceText}${qtyText}${noteStr}`;
+  }
+
+  if (r.type === 'spend') {
+    const advanced = r.advancedBy ? ` (代墊人: ${r.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'})` : ' (共同現金直付)';
+    return `共同支出 ${amountStr} - 分類: ${r.category}${advanced}${noteStr}`;
+  }
+  if (r.type === 'expense') {
+    const payer = r.payer || '個人';
+    return `個人支出 ${amountStr} 於 ${payer}${noteStr}`;
+  }
+
+  return `進行交易變動 ${amountStr} (類型: ${r.type}, 分類: ${r.category})${noteStr}`;
+};
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -1127,16 +1185,7 @@ function App() {
 
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), ...appended];
 
-    const logDetail = records.map(r => {
-      const amountStr = `$${(Number(r.total) || 0).toLocaleString()}`;
-      if (r.type === 'income') return `收入入帳 ${amountStr} (${r.category} - ${r.note || '無備註'})`;
-      if (r.type === 'transfer') return `資金轉移 ${amountStr} (備註: ${r.note || '無備註'})`;
-      if (r.type === 'exchange') return `外幣換匯 ${amountStr} (備註: ${r.note || '無備註'})`;
-      if (r.type === 'calibrate') return `餘額校正 ${amountStr} (備註: ${r.note || '無備註'})`;
-      if (r.type.includes('invest_sell')) return `投資賣出變現 ${amountStr} (標的: ${r.symbol || '無'}, 備註: ${r.note || '無'})`;
-      if (r.type.includes('invest_buy')) return `買入投資標的 ${amountStr} (標的: ${r.symbol || '無'}, 備註: ${r.note || '無'})`;
-      return `進行變動 ${amountStr}`;
-    }).join('; ');
+    const logDetail = records.map(r => formatTransactionDetail(r)).join('; ');
 
     const finalAssetsWithLog = logOperation(finalAssets, 'transaction', logDetail);
 
@@ -1193,7 +1242,7 @@ function App() {
     const payload = { title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出", note: finalNote, date: date, color: "#ef454d", operator: operatorName };
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
-    const logDetail = `新增個人支出 $${totalAmount.toLocaleString()} (${finalNote})`;
+    const logDetail = `新增個人支出 $${totalAmount.toLocaleString()} 於 ${payerName} (${finalNote})`;
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
@@ -1252,7 +1301,8 @@ function App() {
     const payload = { title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName };
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
-    const logDetail = `新增共同支出 $${val.toLocaleString()} (${category} - ${safeNote || '無備註'})`;
+    const methodStr = advancedBy === 'jointCash' ? '共同現金直付' : `由 ${advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`;
+    const logDetail = `新增共同支出 $${val.toLocaleString()} - 分類: ${category} [${methodStr}] (${safeNote || '無備註'})`;
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
@@ -1332,7 +1382,7 @@ function App() {
       }
     }
 
-    const logDetail = `修改交易紀錄「${mutatedRecord.note}」的內容 (日期/備註/分類)`;
+    const logDetail = `修改交易紀錄【${record.date} ${record.category} $${record.total.toLocaleString()}】的內容 -> 新內容: 日期: ${mutatedRecord.date}, 分類: ${mutatedRecord.category}, 備註: ${mutatedRecord.note}`;
     const finalAssetsWithLog = logOperation(newAssets, 'edit', logDetail);
 
     saveToCloud(finalAssetsWithLog);
@@ -1576,7 +1626,7 @@ function App() {
     const payload = { title: "🗑️ 刪除/作廢紀錄", amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`, category: record.category, note: `已作廢: ${record.note} (原因: ${reason.trim()})`, date: new Date().toISOString().split('T')[0], color: "#666666", operator: operatorName };
     if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
 
-    const logDetail = `作廢「${record.note}」共 $${(Number(record.total) || 0).toLocaleString()} (原因: ${reason.trim()})`;
+    const logDetail = `作廢紀錄【${record.date} ${record.payer} ${record.category} $${(Number(record.total) || 0).toLocaleString()}】(原因: ${reason.trim()}, 原備註: ${record.note})`;
     const finalAssetsWithLog = logOperation(finalAssets, 'delete', logDetail);
 
     saveToCloud(finalAssetsWithLog);
@@ -1781,6 +1831,11 @@ function App() {
             newlyAddedRecordTimestamp={newlyAddedRecordTimestamp}
             subTab={monthlyViewSubTab}
             onChangeSubTab={setMonthlyViewSubTab}
+            onDelete={handleDeleteTransaction}
+            onEdit={handleEditTransaction}
+            sendLineNotification={sendLineNotification}
+            currentUser={operatorName}
+            logOperation={logOperation}
           />
         )}
 
@@ -1805,6 +1860,7 @@ function App() {
             customConfirm={customConfirm}
             activeSubTab={settingsSubTab}
             setActiveSubTab={setSettingsSubTab}
+            logOperation={logOperation}
           />
         )}
       </div>
