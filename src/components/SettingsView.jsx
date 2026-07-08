@@ -32,6 +32,7 @@ const SettingsView = ({
   // --- 1. 預算設定 State ---
   const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
   const [selectedBudgetMonth, setSelectedBudgetMonth] = useState(currentMonthStr);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   
   // Category inputs
   const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
@@ -88,6 +89,23 @@ const SettingsView = ({
     }
     return list;
   }, []);
+
+  // Get all historical months that actually have configured budgets, plus recent months
+  const allBudgetMonths = useMemo(() => {
+    const monthsSet = new Set();
+    if (assets?.budgets) {
+      Object.keys(assets.budgets).forEach(m => monthsSet.add(m));
+    }
+    chartMonths.forEach(m => monthsSet.add(m));
+    
+    // Sort chronologically descending (newest first)
+    const sorted = Array.from(monthsSet).sort().reverse();
+    return sorted;
+  }, [assets, chartMonths]);
+
+  const visibleMonths = useMemo(() => {
+    return showAllHistory ? allBudgetMonths : allBudgetMonths.slice(0, 5);
+  }, [allBudgetMonths, showAllHistory]);
 
   const chartData = useMemo(() => {
     const colors = {
@@ -294,14 +312,6 @@ const SettingsView = ({
         {activeSubTab === 'budget' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Historical Budget Chart */}
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '12px', color: '#fff' }}>📈 歷史預算變化趨勢</div>
-              <div style={{ height: '180px', position: 'relative' }}>
-                <Line data={chartData} options={chartOptions} />
-              </div>
-            </div>
-
             {/* Monthly Budget Editor Card */}
             <div className="glass-card" style={{ padding: '20px', position: 'relative' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -373,31 +383,31 @@ const SettingsView = ({
             {/* Budget Details Table */}
             <div className="glass-card" style={{ padding: '16px' }}>
               <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '10px', color: '#fff' }}>📋 預算明細清單</div>
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                      <th style={{ padding: '6px 4px' }}>月份</th>
-                      {dynamicCategories.map(cat => <th key={cat} style={{ padding: '6px 4px', textAlign: 'right' }}>{cat}</th>)}
-                      <th style={{ padding: '6px 4px', textAlign: 'right', color: '#fff' }}>總預算</th>
+                      <th style={{ padding: '6px 4px', whiteSpace: 'nowrap' }}>月份</th>
+                      {dynamicCategories.map(cat => <th key={cat} style={{ padding: '6px 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>{cat}</th>)}
+                      <th style={{ padding: '6px 4px', textAlign: 'right', color: '#fff', whiteSpace: 'nowrap' }}>總預算</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {chartMonths.map(m => {
+                    {visibleMonths.map(m => {
                       const budgets = getBudgetForMonth(assets, m);
                       const total = Object.values(budgets).reduce((s, v) => s + Number(v || 0), 0);
                       const isMonthPast = m < currentMonthStr;
                       return (
                         <tr key={m} style={{ borderBottom: '0.5px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '8px 4px', fontWeight: '600', color: isMonthPast ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>
+                          <td style={{ padding: '8px 4px', fontWeight: '600', color: isMonthPast ? 'var(--text-tertiary)' : 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                             {m} {isMonthPast ? '🔒' : ''}
                           </td>
                           {dynamicCategories.map(cat => (
-                            <td key={cat} style={{ padding: '8px 4px', textAlign: 'right' }}>
+                            <td key={cat} style={{ padding: '8px 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               ${(budgets[cat] || 0).toLocaleString()}
                             </td>
                           ))}
-                          <td style={{ padding: '8px 4px', textAlign: 'right', fontWeight: '700', color: 'var(--accent-blue)' }}>
+                          <td style={{ padding: '8px 4px', textAlign: 'right', fontWeight: '700', color: 'var(--accent-blue)', whiteSpace: 'nowrap' }}>
                             ${total.toLocaleString()}
                           </td>
                         </tr>
@@ -405,6 +415,33 @@ const SettingsView = ({
                     })}
                   </tbody>
                 </table>
+              </div>
+              {allBudgetMonths.length > 5 && (
+                <button 
+                  onClick={() => setShowAllHistory(!showAllHistory)}
+                  className="glass-btn"
+                  style={{
+                    width: '100%',
+                    marginTop: '12px',
+                    padding: '8px 0',
+                    fontSize: '0.78rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    color: 'var(--text-secondary)'
+                  }}
+                >
+                  {showAllHistory ? '收起部分歷史 ▴' : `顯示其餘 ${allBudgetMonths.length - 5} 個月 ▾`}
+                </button>
+              )}
+            </div>
+
+            {/* Historical Budget Chart */}
+            <div className="glass-card" style={{ padding: '16px' }}>
+              <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '12px', color: '#fff' }}>📈 歷史預算變化趨勢</div>
+              <div style={{ height: '180px', position: 'relative' }}>
+                <Line data={chartData} options={chartOptions} />
               </div>
             </div>
           </div>
