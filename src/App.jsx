@@ -1789,7 +1789,6 @@ function App() {
             onChangeSubTab={setMonthlyViewSubTab}
             onDelete={handleDeleteTransaction}
             onEdit={handleEditTransaction}
-            sendLineNotification={sendLineNotification}
             currentUser={operatorName}
             logOperation={logOperation}
           />

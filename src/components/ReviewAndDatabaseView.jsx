@@ -20,7 +20,6 @@ const ReviewAndDatabaseView = ({
   onChangeSubTab,
   onDelete,
   onEdit,
-  sendLineNotification,
   currentUser,
   logOperation
 }) => {
@@ -53,7 +52,6 @@ const ReviewAndDatabaseView = ({
           newlyAddedRecordTimestamp={newlyAddedRecordTimestamp}
           onDelete={onDelete}
           onEdit={onEdit}
-          sendLineNotification={sendLineNotification}
           currentUser={currentUser}
           logOperation={logOperation}
         />

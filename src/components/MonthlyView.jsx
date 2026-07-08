@@ -29,7 +29,7 @@ const parseMoney = (valStr) => {
 
 const generateSettleId = () => `settle_${Date.now()}`;
 
-const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, sendLineNotification, currentUser, customAlert, customConfirm, logOperation, newlyAddedRecordTimestamp }) => {
+const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, currentUser, customAlert, customConfirm, logOperation, newlyAddedRecordTimestamp }) => {
     const history = useMemo(() => combinedHistory || [], [combinedHistory]);
 
     const [viewMode, setViewMode] = useState('chart');
@@ -126,17 +126,6 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         newHistory.push({ date: timestamp.split('T')[0], month: timestamp.slice(0, 7), type: 'settle', category: '帳務結算', payer: '共同帳戶', total: debtAmount, note: `撥款結清 ${targetName} 的代墊`, operator: currentUser || "系統", timestamp: timestamp, settledUser: targetUser, settleId: currentSettleId, auditTrail: { before: snapshotBefore, after: snapshotAfter } });
 
         newAssets.monthlyExpenses = newHistory;
-
-        const settlePayload = { title: "✅ 代墊款結清", amount: `$${debtAmount.toLocaleString()}`, category: "帳務結算", note: `共同帳戶已實際撥款給 ${targetName}。`, date: timestamp.split('T')[0], color: "#2ecc71", operator: currentUser || "系統" };
-
-        if (assets.lineConfig?.batchMode) {
-            newAssets.pendingLineNotifications = [...(newAssets.pendingLineNotifications || []), settlePayload];
-        } else {
-            const currentMonth = new Date().toISOString().slice(0, 7);
-            const curCount = (newAssets.lineNotifCount?.month === currentMonth) ? (newAssets.lineNotifCount.count || 0) : 0;
-            newAssets.lineNotifCount = { month: currentMonth, count: curCount + 1 };
-            if (sendLineNotification) sendLineNotification(settlePayload);
-        }
 
         let loggedAssets = newAssets;
         if (logOperation) {
