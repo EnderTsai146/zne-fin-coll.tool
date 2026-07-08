@@ -69,12 +69,15 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
     if (idx < 0) return;
     const child = navRef.current.children[idx + 1];
     if (!child) return;
+    
+    const isCenter = currentPage === 'overview' || currentPage === 'expense';
+    
     setPillStyle({
       width: child.offsetWidth,
       height: child.offsetHeight,
       transform: `translateX(${child.offsetLeft}px)`,
-      opacity: 1,
-      borderRadius: (currentPage === 'overview' || currentPage === 'expense') ? '50%' : '16px',
+      opacity: isCenter ? 0 : 1, // Fade out the pill if the center button is active to prevent double overlap
+      borderRadius: '16px',
     });
   }, [currentPage]);
 
