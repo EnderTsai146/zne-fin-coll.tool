@@ -84,6 +84,27 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
     return Math.ceil((new Date(b.nextDate) - new Date(todayStr)) / (1000 * 60 * 60 * 24)) <= 3;
   });
 
+  const isNextMonthBudgetUnset = useMemo(() => {
+    const today = new Date();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    // Check if we are within 7 days of the end of the month
+    if (daysInMonth - today.getDate() <= 7) {
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      const nextMonthStr = nextMonth.toISOString().slice(0, 7);
+      const nextBudget = assets?.budgets?.[nextMonthStr];
+      if (!nextBudget) return true;
+      const total = Object.values(nextBudget).reduce((sum, val) => sum + Number(val || 0), 0);
+      return total === 0;
+    }
+    return false;
+  }, [assets]);
+
+  const isLineNearlyFull = useMemo(() => {
+    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const lineCount = assets?.lineNotifCount?.month === currentMonthStr ? (assets.lineNotifCount?.count || 0) : 0;
+    return lineCount >= 900;
+  }, [assets]);
+
   const handleCenterClick = () => {
     if (currentPage === 'overview') {
       onPageChange('expense');
@@ -111,9 +132,9 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
               onClick={handleCenterClick}
               style={{ position: 'relative' }}
             >
-              <div className="nav-icon">
+              <div className="nav-icon" style={{ position: 'relative' }}>
                 {displayIcon}
-                {currentPage === 'overview' && hasPendingBills && (
+                {hasPendingBills && (
                   <span className="nav-warning-dot" />
                 )}
               </div>
@@ -122,6 +143,8 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
           );
         }
 
+        const isSettingsWarning = item.id === 'settings' && (isNextMonthBudgetUnset || isLineNearlyFull);
+
         return (
           <div
             key={item.id}
@@ -129,8 +152,11 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
             onClick={() => onPageChange(item.id)}
             style={{ position: 'relative' }}
           >
-            <div className="nav-icon">
+            <div className="nav-icon" style={{ position: 'relative' }}>
               {item.icon}
+              {isSettingsWarning && (
+                <span className="nav-warning-dot" />
+              )}
             </div>
             <div className="nav-label">{item.label}</div>
           </div>

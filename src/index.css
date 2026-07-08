@@ -1294,7 +1294,7 @@ body.modal-open {
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 -1px 0 rgba(255, 255, 255, 0.03);
   border: 0.5px solid rgba(255, 255, 255, 0.10);
-  overflow: hidden;
+  overflow: visible; /* Allowed elements to float out cleanly */
 }
 
 /* Dynamic refraction on nav bar top edge */
@@ -2677,26 +2677,28 @@ div {
 
 /* Elevated circular center navigation button */
 .nav-item.center-nav-btn {
-  width: 60px;
-  height: 60px;
+  width: 62px;
+  height: 62px;
   border-radius: 50% !important;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
-  margin-top: -12px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  margin-top: -24px; /* Pull it up cleanly just like the shopping bag in the image! */
   transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 10;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .nav-item.center-nav-btn.active {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.12) 100%) !important;
+  background: linear-gradient(135deg, rgba(10, 132, 255, 0.85) 0%, rgba(88, 86, 214, 0.75) 100%) !important; /* Premium semi-translucent neon gradient */
   border-color: rgba(255, 255, 255, 0.45) !important;
-  box-shadow: 0 8px 24px rgba(0, 122, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
-  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 12px 28px rgba(10, 132, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px) scale(1.05);
 }
 
 .nav-item.center-nav-btn .nav-icon {
@@ -2710,4 +2712,30 @@ div {
   margin-top: 1px !important;
   color: rgba(255, 255, 255, 0.8) !important;
   font-weight: 600 !important;
+}
+
+/* Warning dot with radar/ripple pulse effect */
+.nav-warning-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  background-color: #ff453a;
+  border-radius: 50%;
+  box-shadow: 0 0 0 rgba(255, 69, 58, 0.45);
+  animation: radar-pulse 1.8s infinite;
+  z-index: 5;
+}
+
+@keyframes radar-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.8);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(255, 69, 58, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 69, 58, 0);
+  }
 }
