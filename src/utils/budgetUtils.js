@@ -4,7 +4,10 @@ export const getBudgetForMonth = (assets, monthStr) => {
   if (assets?.budgets && assets.budgets[monthStr]) {
     return assets.budgets[monthStr];
   }
-  if (assets?.budgets) {
+  
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  // Carry over logic: Only active for months that have already started (<= currentMonthStr)
+  if (monthStr <= currentMonthStr && assets?.budgets) {
     const sortedMonths = Object.keys(assets.budgets).sort();
     const prevMonths = sortedMonths.filter(m => m < monthStr);
     if (prevMonths.length > 0) {
@@ -12,6 +15,7 @@ export const getBudgetForMonth = (assets, monthStr) => {
       return assets.budgets[closestMonth];
     }
   }
+  
   // Default fallback: return 0 for all categories since no budget has been set
   const categories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
   const zeroMapping = {};

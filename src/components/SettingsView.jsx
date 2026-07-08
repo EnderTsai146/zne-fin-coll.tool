@@ -26,7 +26,8 @@ const SettingsView = ({
   customAlert,
   customConfirm,
   activeSubTab,
-  setActiveSubTab
+  setActiveSubTab,
+  logOperation
 }) => {
   
   // --- 1. 預算設定 State ---
@@ -38,15 +39,67 @@ const SettingsView = ({
   const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
   const [budgetInputs, setBudgetInputs] = useState({});
 
+  const isConfiguredInDb = assets?.budgets && assets.budgets[selectedBudgetMonth] !== undefined;
+  const [isCreatingFutureBudget, setIsCreatingFutureBudget] = useState(false);
+
+  useEffect(() => {
+    setIsCreatingFutureBudget(false);
+  }, [selectedBudgetMonth]);
+
+  const handleDeleteFutureBudget = async () => {
+    if (!await customConfirm(`⚠️ 確定要刪除【${selectedBudgetMonth}】的預算設定嗎？\n刪除後，該月份將回復為未設定狀態（將預設延續前一月的預算）。`)) return;
+    
+    const updatedBudgets = { ...(assets.budgets || {}) };
+    delete updatedBudgets[selectedBudgetMonth];
+    
+    const finalAssets = {
+      ...assets,
+      budgets: updatedBudgets
+    };
+    
+    const logDetail = `刪除【${selectedBudgetMonth}】類別預算設定`;
+    const finalAssetsWithLog = logOperation ? logOperation(finalAssets, 'budget_delete', logDetail) : finalAssets;
+    
+    saveToCloud(finalAssetsWithLog);
+    await customAlert(`🗑️ 【${selectedBudgetMonth}】預算已刪除。`);
+  };
+
   // Populate inputs when month or assets changes
   useEffect(() => {
-    const monthlyBudgets = getBudgetForMonth(assets, selectedBudgetMonth);
-    const initialInputs = {};
-    dynamicCategories.forEach(cat => {
-      initialInputs[cat] = monthlyBudgets[cat] !== undefined ? monthlyBudgets[cat] : 0;
-    });
+    const isFuture = selectedBudgetMonth > currentMonthStr;
+    const isConfigured = assets?.budgets && assets.budgets[selectedBudgetMonth] !== undefined;
+    
+    let initialInputs = {};
+    if (isFuture && !isConfigured && !isCreatingFutureBudget) {
+      dynamicCategories.forEach(cat => {
+        initialInputs[cat] = 0;
+      });
+    } else {
+      let baseBudgets = {};
+      if (isCreatingFutureBudget) {
+        if (assets?.budgets) {
+          const sorted = Object.keys(assets.budgets).sort();
+          const prev = sorted.filter(m => m < selectedBudgetMonth);
+          if (prev.length > 0) {
+            baseBudgets = assets.budgets[prev[prev.length - 1]];
+          }
+        }
+        if (Object.keys(baseBudgets).length === 0) {
+          const portion = Math.round((assets?.monthlyBudget || 25000) / dynamicCategories.length);
+          dynamicCategories.forEach(cat => {
+            baseBudgets[cat] = portion;
+          });
+        }
+      } else {
+        baseBudgets = getBudgetForMonth(assets, selectedBudgetMonth);
+      }
+      
+      dynamicCategories.forEach(cat => {
+        initialInputs[cat] = baseBudgets[cat] !== undefined ? baseBudgets[cat] : 0;
+      });
+    }
     setBudgetInputs(initialInputs);
-  }, [selectedBudgetMonth, assets, dynamicCategories]);
+  }, [selectedBudgetMonth, assets, dynamicCategories, isCreatingFutureBudget, currentMonthStr]);
 
   const isPastMonth = selectedBudgetMonth < currentMonthStr;
 
@@ -74,7 +127,11 @@ const SettingsView = ({
       budgets: updatedBudgets
     };
 
-    saveToCloud(finalAssets);
+    const logDetail = `更新【${selectedBudgetMonth}】類別預算設定：${Object.entries(budgetInputs).map(([cat, val]) => `${cat} $${val.toLocaleString()}`).join(', ')}`;
+    const finalAssetsWithLog = logOperation ? logOperation(finalAssets, 'budget_update', logDetail) : finalAssets;
+
+    saveToCloud(finalAssetsWithLog);
+    setIsCreatingFutureBudget(false);
     await customAlert(`💾 【${selectedBudgetMonth}】預算設定儲存成功！`);
   };
 
@@ -90,18 +147,18 @@ const SettingsView = ({
     return list;
   }, []);
 
-  // Get all historical months that actually have configured budgets, plus recent months
+  // Get all historical months that actually have configured budgets, plus the current month
   const allBudgetMonths = useMemo(() => {
     const monthsSet = new Set();
     if (assets?.budgets) {
       Object.keys(assets.budgets).forEach(m => monthsSet.add(m));
     }
-    chartMonths.forEach(m => monthsSet.add(m));
+    monthsSet.add(currentMonthStr);
     
     // Sort chronologically descending (newest first)
     const sorted = Array.from(monthsSet).sort().reverse();
     return sorted;
-  }, [assets, chartMonths]);
+  }, [assets, currentMonthStr]);
 
   const visibleMonths = useMemo(() => {
     return showAllHistory ? allBudgetMonths : allBudgetMonths.slice(0, 5);
@@ -340,56 +397,121 @@ const SettingsView = ({
                 </div>
               )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {dynamicCategories.map(cat => (
-                  <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                      {cat === '餐費' ? '🍲 ' : cat === '購物' ? '🛍️ ' : cat === '娛樂' ? '✨ ' : '⚙️ '}
-                      {cat} 預算
-                    </span>
-                    <input 
-                      type="text"
-                      inputMode="numeric"
-                      value={budgetInputs[cat] !== undefined ? `$${budgetInputs[cat].toLocaleString()}` : '$0'}
-                      onChange={(e) => handleInputChange(cat, e.target.value)}
-                      disabled={isPastMonth}
-                      className="glass-input"
-                      style={{
-                        width: '120px',
-                        textAlign: 'right',
-                        margin: 0,
-                        fontWeight: '700',
-                        fontSize: '0.95rem',
-                        color: isPastMonth ? 'var(--text-tertiary)' : '#fff',
-                        background: isPastMonth ? 'rgba(255,255,255,0.02)' : undefined,
-                        border: isPastMonth ? '1px dashed rgba(255,255,255,0.08)' : undefined
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {!isPastMonth && (
-                <button 
-                  onClick={handleSaveBudget} 
-                  className="glass-btn glass-btn-cta" 
-                  style={{ width: '100%', marginTop: '20px', fontWeight: '700' }}
-                >
-                  確認儲存 {selectedBudgetMonth} 預算設定
-                </button>
+              {/* Future Month Status Message */}
+              {!isPastMonth && selectedBudgetMonth > currentMonthStr && !isConfiguredInDb && !isCreatingFutureBudget && (
+                <div style={{
+                  background: 'rgba(10, 132, 255, 0.12)',
+                  color: '#0a84ff',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem',
+                  fontWeight: '600',
+                  marginBottom: '16px',
+                  border: '1px solid rgba(10, 132, 255, 0.25)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <span>📅 此月份尚未建立專屬預算，系統將自動延續上一個月的設定。</span>
+                  <button
+                    onClick={() => setIsCreatingFutureBudget(true)}
+                    className="glass-btn"
+                    style={{
+                      alignSelf: 'flex-start',
+                      padding: '4px 12px',
+                      fontSize: '0.78rem',
+                      margin: 0,
+                      background: 'rgba(10, 132, 255, 0.2)',
+                      borderColor: 'rgba(10, 132, 255, 0.4)',
+                      color: '#0a84ff',
+                      fontWeight: '700'
+                    }}
+                  >
+                    建立此月份專屬預算
+                  </button>
+                </div>
               )}
+
+              {/* Show edit inputs only if not blocked by unconfigured future month */}
+              {(isPastMonth || selectedBudgetMonth <= currentMonthStr || isConfiguredInDb || isCreatingFutureBudget) ? (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {dynamicCategories.map(cat => (
+                      <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
+                          {cat === '餐費' ? '🍲 ' : cat === '購物' ? '🛍️ ' : cat === '娛樂' ? '✨ ' : '⚙️ '}
+                          {cat} 預算
+                        </span>
+                        <input 
+                          type="text"
+                          inputMode="numeric"
+                          value={budgetInputs[cat] !== undefined ? `$${budgetInputs[cat].toLocaleString()}` : '$0'}
+                          onChange={(e) => handleInputChange(cat, e.target.value)}
+                          disabled={isPastMonth}
+                          className="glass-input"
+                          style={{
+                            width: '120px',
+                            textAlign: 'right',
+                            margin: 0,
+                            fontWeight: '700',
+                            fontSize: '0.95rem',
+                            color: isPastMonth ? 'var(--text-tertiary)' : '#fff',
+                            background: isPastMonth ? 'rgba(255,255,255,0.02)' : undefined,
+                            border: isPastMonth ? '1px dashed rgba(255,255,255,0.08)' : undefined
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                    {!isPastMonth && (
+                      <button 
+                        onClick={handleSaveBudget} 
+                        className="glass-btn glass-btn-cta" 
+                        style={{ flex: 1, fontWeight: '700', margin: 0 }}
+                      >
+                        確認儲存預算設定
+                      </button>
+                    )}
+                    
+                    {/* Delete button for configured future months */}
+                    {!isPastMonth && selectedBudgetMonth > currentMonthStr && isConfiguredInDb && (
+                      <button 
+                        onClick={handleDeleteFutureBudget} 
+                        className="glass-btn" 
+                        style={{
+                          fontWeight: '700',
+                          margin: 0,
+                          color: '#ff453a',
+                          borderColor: 'rgba(255, 69, 58, 0.4)',
+                          background: 'rgba(255, 69, 58, 0.1)'
+                        }}
+                      >
+                        🗑️ 刪除預算
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : null}
             </div>
 
             {/* Budget Details Table */}
             <div className="glass-card" style={{ padding: '16px' }}>
               <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '10px', color: '#fff' }}>📋 預算明細清單</div>
-              <div style={{ overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ 
+                overflowX: 'auto', 
+                maxHeight: showAllHistory ? '260px' : 'none', 
+                overflowY: showAllHistory ? 'auto' : 'visible',
+                scrollbarWidth: 'thin', 
+                WebkitOverflowScrolling: 'touch' 
+              }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                      <th style={{ padding: '6px 4px', whiteSpace: 'nowrap' }}>月份</th>
-                      {dynamicCategories.map(cat => <th key={cat} style={{ padding: '6px 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>{cat}</th>)}
-                      <th style={{ padding: '6px 4px', textAlign: 'right', color: '#fff', whiteSpace: 'nowrap' }}>總預算</th>
+                      <th style={{ padding: '6px 4px', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30,30,30,0.95)', zIndex: 1 }}>月份</th>
+                      {dynamicCategories.map(cat => <th key={cat} style={{ padding: '6px 4px', textAlign: 'right', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30,30,30,0.95)', zIndex: 1 }}>{cat}</th>)}
+                      <th style={{ padding: '6px 4px', textAlign: 'right', color: '#fff', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30,30,30,0.95)', zIndex: 1 }}>總預算</th>
                     </tr>
                   </thead>
                   <tbody>
