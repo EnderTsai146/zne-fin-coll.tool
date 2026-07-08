@@ -428,7 +428,7 @@ function App() {
 
   const [currentPage, setCurrentPage] = useState('overview');
   const [lastActiveCenterTab, setLastActiveCenterTab] = useState('overview');
-  const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('review');
+  const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('database');
   const [settingsSubTab, setSettingsSubTab] = useState('budget');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
 

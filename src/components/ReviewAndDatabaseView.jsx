@@ -29,22 +29,15 @@ const ReviewAndDatabaseView = ({
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '18px', padding: '0 16px' }}>
         <SegmentedControl
           options={[
-            { label: '每月回顧 📖', value: 'review' },
-            { label: '財務資料庫 📊', value: 'database' }
+            { label: '財務資料庫 📊', value: 'database' },
+            { label: '每月回顧 📖', value: 'review' }
           ]}
           value={subTab}
           onChange={onChangeSubTab}
         />
       </div>
 
-      {subTab === 'review' ? (
-        <ReviewView
-          key="review-sub"
-          assets={assets}
-          combinedHistory={combinedHistory}
-          loadArchiveMonth={loadArchiveMonth}
-        />
-      ) : (
+      {subTab === 'database' ? (
         <MonthlyView
           key="monthly-sub"
           assets={assets}
@@ -63,6 +56,13 @@ const ReviewAndDatabaseView = ({
           sendLineNotification={sendLineNotification}
           currentUser={currentUser}
           logOperation={logOperation}
+        />
+      ) : (
+        <ReviewView
+          key="review-sub"
+          assets={assets}
+          combinedHistory={combinedHistory}
+          loadArchiveMonth={loadArchiveMonth}
         />
       )}
     </div>
