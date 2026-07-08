@@ -11,12 +11,11 @@ import './index.css';
 import ReviewAndDatabaseView from './components/ReviewAndDatabaseView';
 import SettingsView from './components/SettingsView';
 import { getBudgetForMonth } from './utils/budgetUtils';
-import { db, auth } from './firebase';
+import { db, auth, getFcmToken, onFcmMessage } from './firebase';
 import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter, runTransaction } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { MAKE_WEBHOOK_URL } from './config';
 
-const LINE_NOTIFICATIONS_DISABLED = true;
+
 
 const formatInputMoney = (valStr) => {
   if (valStr === '' || valStr === undefined || valStr === null) return '';
@@ -99,11 +98,7 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
     return false;
   }, [assets]);
 
-  const isLineNearlyFull = useMemo(() => {
-    const currentMonthStr = new Date().toISOString().slice(0, 7);
-    const lineCount = assets?.lineNotifCount?.month === currentMonthStr ? (assets.lineNotifCount?.count || 0) : 0;
-    return lineCount >= 900;
-  }, [assets]);
+
 
   const handleCenterClick = () => {
     if (currentPage === 'overview') {
@@ -143,7 +138,7 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
           );
         }
 
-        const isSettingsWarning = item.id === 'settings' && (isNextMonthBudgetUnset || isLineNearlyFull);
+        const isSettingsWarning = item.id === 'settings' && isNextMonthBudgetUnset;
 
         return (
           <div
@@ -531,6 +526,55 @@ function App() {
     };
   }, [currentUser, resetInactivityTimer]);
 
+  // PWA Notification Permission & FCM Token Setup
+  useEffect(() => {
+    if (!currentUser || !dataReady || !operatorName) return;
+
+    const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
+    const existingTokens = assets?.fcmTokens || {};
+    
+    const setupNotifications = async () => {
+      const vapidKey = "BGYGX29x3HiHqANNRIu9qtH_M5nEu9C70r5BgSQ6omRLLRm2nL941IOz8z8PQ3UXaK-wXslOprbMpP-zRIfSruc";
+      
+      try {
+        if ('Notification' in window) {
+          let permission = Notification.permission;
+          if (permission === 'default') {
+            permission = await Notification.requestPermission();
+          }
+          
+          if (permission === 'granted') {
+            const token = await getFcmToken(vapidKey);
+            if (token && existingTokens[userKey] !== token) {
+              const updatedAssets = {
+                ...assets,
+                fcmTokens: {
+                  ...existingTokens,
+                  [userKey]: token
+                }
+              };
+              saveToCloud(updatedAssets);
+              console.log(`Successfully registered FCM token for ${operatorName}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error setting up push notifications:", err);
+      }
+    };
+
+    setupNotifications();
+    
+    // Listen for foreground push notifications
+    onFcmMessage((payload) => {
+      console.log("Foreground push notification received:", payload);
+      if (payload?.notification) {
+        alert(`🔔 【${payload.notification.title}】\n${payload.notification.body}`);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, dataReady, operatorName]);
+
   // Sync session safety with real system time upon tab visibility return
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -839,10 +883,7 @@ function App() {
           { date: '2026-06-24', category: '生活用品', total: 600, payer: '共同帳戶', note: '好市多衛生紙', timestamp: '2026-06-24T12:00:00.000Z' }
         ],
         bills: [],
-        pendingLineNotifications: [],
-        lineConfig: { batchMode: false, month: new Date().toISOString().slice(0, 7) },
-        lineNotifCount: { month: new Date().toISOString().slice(0, 7), count: 5 },
-        config: { categories: ["餐飲食品", "生活用品", "固定費用", "投資理財", "育兒", "寵物", "其他"] },
+        config: { categories: ["餐費", "購物", "娛樂", "其他"] },
         monthlyBudget: 25000
       });
       setDataReady(true);
@@ -860,17 +901,7 @@ function App() {
             userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
           };
         }
-        const currentMonthStr = new Date().toISOString().slice(0, 7);
         let needsUpdate = false;
-        if (!data.lineConfig || data.lineConfig.month !== currentMonthStr) {
-          data.lineConfig = { batchMode: false, month: currentMonthStr };
-          data.lineNotifCount = { month: currentMonthStr, count: 0 };
-          needsUpdate = true;
-        }
-        if (!data.pendingLineNotifications) {
-          data.pendingLineNotifications = [];
-          needsUpdate = true;
-        }
         if (!data.config || !data.config.categories || JSON.stringify(data.config.categories) !== JSON.stringify(["餐費", "購物", "娛樂", "其他"])) {
           data.config = {
             ...(data.config || {}),
@@ -1117,35 +1148,7 @@ function App() {
     };
   };
 
-  const sendLineNotification = async (data) => {
-    // 🚧 此功能暫停使用：暫時關閉發送 Line 通知以節省配額或暫停通知，但保留核心邏輯
-    if (LINE_NOTIFICATIONS_DISABLED) return;
 
-    try {
-      const budgetInfo = getBudgetProgressText(assets);
-      const budgetSuffix = ` [預算進度: ${budgetInfo.percentage}%]`;
-
-      const safeData = {
-        title: String(data.title || "系統通知").replace(/"/g, '＂').replace(/\n/g, ' '),
-        amount: String(data.amount || "$0").replace(/"/g, '＂'),
-        category: String(data.category || "未分類").replace(/"/g, '＂').replace(/\n/g, ' '),
-        // Fix #4: 彙整通知保留換行，一般通知清除換行
-        note: data.isSummary
-          ? String(data.note || "無備註").replace(/"/g, '＂') + budgetSuffix
-          : String(data.note || "無備註").replace(/"/g, '＂').replace(/\n/g, ' ') + budgetSuffix,
-        date: String(data.date || new Date().toISOString().split('T')[0]),
-        color: String(data.color || "#666666"),
-        operator: String(data.operator || operatorName || "系統").replace(/"/g, '＂')
-      };
-      await fetch(MAKE_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(safeData)
-      });
-    } catch (error) {
-      console.error("Line 通知發送失敗", error);
-    }
-  };
 
   const handleLogout = async () => {
     if (await customConfirm("確定要登出嗎？")) {
@@ -1191,10 +1194,7 @@ function App() {
     const timestamp = new Date().toISOString();
     const records = Array.isArray(historyRecordsInput) ? historyRecordsInput : [historyRecordsInput];
 
-    const isBatch = assets.lineConfig?.batchMode;
-    const increment = isBatch ? 0 : 1;
-
-    const finalAssets = getUpdatedAssetsWithLineCount({
+    const finalAssets = {
       ...newAssets,
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
@@ -1205,37 +1205,7 @@ function App() {
           auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
         }))
       ]
-    }, increment);
-
-    const appended = [];
-
-    records.forEach(historyRecord => {
-      let color = "#17c9b2"; let title = "資產變動";
-      if (historyRecord.type === 'income') { color = "#06c755"; title = "收入入帳"; }
-      else if (historyRecord.type === 'spend') { color = "#ef454d"; title = "共同支出"; }
-      else if (historyRecord.type === 'transfer') { color = "#2b90d9"; title = "資產劃撥"; }
-      else if (historyRecord.type === 'exchange') { color = "#3498db"; title = "外幣換匯"; }
-      else if (historyRecord.type === 'calibrate') { color = "#95a5a6"; title = "餘額校正"; }
-      else if (historyRecord.type.includes('invest_sell')) { color = "#f1c40f"; title = "投資變現"; }
-      else if (historyRecord.type.includes('invest_buy')) { color = "#8e44ad"; title = "買入投資"; }
-      else if (historyRecord.type.includes('invest_day_trade')) { color = "#af52de"; title = "當沖結算"; }
-
-      let signPrefix = '';
-      if (['income', 'joint_invest_sell', 'personal_invest_sell', 'personal_invest_profit', 'liquidate'].includes(historyRecord.type)) { signPrefix = '+'; }
-      else if (['spend', 'expense', 'joint_invest_buy', 'personal_invest_buy', 'personal_invest_loss'].includes(historyRecord.type)) { signPrefix = '-'; }
-      else if (['transfer', 'settle', 'exchange', 'calibrate'].includes(historyRecord.type)) { signPrefix = '🔄 '; }
-      else if (historyRecord.type.includes('invest_day_trade')) {
-        signPrefix = (historyRecord.note && historyRecord.note.includes('獲利')) ? '+' : '-';
-      }
-
-      const usdNote = historyRecord.usdAmount ? ` (含 $${historyRecord.usdAmount} USD)` : '';
-      const payload = { title: title, amount: `${signPrefix}$${(Number(historyRecord.total) || 0).toLocaleString()}`, category: historyRecord.category, note: `${historyRecord.note || '無'}${usdNote}`, date: historyRecord.date, color: color, operator: operatorName };
-
-      if (isBatch) appended.push(payload);
-      else sendLineNotification(payload);
-    });
-
-    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), ...appended];
+    };
 
     const logDetail = records.map(r => formatTransactionDetail(r)).join('; ');
 
@@ -1275,9 +1245,8 @@ function App() {
     const finalNote = note || '日記帳';
     const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
 
-    const isBatch = assets.lineConfig?.batchMode;
     const targetTimestamp = new Date().toISOString();
-    const finalAssets = getUpdatedAssetsWithLineCount({
+    const finalAssets = {
       ...newAssetsTemp,
       ...(updatedBills ? { bills: updatedBills } : {}),
       monthlyExpenses: [
@@ -1289,10 +1258,7 @@ function App() {
           necessity: 'need'
         }
       ]
-    }, isBatch ? 0 : 1);
-
-    const payload = { title: "個人日記帳", amount: `-$${totalAmount.toLocaleString()}`, category: "個人支出", note: finalNote, date: date, color: "#ef454d", operator: operatorName };
-    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
+    };
 
     const logDetail = `新增個人支出 $${totalAmount.toLocaleString()} 於 ${payerName} (${finalNote})`;
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
@@ -1301,7 +1267,6 @@ function App() {
     setNewlyAddedRecordTimestamp(targetTimestamp);
     setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
-    if (!isBatch) sendLineNotification(payload);
   };
 
   const handleAddJointExpense = async (date, category, amount, advancedBy, note, updatedBills = null) => {
@@ -1332,10 +1297,9 @@ function App() {
     }
 
     const safeNote = note ? String(note).trim() : '';
-    const isBatch = assets.lineConfig?.batchMode;
 
     const targetTimestamp = new Date().toISOString();
-    const finalAssets = getUpdatedAssetsWithLineCount({
+    const finalAssets = {
       ...newAssets,
       ...(updatedBills ? { bills: updatedBills } : {}),
       monthlyExpenses: [
@@ -1348,10 +1312,7 @@ function App() {
           necessity: 'need', subCategory: category
         }
       ]
-    }, isBatch ? 0 : 1);
-
-    const payload = { title: "共同支出", amount: `-$${val.toLocaleString()}`, category: "共同支出", note: safeNote ? `${category} - ${safeNote}` : category, date: date, color: "#ef454d", operator: operatorName };
-    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
+    };
 
     const methodStr = advancedBy === 'jointCash' ? '共同現金直付' : `由 ${advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`;
     const logDetail = `新增共同支出 $${val.toLocaleString()} - 分類: ${category} [${methodStr}] (${safeNote || '無備註'})`;
@@ -1361,7 +1322,6 @@ function App() {
     setNewlyAddedRecordTimestamp(targetTimestamp);
     setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
-    if (!isBatch) sendLineNotification(payload);
   };
 
   // ★ 嚴格防護的修改功能：只准改文字與日期，金額絕不可動
@@ -1672,32 +1632,16 @@ function App() {
 
     newAssets.monthlyExpenses = mainList;
 
-    const isBatch = assets.lineConfig?.batchMode;
-    const finalAssets = getUpdatedAssetsWithLineCount(newAssets, isBatch ? 0 : 1);
-
-    const payload = { title: "🗑️ 刪除/作廢紀錄", amount: `🔄$${(Number(record.total) || 0).toLocaleString()}`, category: record.category, note: `已作廢: ${record.note} (原因: ${reason.trim()})`, date: new Date().toISOString().split('T')[0], color: "#666666", operator: operatorName };
-    if (isBatch) finalAssets.pendingLineNotifications = [...(assets.pendingLineNotifications || []), payload];
-
     const logDetail = `作廢紀錄【${record.date} ${record.payer} ${record.category} $${(Number(record.total) || 0).toLocaleString()}】(原因: ${reason.trim()}, 原備註: ${record.note})`;
-    const finalAssetsWithLog = logOperation(finalAssets, 'delete', logDetail);
+    const finalAssetsWithLog = logOperation(newAssets, 'delete', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    if (!isBatch) sendLineNotification(payload);
-    await customAlert("🗑️ 紀錄已作廢，相關金額與投資本金已完全復原。");
+    await customAlert("🗑️ 紀錄已作廢，相關金額與投資本本已完全復原。");
   };
 
   const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
 
-  // Fix #9: 將 getUpdatedAssetsWithLineCount 移到 early return 之前，避免 hoisting 問題
-  const getUpdatedAssetsWithLineCount = (assetsCopy, increment = 1) => {
-    if (LINE_NOTIFICATIONS_DISABLED) return assetsCopy;
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    let newCountObj = { month: currentMonth, count: increment };
-    if (assetsCopy.lineNotifCount && assetsCopy.lineNotifCount.month === currentMonth) {
-      newCountObj.count = assetsCopy.lineNotifCount.count + increment;
-    }
-    return { ...assetsCopy, lineNotifCount: newCountObj };
-  };
+
 
   if (splashPhase !== 'done' && (loading || currentUser)) return (
     <div className={`splash-screen splash-phase-${splashPhase}`}>
@@ -1756,46 +1700,7 @@ function App() {
   );
   if (!currentUser) return <Login autoLogoutReason={autoLogoutReason} clearAutoLogoutReason={() => setAutoLogoutReason('')} />;
 
-  // ★ Fix: 不再定義為 render 內的元件，改為預計算變數 + 內嵌 JSX，避免輸入時元件重建導致失焦
-  const currentMonth_tb = new Date().toISOString().slice(0, 7);
-  const lineCount_tb = (assets.lineNotifCount && assets.lineNotifCount.month === currentMonth_tb) ? assets.lineNotifCount.count : 0;
-  const limitWarning_tb = lineCount_tb >= 185;
-  const isBatch_ls = assets.lineConfig?.batchMode || false;
 
-  const handleToggleBatchMode = () => {
-    if (isBatch_ls) {
-      let willSend = false;
-      if (assets.pendingLineNotifications && assets.pendingLineNotifications.length > 0) {
-        const summaryList = assets.pendingLineNotifications.map((n, i) => `${i + 1}. ${n.title}: ${n.note} (${n.amount})`).join('\\n').slice(0, 800);
-        const batchPayload = {
-          title: "手動批次變動彙整",
-          amount: `共 ${assets.pendingLineNotifications.length} 筆`,
-          category: "系統彙整",
-          note: summaryList,
-          date: new Date().toISOString().split('T')[0] + '（本日期為系統彙整日，以上逐筆個別日期請至App中查看。）',
-          color: "#9b59b6",
-          operator: "累積總結推播",
-          isSummary: true
-        };
-        sendLineNotification(batchPayload);
-        willSend = true;
-        alert(`📤 已為您合併發出共 ${assets.pendingLineNotifications.length} 筆通知！`);
-      } else {
-        alert(`沒有累積等待中的通知。已關閉暫存模式。`);
-      }
-      const finalAssets = getUpdatedAssetsWithLineCount({
-        ...assets,
-        pendingLineNotifications: [],
-        lineConfig: { ...assets.lineConfig, batchMode: false }
-      }, willSend ? 1 : 0);
-      saveToCloud(finalAssets);
-    } else {
-      saveToCloud({
-        ...assets,
-        lineConfig: { ...assets.lineConfig, batchMode: true }
-      });
-    }
-  };
 
   /* navItems & BottomNav moved to module level for stable pill animation */
 

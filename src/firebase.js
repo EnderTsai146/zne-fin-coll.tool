@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 // ★ 新增這行：引入驗證功能
 import { getAuth } from "firebase/auth";
+import { getMessaging, getToken, onMessage, isSupported } from "firebase/messaging";
 
 // 您的 Firebase 設定 (這部分不用動，維持原本的即可)
 const firebaseConfig = {
@@ -20,3 +21,31 @@ export const db = getFirestore(app);
 
 // ★ 新增這行：匯出 auth 實例
 export const auth = getAuth(app);
+
+export const getFcmToken = async (vapidKey) => {
+  try {
+    const supported = await isSupported();
+    if (!supported) {
+      console.warn("FCM is not supported in this browser environment.");
+      return null;
+    }
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, { vapidKey });
+    return token;
+  } catch (err) {
+    console.error("An error occurred while retrieving FCM token. ", err);
+    return null;
+  }
+};
+
+export const onFcmMessage = (callback) => {
+  try {
+    isSupported().then(supported => {
+      if (!supported) return;
+      const messaging = getMessaging(app);
+      onMessage(messaging, callback);
+    });
+  } catch (err) {
+    console.error("Failed to register onMessage handler. ", err);
+  }
+};

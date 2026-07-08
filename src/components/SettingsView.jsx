@@ -231,43 +231,7 @@ const SettingsView = ({
     }
   };
 
-  // --- 2. LINE Settings State & Logic ---
-  const lineCount_tb = assets.lineNotifCount?.month === currentMonthStr ? (assets.lineNotifCount?.count || 0) : 0;
-  const isBatch_ls = assets.lineConfig?.batchMode || false;
-  const LINE_NOTIFICATIONS_DISABLED = true; // 系統預設停用，保留 UI 顯示
-  const [tempLineCount, setTempLineCount] = useState(lineCount_tb);
 
-  useEffect(() => {
-    setTempLineCount(lineCount_tb);
-  }, [lineCount_tb]);
-
-  const handleToggleBatchMode = () => {
-    const willBeBatch = !isBatch_ls;
-    if (!willBeBatch) {
-      // Flush batch logic (would trigger notifications, keeping logic mock-safe)
-      if (assets.pendingLineNotifications?.length > 0) {
-        alert(`📤 已為您發出共 ${assets.pendingLineNotifications.length} 筆暫存通知！`);
-      }
-      saveToCloud({
-        ...assets,
-        pendingLineNotifications: [],
-        lineConfig: { ...assets.lineConfig, batchMode: false }
-      });
-    } else {
-      saveToCloud({
-        ...assets,
-        lineConfig: { ...assets.lineConfig, batchMode: true }
-      });
-    }
-  };
-
-  const handleSaveLineCount = async () => {
-    saveToCloud({
-      ...assets,
-      lineNotifCount: { month: currentMonthStr, count: Number(tempLineCount) || 0 }
-    });
-    await customAlert("💾 LINE 統計計數已更新！");
-  };
 
   // --- 3. Operation Logs State & Logic ---
   const [dbLogs, setDbLogs] = useState([]);
@@ -355,7 +319,6 @@ const SettingsView = ({
       {/* Settings Navigation Sub-Tabs */}
       <div className="settings-tabs" style={{ marginBottom: '20px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
         <button className={`settings-tab-btn ${activeSubTab === 'budget' ? 'active' : ''}`} onClick={() => setActiveSubTab('budget')}>預算設定</button>
-        <button className={`settings-tab-btn ${activeSubTab === 'line' ? 'active' : ''}`} onClick={() => setActiveSubTab('line')}>LINE設定</button>
         <button className={`settings-tab-btn ${activeSubTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveSubTab('guide')}>操作指南</button>
         <button className={`settings-tab-btn ${activeSubTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveSubTab('faq')}>常見問題</button>
         <button className={`settings-tab-btn ${activeSubTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveSubTab('logs')}>歷史軌跡</button>
@@ -569,65 +532,7 @@ const SettingsView = ({
           </div>
         )}
 
-        {/* === 2. LINE 設定 === */}
-        {activeSubTab === 'line' && (
-          <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '16px' }}>
-            {/* 🚧 此功能暫停使用。遮罩色塊 */}
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(18, 18, 18, 0.75)',
-              backdropFilter: 'blur(3px)',
-              zIndex: 10,
-              color: '#ffffff',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              fontSize: '1rem',
-              fontWeight: 'bold',
-            }}>
-              <span style={{ fontSize: '2.2rem', marginBottom: '6px' }}>🚧</span>
-              <span>此功能暫停使用。</span>
-            </div>
 
-            <div className="glass-card" style={{ padding: '20px' }}>
-              <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '1rem', fontWeight: '700' }}>💬 系統通知管理</h3>
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600' }}>手動校正當月計數</label>
-                <input 
-                  type="number" 
-                  inputMode="numeric" 
-                  className="glass-input" 
-                  value={tempLineCount} 
-                  onChange={e => setTempLineCount(e.target.value)} 
-                  placeholder="強制覆寫系統已發送數量" 
-                  style={{ marginBottom: 0 }} 
-                />
-              </div>
-              <div style={{ marginBottom: '22px', padding: '16px', background: 'rgba(120,120,128,0.06)', borderRadius: 'var(--radius-md)', border: isBatch_ls ? '1px solid rgba(0,122,255,0.25)' : '1px solid transparent', transition: 'all 0.3s ease' }}>
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                  <span style={{ fontWeight: '600', fontSize: '0.88rem', color: isBatch_ls ? 'var(--accent-blue)' : 'var(--text-primary)' }}>
-                    {isBatch_ls ? '📦 已暫停 Line 推播並開始收集' : '📦 暫停推播並開始收集新通知'}
-                  </span>
-                  <input type="checkbox" checked={isBatch_ls} onChange={handleToggleBatchMode} style={{ transform: 'scale(1.2)', accentColor: 'var(--accent-blue)' }} />
-                </label>
-                <p style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '8px', lineHeight: '1.5' }}>
-                  開啟此開關以暫停每筆獨立提醒，所有的操作將存入雲端等候名單。當你將此開關「關閉」時，會一次性合開發送所有等候中的變動。
-                </p>
-                {isBatch_ls && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--accent-orange)', marginTop: '8px', fontWeight: '600' }}>
-                    🛒 等待發送的通知數量：{assets.pendingLineNotifications?.length || 0} 筆
-                  </div>
-                )}
-              </div>
-              <button className="glass-btn glass-btn-cta" style={{ width: '100%', fontWeight: '700' }} onClick={handleSaveLineCount}>確認儲存設定</button>
-            </div>
-          </div>
-        )}
 
         {/* === 3. 操作指南 === */}
         {activeSubTab === 'guide' && (
