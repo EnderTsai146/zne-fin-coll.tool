@@ -438,6 +438,7 @@ function App() {
   const [autoLogoutReason, setAutoLogoutReason] = useState('');
   const inactivityTimerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+  const lastActiveTimeRef = useRef(Date.now());
 
   const performAutoLogout = useCallback((reason) => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
@@ -463,6 +464,7 @@ function App() {
 
   const resetInactivityTimer = useCallback(() => {
     if (!currentUser) return;
+    lastActiveTimeRef.current = Date.now();
     if (showTimeoutWarning) return;
 
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
@@ -502,6 +504,30 @@ function App() {
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };
   }, [currentUser, resetInactivityTimer]);
+
+  // Sync session safety with real system time upon tab visibility return
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && currentUser) {
+        const elapsed = Date.now() - lastActiveTimeRef.current;
+        const idleLimit = 180000; // 3 minutes
+        const warningPeriod = 15000; // 15 seconds
+        
+        if (elapsed >= idleLimit + warningPeriod) {
+          performAutoLogout('inactivity');
+        } else if (elapsed >= idleLimit) {
+          const remaining = Math.max(1, Math.ceil((idleLimit + warningPeriod - elapsed) / 1000));
+          setShowTimeoutWarning(true);
+          setTimeoutCountdown(remaining);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentUser, performAutoLogout]);
 
   // Timer countdown warning handler
   useEffect(() => {
