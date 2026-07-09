@@ -27,8 +27,40 @@ const SettingsView = ({
   customConfirm,
   activeSubTab,
   setActiveSubTab,
-  logOperation
+  logOperation,
+  onRequestNotificationPermission
 }) => {
+  
+  // --- Push Notification Permission States & Handlers ---
+  const [notificationPermission, setNotificationPermission] = useState('default');
+  const [isSubscribing, setIsSubscribing] = useState(false);
+
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    } else {
+      setNotificationPermission('unsupported');
+    }
+  }, []);
+
+  const handleEnableNotification = async () => {
+    setIsSubscribing(true);
+    try {
+      if (onRequestNotificationPermission) {
+        const perm = await onRequestNotificationPermission();
+        setNotificationPermission(perm);
+        if (perm === 'granted') {
+          await customAlert("✅ 啟用成功！您已開啟推播通知。");
+        } else if (perm === 'denied') {
+          await customAlert("⚠️ 您拒絕了通知權限，若要接收通知，請至瀏覽器或系統通知設定中重新允許。");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      await customAlert("❌ 啟用通知失敗：" + err.message);
+    }
+    setIsSubscribing(false);
+  };
   
   // --- 1. 預算設定 State ---
   const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
@@ -651,32 +683,92 @@ const SettingsView = ({
         )}
 
         {/* === 6. 系統資訊 === */}
-        {activeSubTab === 'info' && (
-          <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-              <span>系統版本</span>
-              <span style={{ color: '#ffffff', fontWeight: '600' }}>v2.5.0 ( potato-steward-budget )</span>
+        {activeSubTab === 'info' && (() => {
+          let statusText = '偵測中...';
+          let statusColor = 'var(--text-secondary)';
+          let showBtn = false;
+          if (notificationPermission === 'granted') {
+            statusText = '已開啟通知 系統運作中 ✅';
+            statusColor = 'var(--accent-green)';
+          } else if (notificationPermission === 'denied') {
+            statusText = '通知已遭封鎖 ❌ (請至瀏覽器設定允許)';
+            statusColor = 'var(--accent-red)';
+          } else if (notificationPermission === 'unsupported') {
+            statusText = '不支援通知 🚫';
+            statusColor = 'var(--text-tertiary)';
+          } else {
+            statusText = '尚未啟用通知 🔔';
+            statusColor = 'var(--accent-orange)';
+            showBtn = true;
+          }
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                  <span>系統版本</span>
+                  <span style={{ color: '#ffffff', fontWeight: '600' }}>v2.5.0 ( potato-steward-budget )</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                  <span>資料庫狀態</span>
+                  <span style={{ color: window.location.hostname === 'localhost' ? 'var(--accent-orange)' : 'var(--accent-green)', fontWeight: '600' }}>
+                    {window.location.hostname === 'localhost' ? '本地模擬開發模式' : '雲端 Firestore 連線中'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                  <span>目前操作者</span>
+                  <span style={{ color: '#ffffff', fontWeight: '600' }}>{operatorName}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+                  <span>綁定帳號</span>
+                  <span style={{ color: '#ffffff', fontWeight: '600', fontSize: '0.78rem' }}>{currentUser?.email || '無'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>歷史明細總數</span>
+                  <span style={{ color: '#ffffff', fontWeight: '600' }}>{assets.monthlyExpenses?.length || 0} 筆</span>
+                </div>
+              </div>
+
+              {/* Notification card panel */}
+              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ fontWeight: '700', fontSize: '0.9rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🔔 裝置推播通知
+                </div>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
+                  啟用通知後，當交易紀錄產生異動（新增支出、劃撥或修改時）您的裝置將即時收到系統推播。
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>通知狀態</span>
+                  <span style={{ fontSize: '0.8rem', fontWeight: '700', color: statusColor }}>
+                    {statusText}
+                  </span>
+                </div>
+
+                {showBtn && (
+                  <button
+                    onClick={handleEnableNotification}
+                    disabled={isSubscribing}
+                    className="glass-btn"
+                    style={{
+                      width: '100%',
+                      padding: '10px 0',
+                      borderRadius: '12px',
+                      fontSize: '0.82rem',
+                      fontWeight: '700',
+                      color: '#fff',
+                      background: 'linear-gradient(135deg, rgba(10,132,255,0.7) 0%, rgba(88,86,214,0.6) 100%)',
+                      borderColor: 'rgba(10,132,255,0.4)',
+                      cursor: 'pointer',
+                      marginTop: '4px',
+                      boxShadow: '0 4px 15px rgba(10,132,255,0.25)'
+                    }}
+                  >
+                    {isSubscribing ? '啟動中...' : '啟用推播通知 🔔'}
+                  </button>
+                )}
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-              <span>資料庫狀態</span>
-              <span style={{ color: window.location.hostname === 'localhost' ? 'var(--accent-orange)' : 'var(--accent-green)', fontWeight: '600' }}>
-                {window.location.hostname === 'localhost' ? '本地模擬開發模式' : '雲端 Firestore 連線中'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-              <span>目前操作者</span>
-              <span style={{ color: '#ffffff', fontWeight: '600' }}>{operatorName}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
-              <span>綁定帳號</span>
-              <span style={{ color: '#ffffff', fontWeight: '600', fontSize: '0.78rem' }}>{currentUser?.email || '無'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>歷史明細總數</span>
-              <span style={{ color: '#ffffff', fontWeight: '600' }}>{assets.monthlyExpenses?.length || 0} 筆</span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
       </div>
     </div>

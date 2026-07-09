@@ -578,6 +578,40 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, dataReady, operatorName]);
 
+  const handleRegisterNotification = async () => {
+    const vapidKey = "BGYGX29x3HiHqANNRIu9qtH_M5nEu9C70r5BgSQ6omRLLRm2nL941IOz8z8PQ3UXaK-wXslOprbMpP-zRIfSruc";
+    if (!('Notification' in window)) return 'unsupported';
+    
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    
+    if (permission === 'granted' && operatorName) {
+      try {
+        const token = await getFcmToken(vapidKey);
+        if (token) {
+          const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
+          const existingTokens = assets?.fcmTokens || {};
+          if (existingTokens[userKey] !== token) {
+            const updatedAssets = {
+              ...assets,
+              fcmTokens: {
+                ...existingTokens,
+                [userKey]: token
+              }
+            };
+            saveToCloud(updatedAssets);
+            console.log(`Successfully registered FCM token for ${operatorName}`);
+          }
+        }
+      } catch (err) {
+        console.error("FCM Token fetch failed:", err);
+      }
+    }
+    return permission;
+  };
+
   // Sync session safety with real system time upon tab visibility return
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -1899,6 +1933,7 @@ function App() {
             activeSubTab={settingsSubTab}
             setActiveSubTab={setSettingsSubTab}
             logOperation={logOperation}
+            onRequestNotificationPermission={handleRegisterNotification}
           />
         )}
       </div>
