@@ -1314,15 +1314,27 @@ function App() {
           .then(async (res) => {
             const text = await res.text();
             console.log(`[Push] GAS Web App Response for ${token.substring(0, 8)}...:`, text);
+            
+            if (text.startsWith("error:") || text.startsWith("error")) {
+              alert(`⚠️ 推播發送失敗（Google Apps Script 系統崩潰）：\n${text}`);
+              return;
+            }
+            
             try {
               const json = JSON.parse(text);
               if (json && json.status === 'error') {
-                alert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || text}`);
+                alert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || json.message || text}`);
               } else if (json && json.status === 'success') {
                 console.log(`[Push] Push sent successfully for token prefix: ${token.substring(0, 8)}`);
+                if (title.includes("測試")) {
+                  alert(`✅ 測試推播請求成功發送至 FCM 伺服器！\n請檢查您的裝置。如果仍未收到通知，可能是：\n1. 裝置的通知權限未開啟。\n2. 您的 Google Apps Script 尚未連結 GCP 專案，請檢查 Apps Script 的 Log。`);
+                }
+              } else {
+                alert(`⚠️ 推播發送回應異常：\n${text}`);
               }
             } catch (e) {
               console.warn("[Push] Parse response failed:", text);
+              alert(`⚠️ 接收到非預期回應（可能是 GAS 程式碼錯誤）：\n${text}`);
             }
           })
           .catch(err => {
