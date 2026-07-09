@@ -1193,6 +1193,30 @@ function App() {
     return newAssets;
   };
 
+  const sendTransactionPush = (title, body) => {
+    try {
+      const partnerKey = operatorName.includes('大狗狗') ? 'userB' : 'userA';
+      const partnerToken = assets?.fcmTokens?.[partnerKey];
+      if (!partnerToken) {
+        console.log(`[Push] No registered FCM token for partner (${partnerKey}). Skip push.`);
+        return;
+      }
+      fetch(MY_GOOGLE_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'push',
+          token: partnerToken,
+          title,
+          body
+        })
+      }).then(res => console.log("[Push] Request successfully sent:", res))
+        .catch(err => console.error("[Push] Fetch failed:", err));
+    } catch (err) {
+      console.error("[Push] Error:", err);
+    }
+  };
+
   const handleTransaction = (newAssets, historyRecordsInput) => {
     const timestamp = new Date().toISOString();
     const records = Array.isArray(historyRecordsInput) ? historyRecordsInput : [historyRecordsInput];
@@ -1215,6 +1239,34 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'transaction', logDetail);
 
     saveToCloud(finalAssetsWithLog);
+    
+    if (records.length > 0) {
+      const firstRecord = records[0];
+      const type = firstRecord.type;
+      let title = "🔄 帳務變動通知";
+      let body = `${operatorName} 執行了操作`;
+      
+      if (type === 'transfer') {
+        title = "🔄 資金轉帳劃撥";
+        body = `${operatorName} 劃撥資金：${firstRecord.note || '資產劃撥'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'exchange') {
+        title = "💱 貨幣換匯異動";
+        body = `${operatorName} 貨幣換匯：${firstRecord.note || '換匯'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'calibrate') {
+        title = "⚖️ 餘額手動校正";
+        body = `${operatorName} 餘額校正：${firstRecord.note || '校正'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'settle') {
+        title = "🤝 帳務結算通知";
+        body = `${operatorName} 結算帳務：${firstRecord.note || '結清'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type && type.includes('buy')) {
+        title = "📈 買入投資商品";
+        body = `${operatorName} 買入商品：${firstRecord.note || '投資買入'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type && type.includes('sell')) {
+        title = "📉 賣出投資商品";
+        body = `${operatorName} 賣出商品：${firstRecord.note || '投資賣出'} - $${firstRecord.total.toLocaleString()}`;
+      }
+      sendTransactionPush(title, body);
+    }
     
     // 檢查是否有投資交易紀錄
     const firstInvestRecord = records.find(r => r.type && r.type.includes('invest'));
@@ -1267,6 +1319,7 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
+    sendTransactionPush("💰 個人支出異動", `${payerName} 登錄個人支出：${finalNote} - $${totalAmount.toLocaleString()}`);
     setNewlyAddedRecordTimestamp(targetTimestamp);
     setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
@@ -1322,6 +1375,9 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
+    const payerNameText = operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶';
+    const pushMethodStr = advancedBy === 'jointCash' ? '共同現金直付' : '代墊款';
+    sendTransactionPush("🤝 共同支出異動", `${payerNameText} 登錄共同支出（${pushMethodStr}）：${category}${safeNote ? ' - ' + safeNote : ''} - $${val.toLocaleString()}`);
     setNewlyAddedRecordTimestamp(targetTimestamp);
     setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
@@ -1401,6 +1457,7 @@ function App() {
     const finalAssetsWithLog = logOperation(newAssets, 'edit', logDetail);
 
     saveToCloud(finalAssetsWithLog);
+    sendTransactionPush("✏️ 交易明細修改", `${operatorName} 修改了交易紀錄：${record.note || record.category} ➔ ${mutatedRecord.note}`);
     alert("✅ 紀錄修改成功！(金額與帳戶已受保護不可修改)");
   };
 
@@ -1639,6 +1696,7 @@ function App() {
     const finalAssetsWithLog = logOperation(newAssets, 'delete', logDetail);
 
     saveToCloud(finalAssetsWithLog);
+    sendTransactionPush("🗑️ 交易紀錄作廢", `${operatorName} 作廢了交易：${record.note || record.category} - $${(Number(record.total) || 0).toLocaleString()} (原因: ${reason.trim()})`);
     await customAlert("🗑️ 紀錄已作廢，相關金額與投資本本已完全復原。");
   };
 
