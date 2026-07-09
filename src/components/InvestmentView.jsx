@@ -304,14 +304,13 @@ const InvestmentView = ({ assets, isFetchingArchive, newlyAddedInvestSymbol, new
 
     return (
       <div
+        className={isNewlyAdded ? 'newly-added-highlight' : ''}
         style={{
           background: 'rgba(120,120,128,0.04)',
           borderRadius: 'var(--radius-md)',
           marginBottom: '10px',
           overflow: 'hidden',
-          border: isNewlyAdded ? '1px solid rgba(0, 122, 255, 0.6)' : '0.5px solid rgba(120,120,128,0.08)',
-          animation: isNewlyAdded ? 'pulseGlow 1.5s infinite' : undefined,
-          boxShadow: isNewlyAdded ? '0 0 10px rgba(0,122,255,0.4)' : undefined,
+          border: '0.5px solid rgba(120,120,128,0.08)',
           transition: 'all 0.25s ease',
         }}
       >

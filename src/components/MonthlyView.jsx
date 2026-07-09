@@ -770,7 +770,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                 return (
                                     <div 
                                         key={record.originalIndex} 
-                                        className="glass-card" 
+                                        className={`glass-card ${isNewlyAdded ? 'newly-added-highlight' : ''}`} 
                                         // HIG 2: Tap list row to open bottom action sheet modal
                                         onClick={() => { if (!isDeleted) setActiveActionRecord(record); }}
                                         style={{ 
@@ -780,10 +780,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                             padding: '14px 16px', 
                                             opacity: opacity,
                                             cursor: isDeleted ? 'default' : 'pointer',
-                                            transition: 'transform 0.2s ease, background 0.2s ease',
-                                            border: isNewlyAdded ? '1px solid rgba(0, 122, 255, 0.6)' : undefined,
-                                            animation: isNewlyAdded ? 'pulseGlow 1.5s infinite' : undefined,
-                                            boxShadow: isNewlyAdded ? '0 0 10px rgba(0,122,255,0.4)' : undefined
+                                            transition: 'transform 0.2s ease, background 0.2s ease'
                                         }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
