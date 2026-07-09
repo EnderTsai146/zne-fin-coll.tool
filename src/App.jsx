@@ -1258,6 +1258,18 @@ function App() {
       } else if (type === 'settle') {
         title = "🤝 帳務結算通知";
         body = `${operatorName} 結算帳務：${firstRecord.note || '結清'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'income') {
+        title = "💵 登錄個人收入";
+        body = `${operatorName} 登錄收入：${firstRecord.note || '個人收入'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'liquidate') {
+        title = "💰 贖回投資商品";
+        body = `${operatorName} 贖回商品：${firstRecord.note || '投資贖回'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'personal_invest_profit') {
+        title = "💹 投資實現損益 (獲利)";
+        body = `${operatorName} 實現投資獲利：${firstRecord.note || '投資獲利'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'personal_invest_loss') {
+        title = "📉 投資實現損益 (虧損)";
+        body = `${operatorName} 實現投資虧損：${firstRecord.note || '投資虧損'} - $${firstRecord.total.toLocaleString()}`;
       } else if (type && type.includes('buy')) {
         title = "📈 買入投資商品";
         body = `${operatorName} 買入商品：${firstRecord.note || '投資買入'} - $${firstRecord.total.toLocaleString()}`;
