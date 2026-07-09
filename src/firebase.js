@@ -23,19 +23,13 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 export const getFcmToken = async (vapidKey) => {
-  try {
-    const supported = await isSupported();
-    if (!supported) {
-      console.warn("FCM is not supported in this browser environment.");
-      return null;
-    }
-    const messaging = getMessaging(app);
-    const token = await getToken(messaging, { vapidKey });
-    return token;
-  } catch (err) {
-    console.error("An error occurred while retrieving FCM token. ", err);
-    return null;
+  const supported = await isSupported();
+  if (!supported) {
+    throw new Error("此瀏覽器環境不支援 FCM 服務。");
   }
+  const messaging = getMessaging(app);
+  const token = await getToken(messaging, { vapidKey });
+  return token;
 };
 
 export const onFcmMessage = (callback) => {

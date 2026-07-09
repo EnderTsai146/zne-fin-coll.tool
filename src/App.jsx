@@ -50,10 +50,10 @@ const NAV_ITEMS = [
   { id: 'settings', icon: '⚙️', label: '設定' }
 ];
 
-// Helpers for FCM multiple tokens management
 const getTokensArray = (field) => {
   if (!field) return [];
   if (typeof field === 'string') return [field];
+  if (Array.isArray(field)) return field.filter(t => typeof t === 'string' && t.length > 5);
   if (typeof field === 'object') return Object.keys(field).filter(t => typeof t === 'string' && t.length > 5);
   return [];
 };
@@ -1289,12 +1289,18 @@ function App() {
       const userBTokens = getTokensArray(assets?.fcmTokens?.['userB']);
       const allTokens = Array.from(new Set([...userATokens, ...userBTokens]));
       
+      console.log("[Push] userATokens:", userATokens);
+      console.log("[Push] userBTokens:", userBTokens);
+      console.log("[Push] allTokens:", allTokens);
+      
       if (allTokens.length === 0) {
         console.log(`[Push] No registered FCM tokens. Skip push.`);
+        alert("⚠️ 無法發送推播：目前資料庫中尚未登記任何裝置 Token！請確認您是否已經成功將網頁加入主畫面並啟用推播。");
         return;
       }
       
       allTokens.forEach(token => {
+        console.log(`[Push] Fetching GAS Web App for token: ${token.substring(0, 15)}...`);
         fetch(MY_GOOGLE_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -1304,11 +1310,29 @@ function App() {
             title,
             body
           })
-        }).then(res => console.log(`[Push] Request successfully sent to token starting with ${token.substring(0, 10)}`))
-          .catch(err => console.error("[Push] Fetch failed for token:", token, err));
+        })
+          .then(async (res) => {
+            const text = await res.text();
+            console.log(`[Push] GAS Web App Response for ${token.substring(0, 8)}...:`, text);
+            try {
+              const json = JSON.parse(text);
+              if (json && json.status === 'error') {
+                alert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || text}`);
+              } else if (json && json.status === 'success') {
+                console.log(`[Push] Push sent successfully for token prefix: ${token.substring(0, 8)}`);
+              }
+            } catch (e) {
+              console.warn("[Push] Parse response failed:", text);
+            }
+          })
+          .catch(err => {
+            console.error("[Push] Fetch failed for token:", token, err);
+            alert(`⚠️ 推播網路請求失敗：\n${err.message || String(err)}`);
+          });
       });
     } catch (err) {
       console.error("[Push] Error:", err);
+      alert(`⚠️ 推播程式執行錯誤：\n${err.message || String(err)}`);
     }
   };
 
