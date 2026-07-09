@@ -95,7 +95,10 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const [tempBudget, setTempBudget] = useState(() => formatInputMoney(assets.monthlyBudget || 25000));
     const currentBudget = assets.monthlyBudget || 25000;
 
-    const handleSaveBudget = () => { setAssets({ ...assets, monthlyBudget: parseMoney(tempBudget) }); setIsEditingBudget(false); };
+    const handleSaveBudget = () => {
+        setAssets(prev => ({ ...prev, monthlyBudget: parseMoney(tempBudget) }));
+        setIsEditingBudget(false);
+    };
 
     // ★ 增加校正專屬顏色標籤
     const getTypeColor = (type) => {
@@ -139,12 +142,15 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
         newAssets.monthlyExpenses = newHistory;
 
-        let loggedAssets = newAssets;
-        if (logOperation) {
-            loggedAssets = logOperation(newAssets, 'settle', `代墊款結清：共同帳戶撥款 $${debtAmount.toLocaleString()} 給 ${targetName}`);
-        }
-
-        setAssets(loggedAssets);
+        setAssets(prev => {
+            // Re-apply the transaction log on top of the latest state to be absolutely safe
+            const finalAssets = { ...prev, ...newAssets };
+            let loggedAssets = finalAssets;
+            if (logOperation) {
+                loggedAssets = logOperation(finalAssets, 'settle', `代墊款結清：共同帳戶撥款 $${debtAmount.toLocaleString()} 給 ${targetName}`);
+            }
+            return loggedAssets;
+        });
         await customAlert("✅ 結清完成！資金已轉移，並已產生結清軌跡。"); 
         setShowSettlementModal(false);
     };

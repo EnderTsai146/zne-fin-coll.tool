@@ -1642,7 +1642,20 @@ function App() {
     await customAlert("🗑️ 紀錄已作廢，相關金額與投資本本已完全復原。");
   };
 
-  const handleAssetsUpdate = (updatedAssets) => { saveToCloud(updatedAssets); };
+  const handleAssetsUpdate = (updater) => {
+    setAssets(prev => {
+      const nextAssets = typeof updater === 'function' ? updater(prev) : updater;
+      if (currentUser) {
+        if (window.location.hostname === 'localhost') {
+          console.log("[DEV MOCK] saveToCloud:", nextAssets);
+        } else {
+          const docRef = doc(db, "finance", "data");
+          setDoc(docRef, nextAssets).catch((err) => alert("連線錯誤：" + err.message));
+        }
+      }
+      return nextAssets;
+    });
+  };
 
 
 

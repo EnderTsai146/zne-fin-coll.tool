@@ -496,12 +496,18 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
     };
 
     if (editingBillId) {
-      const updatedBills = safeBills.map(b => b.id === editingBillId ? { ...b, ...updatedBillData } : b);
-      setAssets({ ...assets, bills: updatedBills });
+      setAssets(prev => {
+        const currentSafeBills = prev.bills || [];
+        const updatedBills = currentSafeBills.map(b => b.id === editingBillId ? { ...b, ...updatedBillData } : b);
+        return { ...prev, bills: updatedBills };
+      });
       await customAlert("✅ 帳單修改成功！");
     } else {
-      const newBill = { id: Date.now().toString(), ...updatedBillData };
-      setAssets({ ...assets, bills: [...safeBills, newBill] });
+      setAssets(prev => {
+        const currentSafeBills = prev.bills || [];
+        const newBill = { id: Date.now().toString(), ...updatedBillData };
+        return { ...prev, bills: [...currentSafeBills, newBill] };
+      });
       await customAlert("✅ 帳單設定成功！");
     }
 
@@ -583,7 +589,7 @@ const ExpenseEntry = ({ assets, setAssets, onAddExpense, onAddJointExpense, onTr
       return;
     }
     if (!(await customConfirm("⚠️ 確定要刪除這個帳單提醒嗎？"))) return;
-    setAssets({ ...assets, bills: safeBills.filter(b => b.id !== id) });
+    setAssets(prev => ({ ...prev, bills: (prev.bills || []).filter(b => b.id !== id) }));
   };
 
   return (

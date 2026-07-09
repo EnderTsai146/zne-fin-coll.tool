@@ -93,8 +93,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 }).catch(e => console.log('Background backup error (usually cors/redirect thrown by browser):', e));
 
                 setBackupWarning(false);
-                // ★ Fix: 傳入完整物件而非函式（setAssets 實際上是 handleAssetsUpdate，期望收到物件）
-                setAssets({ ...assets, lastBackupDate: todayStr });
+                // ★ Fix: 使用 functional update 確保狀態更新順序正確
+                setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
             } finally {
                 isBackingUpRef.current = false;
             }
@@ -369,7 +369,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         const finalNetWorth = Math.round(totalTwdCash + usdCashTwd + nonStockInvest + stockMarketValue);
 
                         setLiveMarketNetWorth(finalNetWorth);
-                        setAssets({ ...assets, dailyNetWorth: { ...(assets.dailyNetWorth || {}), [recordDate]: finalNetWorth } });
+                        setAssets(prev => ({ ...prev, dailyNetWorth: { ...(prev.dailyNetWorth || {}), [recordDate]: finalNetWorth } }));
                     }
                 }
             } catch (e) {
