@@ -1260,16 +1260,16 @@ function App() {
 
   const sendTransactionPush = (title, body) => {
     try {
-      const partnerKey = operatorName.includes('大狗狗') ? 'userB' : 'userA';
-      const partnerTokensField = assets?.fcmTokens?.[partnerKey];
-      const tokenList = getTokensArray(partnerTokensField);
+      const userATokens = getTokensArray(assets?.fcmTokens?.['userA']);
+      const userBTokens = getTokensArray(assets?.fcmTokens?.['userB']);
+      const allTokens = Array.from(new Set([...userATokens, ...userBTokens]));
       
-      if (tokenList.length === 0) {
-        console.log(`[Push] No registered FCM tokens for partner (${partnerKey}). Skip push.`);
+      if (allTokens.length === 0) {
+        console.log(`[Push] No registered FCM tokens. Skip push.`);
         return;
       }
       
-      tokenList.forEach(token => {
+      allTokens.forEach(token => {
         fetch(MY_GOOGLE_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
