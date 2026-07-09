@@ -91,14 +91,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         };
     }, [editModalData, showSettlementModal, activeActionRecord]);
 
-    const [isEditingBudget, setIsEditingBudget] = useState(false);
-    const [tempBudget, setTempBudget] = useState(() => formatInputMoney(assets.monthlyBudget || 25000));
-    const currentBudget = assets.monthlyBudget || 25000;
 
-    const handleSaveBudget = () => {
-        setAssets(prev => ({ ...prev, monthlyBudget: parseMoney(tempBudget) }));
-        setIsEditingBudget(false);
-    };
 
     // ★ 增加校正專屬顏色標籤
     const getTypeColor = (type) => {
@@ -306,9 +299,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
         return { stats, pieData, barChartData, compChartData, momText, momColor, netCashFlow, savingsRate, leaderboard };
     }, [history, filterDate, assets]);
 
-    const budgetPercent = Math.min((dashboardData.stats.expense.total / currentBudget) * 100, 100).toFixed(1);
-    let progressColor = '#30d158';
-    if (budgetPercent >= 90) progressColor = '#ff453a'; else if (budgetPercent >= 70) progressColor = '#ff9f0a';
+
 
     const filteredHistory = historyWithIndex.filter(record => {
         const recordMonth = record.month || record.date.slice(0, 7);
@@ -486,27 +477,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                         </div>
                     </div>
 
-                    <div className="glass-card" style={{ padding: '16px', marginBottom: '18px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '800', letterSpacing: '-0.01em' }}>🎯 共同預算進度</h3>
-                            {isEditingBudget ? (
-                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                    <input type="text" inputMode="numeric" className="glass-input" style={{ margin: 0, padding: '4px 8px', width: '100px' }} value={tempBudget} onChange={e => setTempBudget(formatInputMoney(e.target.value))} />
-                                    <button className="glass-btn" style={{ padding: '4px 10px', fontSize: '0.8rem', fontWeight: '600' }} onClick={handleSaveBudget}>儲存</button>
-                                </div>
-                            ) : (
-                                <div style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', cursor: 'pointer', background: 'rgba(255,255,255,0.06)', padding: '4px 10px', borderRadius: '8px', fontWeight: '600' }} onClick={() => { setTempBudget(formatInputMoney(assets.monthlyBudget || 25000)); setIsEditingBudget(true); }}>
-                                    設定預算: {formatMoney(currentBudget)} ✏️
-                                </div>
-                            )}
-                        </div>
-                        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '10px', height: '12px', width: '100%', overflow: 'hidden' }}>
-                            <div style={{ background: progressColor, width: `${budgetPercent}%`, height: '100%', transition: 'width 0.5s ease' }}></div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                            <span>已花 {formatMoney(dashboardData.stats.expense.total)}</span><span>剩餘 {formatMoney(Math.max(currentBudget - dashboardData.stats.expense.total, 0))} ({budgetPercent}%)</span>
-                        </div>
-                    </div>
+
 
                     <div style={{ display: 'flex', gap: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
                         <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '16px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(48,209,88,0.12), rgba(48,209,88,0.02))' }}>

@@ -472,9 +472,9 @@ const SettingsView = ({
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                      <th style={{ padding: '6px 4px', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30,30,30,0.95)', zIndex: 1 }}>月份</th>
-                      {dynamicCategories.map(cat => <th key={cat} style={{ padding: '6px 4px', textAlign: 'right', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30,30,30,0.95)', zIndex: 1 }}>{cat}</th>)}
-                      <th style={{ padding: '6px 4px', textAlign: 'right', color: '#fff', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30,30,30,0.95)', zIndex: 1 }}>總預算</th>
+                      <th style={{ padding: '6px 4px', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30, 30, 30, 0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', zIndex: 1 }}>月份</th>
+                      {dynamicCategories.map(cat => <th key={cat} style={{ padding: '6px 4px', textAlign: 'right', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30, 30, 30, 0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', zIndex: 1 }}>{cat}</th>)}
+                      <th style={{ padding: '6px 4px', textAlign: 'right', color: '#fff', whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: 'rgba(30, 30, 30, 0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', zIndex: 1 }}>總預算</th>
                     </tr>
                   </thead>
                   <tbody>

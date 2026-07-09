@@ -1027,42 +1027,88 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                                 }
 
                                 return (
-                                    <div key={idx} style={{ padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '8px', opacity: record.isDeleted ? 0.6 : 1 }}>
-                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: 'var(--radius-xs)', flexWrap: 'wrap', gap: '6px' }}>
-                                            <span className="nobrk" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>📅 帳單日: {record.date} {record.isDeleted && <span style={{ color: 'var(--accent-red)', marginLeft: '5px' }}>(🚫已作廢)</span>}</span>
-                                            <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                <span className="nobrk">⏱ 登錄: {formatDateTime(record.timestamp)}</span>
+                                    <div 
+                                        key={idx} 
+                                        style={{ 
+                                            padding: '12px 14px', 
+                                            background: 'rgba(255, 255, 255, 0.02)',
+                                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                                            borderRadius: '12px',
+                                            marginBottom: '10px', 
+                                            display: 'flex', 
+                                            flexDirection: 'column', 
+                                            gap: '8px', 
+                                            opacity: record.isDeleted ? 0.5 : 1 
+                                        }}
+                                    >
+                                        {/* Top Metadata Row */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '1px solid rgba(255, 255, 255, 0.04)', paddingBottom: '6px' }}>
+                                            <span className="nobrk" style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>
+                                                📅 帳單日: {record.date} {record.isDeleted && <span style={{ color: 'var(--accent-red)', marginLeft: '4px' }}>(已作廢)</span>}
+                                            </span>
+                                            <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                <span className="nobrk">⏱ {formatDateTime(record.timestamp)}</span>
                                                 <span className="nobrk">| 👤 {record.operator || '系統'}</span>
                                             </span>
                                         </div>
 
-                                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
-                                            {cashDiff !== 0 && (<div className="nobrk" style={{ color: cashDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: 'bold', fontSize: '1rem' }}>[{label}現鈔] {cashDiff > 0 ? '增加' : '扣除'} {cashDiff > 0 ? '+' : ''}{formatMoney(cashDiff)}</div>)}
-                                            {usdDiff !== 0 && (<div className="nobrk" style={{ color: usdDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: 'bold', fontSize: '1rem' }}>[{label}美金] {usdDiff > 0 ? '增加' : '扣除'} {usdDiff > 0 ? '+' : ''}${usdDiff.toFixed(2)}</div>)}
-                                            {invDiff !== 0 && (<div className="nobrk" style={{ color: invDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: 'bold', fontSize: '1rem' }}>[{label}投資] {invDiff > 0 ? '增加' : '扣除'} {invDiff > 0 ? '+' : ''}{formatMoney(invDiff)}</div>)}
+                                        {/* Main Record Header & Total */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                            <div style={{ color: 'var(--text-primary)', fontSize: '0.86rem', fontWeight: '700', wordBreak: 'break-word', textDecoration: record.isDeleted ? 'line-through' : 'none' }}>
+                                                📝 {record.note || record.category}
+                                            </div>
+                                            <div className="nobrk" style={{ fontSize: '0.86rem', fontWeight: '700', color: 'var(--text-primary)', textDecoration: record.isDeleted ? 'line-through' : 'none' }}>
+                                                總額: {formatMoney(record.total)}
+                                            </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                                            <div style={{ color: 'var(--text-primary)', fontSize: '0.92rem', wordBreak: 'break-word', paddingRight: '10px', fontWeight: '700', textDecoration: record.isDeleted ? 'line-through' : 'none' }}>📝 {record.note}</div>
-                                            <div className="nobrk" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textDecoration: record.isDeleted ? 'line-through' : 'none' }}>總額: {formatMoney(record.total)}</div>
-                                        </div>
+                                        {/* Balance Differences Row */}
+                                        {(cashDiff !== 0 || usdDiff !== 0 || invDiff !== 0) && (
+                                            <div style={{ display: 'flex', gap: '6px 12px', flexWrap: 'wrap', fontSize: '0.78rem' }}>
+                                                {cashDiff !== 0 && (
+                                                    <span className="nobrk" style={{ color: cashDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: '600' }}>
+                                                        [{label}現鈔] {cashDiff > 0 ? '增加' : '扣除'} {cashDiff > 0 ? '+' : ''}{formatMoney(cashDiff)}
+                                                    </span>
+                                                )}
+                                                {usdDiff !== 0 && (
+                                                    <span className="nobrk" style={{ color: usdDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: '600' }}>
+                                                        [{label}美金] {usdDiff > 0 ? '增加' : '扣除'} {usdDiff > 0 ? '+' : ''}${usdDiff.toFixed(2)}
+                                                    </span>
+                                                )}
+                                                {invDiff !== 0 && (
+                                                    <span className="nobrk" style={{ color: invDiff > 0 ? 'var(--accent-green)' : '#ff6b6b', fontWeight: '600' }}>
+                                                        [{label}投資] {invDiff > 0 ? '增加' : '扣除'} {invDiff > 0 ? '+' : ''}{formatMoney(invDiff)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
 
+                                        {/* Audit Trail Box */}
                                         {b && a && (
-                                            <div style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.06)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', marginTop: '4px' }}>
-                                                <div style={{ marginBottom: '4px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
-                                                    <span className="nobrk" style={{ color: 'var(--text-tertiary)' }}>變動前：</span>
-                                                    <span style={{ color: 'var(--text-tertiary)', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            <div style={{ 
+                                                fontSize: '0.74rem', 
+                                                background: 'rgba(0, 0, 0, 0.15)', 
+                                                padding: '8px 12px', 
+                                                borderRadius: '8px', 
+                                                border: '1px solid rgba(255, 255, 255, 0.04)', 
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '4px'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-tertiary)', flexWrap: 'wrap', gap: '4px' }}>
+                                                    <span className="nobrk">變動前：</span>
+                                                    <span style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                         <span className="nobrk">現 {formatMoney(bCash)}</span>
                                                         <span className="nobrk">| 美 ${bUsd.toFixed(2)}</span>
-                                                        <span className="nobrk">｜ 投 {formatMoney(bInv)}</span>
+                                                        <span className="nobrk">| 投 {formatMoney(bInv)}</span>
                                                     </span>
                                                 </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: 'var(--text-primary)', flexWrap: 'wrap', gap: '4px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '4px' }}>
                                                     <span className="nobrk">變動後：</span>
-                                                    <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                    <span style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', color: 'var(--text-primary)' }}>
                                                         <span className="nobrk">現 {formatMoney(aCash)}</span>
                                                         <span className="nobrk">| 美 ${aUsd.toFixed(2)}</span>
-                                                        <span className="nobrk">｜ 投 {formatMoney(aInv)}</span>
+                                                        <span className="nobrk">| 投 {formatMoney(aInv)}</span>
                                                     </span>
                                                 </div>
                                             </div>
