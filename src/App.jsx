@@ -418,6 +418,11 @@ function App() {
   const [newlyAddedRecordTimestamp, setNewlyAddedRecordTimestamp] = useState(null);
   const [newlyAddedInvestSymbol, setNewlyAddedInvestSymbol] = useState(null);
   const [newlyAddedInvestPayer, setNewlyAddedInvestPayer] = useState(null);
+  const [fcmDiagnostic, setFcmDiagnostic] = useState({
+    token: null,
+    error: null,
+    status: 'checking' // 'checking', 'unsupported', 'permission_denied', 'ready', 'failed'
+  });
 
   const customAlert = (message, title = '提示') => {
     return new Promise((resolve) => {
@@ -570,8 +575,10 @@ function App() {
           }
           
           if (permission === 'granted') {
+            setFcmDiagnostic(prev => ({ ...prev, status: 'fetching' }));
             const token = await getFcmToken(vapidKey);
             if (token) {
+              setFcmDiagnostic({ token, error: null, status: 'ready' });
               const tokenList = getTokensArray(existingUserField);
               if (!tokenList.includes(token)) {
                 const updatedUserField = addTokenToDict(existingUserField, token);
@@ -585,11 +592,18 @@ function App() {
                 saveToCloud(updatedAssets);
                 console.log(`Successfully registered FCM token for ${operatorName}`);
               }
+            } else {
+              setFcmDiagnostic({ token: null, error: "無法取得 FCM Token。可能是瀏覽器不支援 Web Push、或者 Firebase 設定有問題。", status: 'failed' });
             }
+          } else {
+            setFcmDiagnostic({ token: null, error: permission === 'denied' ? "瀏覽器拒絕了通知權限。請在瀏覽器設定中重新啟用。" : "尚未啟用通知權限。", status: 'permission_denied' });
           }
+        } else {
+          setFcmDiagnostic({ token: null, error: "此瀏覽器或裝置不支援 Web Push 推播通知。", status: 'unsupported' });
         }
       } catch (err) {
         console.error("Error setting up push notifications:", err);
+        setFcmDiagnostic({ token: null, error: err.message || String(err), status: 'failed' });
       }
     };
 
@@ -607,7 +621,10 @@ function App() {
 
   const handleRegisterNotification = async () => {
     const vapidKey = "BGYGX29x3HiHqANNRIu9qtH_M5nEu9C70r5BgSQ6omRLLRm2nL941IOz8z8PQ3UXaK-wXslOprbMpP-zRIfSruc";
-    if (!('Notification' in window)) return 'unsupported';
+    if (!('Notification' in window)) {
+      setFcmDiagnostic({ token: null, error: "此瀏覽器或裝置不支援 Web Push 推播通知。", status: 'unsupported' });
+      return 'unsupported';
+    }
     
     let permission = Notification.permission;
     if (permission === 'default') {
@@ -616,8 +633,10 @@ function App() {
     
     if (permission === 'granted' && operatorName) {
       try {
+        setFcmDiagnostic(prev => ({ ...prev, status: 'fetching' }));
         const token = await getFcmToken(vapidKey);
         if (token) {
+          setFcmDiagnostic({ token, error: null, status: 'ready' });
           const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
           const existingTokens = assets?.fcmTokens || {};
           const existingUserField = existingTokens[userKey];
@@ -635,10 +654,16 @@ function App() {
             saveToCloud(updatedAssets);
             console.log(`Successfully registered FCM token for ${operatorName}`);
           }
+        } else {
+          setFcmDiagnostic({ token: null, error: "取得 FCM Token 失敗，請確認是否已將此網頁「加入主畫面 / Dock」成 PWA 應用程式，且連網正常。", status: 'failed' });
         }
       } catch (err) {
         console.error("FCM Token fetch failed:", err);
+        setFcmDiagnostic({ token: null, error: err.message || String(err), status: 'failed' });
+        throw err;
       }
+    } else {
+      setFcmDiagnostic({ token: null, error: permission === 'denied' ? "瀏覽器拒絕了通知權限。請在瀏覽器設定中重新啟用。" : "尚未啟用通知權限。", status: 'permission_denied' });
     }
     return permission;
   };
@@ -1970,6 +1995,8 @@ function App() {
             setActiveSubTab={setSettingsSubTab}
             logOperation={logOperation}
             onRequestNotificationPermission={handleRegisterNotification}
+            fcmDiagnostic={fcmDiagnostic}
+            onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`)}
           />
         )}
       </div>

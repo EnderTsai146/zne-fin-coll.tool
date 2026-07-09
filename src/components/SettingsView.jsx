@@ -28,7 +28,9 @@ const SettingsView = ({
   activeSubTab,
   setActiveSubTab,
   logOperation,
-  onRequestNotificationPermission
+  onRequestNotificationPermission,
+  fcmDiagnostic = { status: 'checking', token: null, error: null },
+  onSendTestPush
 }) => {
   
   // --- Push Notification Permission States & Handlers ---
@@ -729,42 +731,88 @@ const SettingsView = ({
               </div>
 
               {/* Notification card panel */}
-              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ fontWeight: '700', fontSize: '0.9rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   🔔 裝置推播通知
                 </div>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
-                  啟用通知後，當交易紀錄產生異動（新增支出、劃撥或修改時）您的裝置將即時收到系統推播。
+                  當交易紀錄產生異動（新增支出、劃撥或修改時），綁定的所有裝置都將即時收到系統推播橫幅。
                 </p>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>通知狀態</span>
-                  <span style={{ fontSize: '0.8rem', fontWeight: '700', color: statusColor }}>
-                    {statusText}
-                  </span>
+                
+                {/* Status breakdown list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.04)', fontSize: '0.8rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>瀏覽器權限</span>
+                    <span style={{ fontWeight: '700', color: notificationPermission === 'granted' ? 'var(--accent-green)' : (notificationPermission === 'denied' ? 'var(--accent-red)' : 'var(--accent-orange)') }}>
+                      {notificationPermission === 'granted' ? '已允許 ✅' : (notificationPermission === 'denied' ? '已拒絕/封鎖 ❌' : '尚未授權 🔔')}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>FCM 狀態</span>
+                    <span style={{ fontWeight: '700', color: fcmDiagnostic.status === 'ready' ? 'var(--accent-green)' : (fcmDiagnostic.status === 'failed' ? 'var(--accent-red)' : 'var(--accent-orange)') }}>
+                      {fcmDiagnostic.status === 'ready' ? '連線就緒 ✅' : (fcmDiagnostic.status === 'fetching' ? '取得 Token 中...' : (fcmDiagnostic.status === 'checking' ? '檢測中...' : '尚未連線 ⚠️'))}
+                    </span>
+                  </div>
+                  {fcmDiagnostic.token && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>裝置 Token</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                        {fcmDiagnostic.token.substring(0, 15)}...
+                      </span>
+                    </div>
+                  )}
+                  {fcmDiagnostic.error && (
+                    <div style={{ marginTop: '4px', padding: '8px', borderRadius: '6px', backgroundColor: 'rgba(255, 69, 58, 0.1)', color: 'var(--accent-red)', fontSize: '0.72rem', wordBreak: 'break-all' }}>
+                      ⚠️ 診斷錯誤資訊：{fcmDiagnostic.error}
+                    </div>
+                  )}
                 </div>
 
-                {showBtn && (
+                <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     onClick={handleEnableNotification}
-                    disabled={isSubscribing}
+                    disabled={isSubscribing || fcmDiagnostic.status === 'fetching'}
                     className="glass-btn"
                     style={{
-                      width: '100%',
+                      flex: 1,
                       padding: '10px 0',
                       borderRadius: '12px',
-                      fontSize: '0.82rem',
+                      fontSize: '0.8rem',
                       fontWeight: '700',
                       color: '#fff',
-                      background: 'linear-gradient(135deg, rgba(10,132,255,0.7) 0%, rgba(88,86,214,0.6) 100%)',
-                      borderColor: 'rgba(10,132,255,0.4)',
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
+                      borderColor: 'rgba(255,255,255,0.1)',
                       cursor: 'pointer',
-                      marginTop: '4px',
-                      boxShadow: '0 4px 15px rgba(10,132,255,0.25)'
                     }}
                   >
-                    {isSubscribing ? '啟動中...' : '啟用推播通知 🔔'}
+                    {isSubscribing ? '啟動中...' : (notificationPermission === 'granted' ? '重新綁定裝置 🔄' : '啟用推播通知 🔔')}
                   </button>
-                )}
+
+                  {fcmDiagnostic.status === 'ready' && onSendTestPush && (
+                    <button
+                      onClick={onSendTestPush}
+                      className="glass-btn"
+                      style={{
+                        flex: 1,
+                        padding: '10px 0',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        color: '#fff',
+                        background: 'linear-gradient(135deg, rgba(52,199,89,0.7) 0%, rgba(48,209,88,0.5) 100%)',
+                        borderColor: 'rgba(52,199,89,0.4)',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 15px rgba(52,199,89,0.2)'
+                      }}
+                    >
+                      發送測試推播 🚀
+                    </button>
+                  )}
+                </div>
+
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: 'var(--text-tertiary)', lineHeight: '1.4', fontStyle: 'italic' }}>
+                  * 註：iOS 及 macOS 設備需先透過 Safari 將本網站「加入主畫面/加入 Dock (安裝為 PWA)」後，才能完整啟用並接收系統背景推播。
+                </p>
               </div>
             </div>
           );
