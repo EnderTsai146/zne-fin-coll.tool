@@ -14,6 +14,7 @@ import { getBudgetForMonth } from './utils/budgetUtils';
 import { db, auth, getFcmToken, onFcmMessage } from './firebase';
 import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter, runTransaction } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { MY_GOOGLE_API_URL } from './config';
 
 
 
@@ -48,6 +49,27 @@ const NAV_ITEMS = [
   { id: 'transfer', icon: '🛠️', label: '操作' },
   { id: 'settings', icon: '⚙️', label: '設定' }
 ];
+
+// Helpers for FCM multiple tokens management
+const getTokensArray = (field) => {
+  if (!field) return [];
+  if (typeof field === 'string') return [field];
+  if (typeof field === 'object') return Object.keys(field).filter(t => typeof t === 'string' && t.length > 5);
+  return [];
+};
+
+const addTokenToDict = (field, newToken) => {
+  let dict = {};
+  if (typeof field === 'string' && field) {
+    dict[field] = true;
+  } else if (typeof field === 'object' && field) {
+    dict = { ...field };
+  }
+  if (newToken) {
+    dict[newToken] = true;
+  }
+  return dict;
+};
 
 // ★ Liquid‑glass bottom nav with sliding pill
 const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) => {
@@ -535,6 +557,7 @@ function App() {
 
     const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
     const existingTokens = assets?.fcmTokens || {};
+    const existingUserField = existingTokens[userKey];
     
     const setupNotifications = async () => {
       const vapidKey = "BGYGX29x3HiHqANNRIu9qtH_M5nEu9C70r5BgSQ6omRLLRm2nL941IOz8z8PQ3UXaK-wXslOprbMpP-zRIfSruc";
@@ -548,16 +571,20 @@ function App() {
           
           if (permission === 'granted') {
             const token = await getFcmToken(vapidKey);
-            if (token && existingTokens[userKey] !== token) {
-              const updatedAssets = {
-                ...assets,
-                fcmTokens: {
-                  ...existingTokens,
-                  [userKey]: token
-                }
-              };
-              saveToCloud(updatedAssets);
-              console.log(`Successfully registered FCM token for ${operatorName}`);
+            if (token) {
+              const tokenList = getTokensArray(existingUserField);
+              if (!tokenList.includes(token)) {
+                const updatedUserField = addTokenToDict(existingUserField, token);
+                const updatedAssets = {
+                  ...assets,
+                  fcmTokens: {
+                    ...existingTokens,
+                    [userKey]: updatedUserField
+                  }
+                };
+                saveToCloud(updatedAssets);
+                console.log(`Successfully registered FCM token for ${operatorName}`);
+              }
             }
           }
         }
@@ -593,12 +620,16 @@ function App() {
         if (token) {
           const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
           const existingTokens = assets?.fcmTokens || {};
-          if (existingTokens[userKey] !== token) {
+          const existingUserField = existingTokens[userKey];
+          
+          const tokenList = getTokensArray(existingUserField);
+          if (!tokenList.includes(token)) {
+            const updatedUserField = addTokenToDict(existingUserField, token);
             const updatedAssets = {
               ...assets,
               fcmTokens: {
                 ...existingTokens,
-                [userKey]: token
+                [userKey]: updatedUserField
               }
             };
             saveToCloud(updatedAssets);
@@ -1230,22 +1261,27 @@ function App() {
   const sendTransactionPush = (title, body) => {
     try {
       const partnerKey = operatorName.includes('大狗狗') ? 'userB' : 'userA';
-      const partnerToken = assets?.fcmTokens?.[partnerKey];
-      if (!partnerToken) {
-        console.log(`[Push] No registered FCM token for partner (${partnerKey}). Skip push.`);
+      const partnerTokensField = assets?.fcmTokens?.[partnerKey];
+      const tokenList = getTokensArray(partnerTokensField);
+      
+      if (tokenList.length === 0) {
+        console.log(`[Push] No registered FCM tokens for partner (${partnerKey}). Skip push.`);
         return;
       }
-      fetch(MY_GOOGLE_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'push',
-          token: partnerToken,
-          title,
-          body
-        })
-      }).then(res => console.log("[Push] Request successfully sent:", res))
-        .catch(err => console.error("[Push] Fetch failed:", err));
+      
+      tokenList.forEach(token => {
+        fetch(MY_GOOGLE_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'push',
+            token: token,
+            title,
+            body
+          })
+        }).then(res => console.log(`[Push] Request successfully sent to token starting with ${token.substring(0, 10)}`))
+          .catch(err => console.error("[Push] Fetch failed for token:", token, err));
+      });
     } catch (err) {
       console.error("[Push] Error:", err);
     }
