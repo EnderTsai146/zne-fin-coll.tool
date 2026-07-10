@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Service account credentials
+*-adminsdk-*.json
+jne-fin-*.json
+
