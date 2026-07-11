@@ -935,10 +935,18 @@ function App() {
             localStorage.setItem('loginTimestamp', now.toString());
           }
         }
+        // 重設載入與過場動畫狀態，防範直接進入數字為 0 的總覽畫面
+        setSplashPhase('loading');
+        setLoadProgress(0);
+        dataReadyForSplash.current = false;
+        setDataReady(false);
+        setLoading(true);
+
         setCurrentUser(user);
         setOperatorName(USER_MAPPING[user.email] || user.email.split('@')[0]);
         setAutoLogoutReason('');
         // ★ 不要在此設 loading=false，等 Firestore 資料到位後再解鎖
+
       } else {
         localStorage.removeItem('loginTimestamp');
         setCurrentUser(null);
