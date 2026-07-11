@@ -612,9 +612,6 @@ function App() {
     // Listen for foreground push notifications
     onFcmMessage((payload) => {
       console.log("Foreground push notification received:", payload);
-      if (payload?.notification) {
-        alert(`🔔 【${payload.notification.title}】\n${payload.notification.body}`);
-      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, dataReady, operatorName]);
@@ -1221,7 +1218,7 @@ function App() {
       return;
     }
     const docRef = doc(db, "finance", "data");
-    setDoc(docRef, newAssets).catch((err) => alert("連線錯誤：" + err.message));
+    setDoc(docRef, newAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
   };
 
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
@@ -1295,13 +1292,13 @@ function App() {
       
       if (allTokens.length === 0) {
         console.log(`[Push] No registered FCM tokens. Skip push.`);
-        alert("⚠️ 無法發送推播：目前資料庫中尚未登記任何裝置 Token！請確認您是否已經成功將網頁加入主畫面並啟用推播。");
-        return;
+        customAlert("⚠️ 無法發送推播：目前資料庫中尚未登記任何裝置 Token！請確認您是否已經成功將網頁加入主畫面並啟用推播。", "推播通知");
+        return Promise.resolve();
       }
       
-      allTokens.forEach(token => {
+      const promises = allTokens.map(token => {
         console.log(`[Push] Fetching GAS Web App for token: ${token.substring(0, 15)}...`);
-        fetch(MY_GOOGLE_API_URL, {
+        return fetch(MY_GOOGLE_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -1316,35 +1313,37 @@ function App() {
             console.log(`[Push] GAS Web App Response for ${token.substring(0, 8)}...:`, text);
             
             if (text.startsWith("error:") || text.startsWith("error")) {
-              alert(`⚠️ 推播發送失敗（Google Apps Script 系統崩潰）：\n${text}`);
+              customAlert(`⚠️ 推播發送失敗（Google Apps Script 系統崩潰）：\n${text}`, "系統錯誤");
               return;
             }
             
             try {
               const json = JSON.parse(text);
               if (json && json.status === 'error') {
-                alert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || json.message || text}`);
+                customAlert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || json.message || text}`, "推播失敗");
               } else if (json && json.status === 'success') {
                 console.log(`[Push] Push sent successfully for token prefix: ${token.substring(0, 8)}`);
                 if (title.includes("測試")) {
-                  alert(`✅ 測試推播請求成功發送至 FCM 伺服器！\n請檢查您的裝置。如果仍未收到通知，可能是：\n1. 裝置的通知權限未開啟。\n2. 您的 Google Apps Script 尚未連結 GCP 專案，請檢查 Apps Script 的 Log。`);
+                  customAlert(`✅ 測試推播請求成功發送至 FCM 伺服器！\n請檢查您的裝置。如果仍未收到通知，可能是：\n1. 裝置的通知權限未開啟。\n2. 您的 Google Apps Script 尚未連結 GCP 專案，請檢查 Apps Script 的 Log。`, "測試推播");
                 }
               } else {
-                alert(`⚠️ 推播發送回應異常：\n${text}`);
+                customAlert(`⚠️ 推播發送回應異常：\n${text}`, "推播異常");
               }
             } catch (e) {
               console.warn("[Push] Parse response failed:", text);
-              alert(`⚠️ 接收到非預期回應（可能是 GAS 程式碼錯誤）：\n${text}`);
+              customAlert(`⚠️ 接收到非預期回應（可能是 GAS 程式碼錯誤）：\n${text}`, "推播錯誤");
             }
           })
           .catch(err => {
             console.error("[Push] Fetch failed for token:", token, err);
-            alert(`⚠️ 推播網路請求失敗：\n${err.message || String(err)}`);
+            customAlert(`⚠️ 推播網路請求失敗：\n${err.message || String(err)}`, "連線失敗");
           });
       });
+      return Promise.all(promises);
     } catch (err) {
       console.error("[Push] Error:", err);
-      alert(`⚠️ 推播程式執行錯誤：\n${err.message || String(err)}`);
+      customAlert(`⚠️ 推播程式執行錯誤：\n${err.message || String(err)}`, "程式錯誤");
+      return Promise.resolve();
     }
   };
 
@@ -1407,6 +1406,17 @@ function App() {
       } else if (type && type.includes('sell')) {
         title = "📉 賣出投資商品";
         body = `${operatorName} 賣出商品：${firstRecord.note || '投資賣出'} - $${firstRecord.total.toLocaleString()}`;
+      } else if (type === 'expense') {
+        title = "💰 個人支出異動";
+        body = `${firstRecord.payer} 登錄個人支出：${firstRecord.note || '日記帳'} - $${(Number(firstRecord.total) || 0).toLocaleString()}`;
+      } else if (type === 'spend') {
+        title = "🤝 共同支出異動";
+        const payerNameText = operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶';
+        const advancedByText = firstRecord.advancedBy 
+          ? `由 ${firstRecord.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`
+          : '共同現金直付';
+        const pushMethodStr = firstRecord.advancedBy ? '代墊款' : '共同現金直付';
+        body = `${payerNameText} 登錄共同支出（${pushMethodStr}）：${firstRecord.note || firstRecord.category} - $${(Number(firstRecord.total) || 0).toLocaleString()}`;
       }
       sendTransactionPush(title, body);
     }
@@ -1527,8 +1537,9 @@ function App() {
   };
 
   // ★ 嚴格防護的修改功能：只准改文字與日期，金額絕不可動
-  const handleEditTransaction = (context, newData) => {
+  const handleEditTransaction = async (context, newData) => {
     const newAssets = { ...assets };
+
 
     let list;
     let targetRecord;
@@ -1581,7 +1592,7 @@ function App() {
           month: context.month,
           archivedAt: new Date().toISOString(),
           records: list
-        }).catch(e => alert("歷史庫舊紀錄移除失敗：" + e.message));
+        }).catch(async e => await customAlert("歷史庫舊紀錄移除失敗：" + e.message, "同步失敗"));
 
         // 遣送回主動區，讓安全的 Archival Engine 等等把它接走重新安置。
         newAssets.monthlyExpenses = [...(newAssets.monthlyExpenses || []), mutatedRecord];
@@ -1592,7 +1603,7 @@ function App() {
           month: context.month,
           archivedAt: new Date().toISOString(),
           records: list
-        }).catch(e => alert("歸檔紀錄唯讀同步失敗：" + e.message));
+        }).catch(async e => await customAlert("歸檔紀錄唯讀同步失敗：" + e.message, "同步失敗"));
       }
     }
 
@@ -1601,7 +1612,7 @@ function App() {
 
     saveToCloud(finalAssetsWithLog);
     sendTransactionPush("✏️ 交易明細修改", `${operatorName} 修改了交易紀錄：${record.note || record.category} ➔ ${mutatedRecord.note}`);
-    alert("✅ 紀錄修改成功！(金額與帳戶已受保護不可修改)");
+    await customAlert("✅ 紀錄修改成功！(金額與帳戶已受保護不可修改)", "修改成功");
   };
 
   // ★ 完美還原的作廢功能
@@ -1851,7 +1862,7 @@ function App() {
           console.log("[DEV MOCK] saveToCloud:", nextAssets);
         } else {
           const docRef = doc(db, "finance", "data");
-          setDoc(docRef, nextAssets).catch((err) => alert("連線錯誤：" + err.message));
+          setDoc(docRef, nextAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
         }
       }
       return nextAssets;

@@ -36,6 +36,25 @@ const SettingsView = ({
   // --- Push Notification Permission States & Handlers ---
   const [notificationPermission, setNotificationPermission] = useState('default');
   const [isSubscribing, setIsSubscribing] = useState(false);
+  const [isTestingPush, setIsTestingPush] = useState(false);
+
+  const handleSendTestPushClick = async () => {
+    if (isTestingPush) return;
+    setIsTestingPush(true);
+    try {
+      if (onSendTestPush) {
+        await onSendTestPush();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      // 3秒後重新啟用按鈕，防止連續點按
+      setTimeout(() => {
+        setIsTestingPush(false);
+      }, 3000);
+    }
+  };
+
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -790,7 +809,8 @@ const SettingsView = ({
 
                   {fcmDiagnostic.status === 'ready' && onSendTestPush && (
                     <button
-                      onClick={onSendTestPush}
+                      onClick={handleSendTestPushClick}
+                      disabled={isTestingPush}
                       className="glass-btn"
                       style={{
                         flex: 1,
@@ -799,15 +819,19 @@ const SettingsView = ({
                         fontSize: '0.8rem',
                         fontWeight: '700',
                         color: '#fff',
-                        background: 'linear-gradient(135deg, rgba(52,199,89,0.7) 0%, rgba(48,209,88,0.5) 100%)',
-                        borderColor: 'rgba(52,199,89,0.4)',
-                        cursor: 'pointer',
-                        boxShadow: '0 4px 15px rgba(52,199,89,0.2)'
+                        background: isTestingPush
+                          ? 'linear-gradient(135deg, rgba(142,142,147,0.7) 0%, rgba(142,142,147,0.5) 100%)'
+                          : 'linear-gradient(135deg, rgba(52,199,89,0.7) 0%, rgba(48,209,88,0.5) 100%)',
+                        borderColor: isTestingPush ? 'rgba(142,142,147,0.4)' : 'rgba(52,199,89,0.4)',
+                        cursor: isTestingPush ? 'not-allowed' : 'pointer',
+                        boxShadow: isTestingPush ? 'none' : '0 4px 15px rgba(52,199,89,0.2)',
+                        opacity: isTestingPush ? 0.7 : 1
                       }}
                     >
-                      發送測試推播 🚀
+                      {isTestingPush ? '發送中... ⏳' : '發送測試推播 🚀'}
                     </button>
                   )}
+
                 </div>
 
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: 'var(--text-tertiary)', lineHeight: '1.4', fontStyle: 'italic' }}>

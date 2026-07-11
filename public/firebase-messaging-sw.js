@@ -13,14 +13,15 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage((payload) => {
-  console.log('Received background messaging payload: ', payload);
-  const title = payload.notification.title || '馬鈴薯管家';
-  const options = {
-    body: payload.notification.body,
-    icon: '/apple-touch-icon.png',
-    badge: '/apple-touch-icon.png',
-    data: payload.data
-  };
-  self.registration.showNotification(title, options);
-});
+// messaging.onBackgroundMessage((payload) => {
+//   console.log('Received background messaging payload: ', payload);
+//   const title = payload.notification.title || '馬鈴薯管家';
+//   const options = {
+//     body: payload.notification.body,
+//     icon: '/apple-touch-icon.png',
+//     badge: '/apple-touch-icon.png',
+//     data: payload.data
+//   };
+//   self.registration.showNotification(title, options);
+// });
+
