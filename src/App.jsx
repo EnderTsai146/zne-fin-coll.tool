@@ -3,7 +3,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMe
 import Login from './components/Login';
 import TotalOverview from './components/TotalOverview';
 import MonthlyView from './components/MonthlyView';
-import AssetTransfer from './components/AssetTransfer';
+import AccountsManager from './components/AccountsManager';
 import InvestmentView from './components/InvestmentView';
 import ExpenseEntry from './components/ExpenseEntry';
 import ReviewView from './components/ReviewView';
@@ -46,7 +46,7 @@ const NAV_ITEMS = [
   { id: 'monthly', icon: '📊', label: '資料庫' },
   { id: 'invest', icon: '📈', label: '投資' },
   { id: 'center', icon: '', label: '' }, // Handled specially
-  { id: 'transfer', icon: '🛠️', label: '操作' },
+  { id: 'accounts', icon: '🏦', label: '帳戶' },
   { id: 'settings', icon: '⚙️', label: '設定' }
 ];
 
@@ -80,7 +80,7 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
     if (pageId === 'overview' || pageId === 'expense') return 2;
     if (pageId === 'monthly') return 0;
     if (pageId === 'invest') return 1;
-    if (pageId === 'transfer') return 3;
+    if (pageId === 'accounts') return 3;
     if (pageId === 'settings') return 4;
     return -1;
   };
@@ -1000,6 +1000,166 @@ function App() {
           };
         }
         let needsUpdate = false;
+
+        // --- Multi-Account Initial Migration ---
+        if (!data.accounts || data.accounts.length === 0) {
+          const initAccounts = [
+            {
+              id: 'acc_userA_twd',
+              owner: 'userA',
+              type: 'bank',
+              name: '大狗狗個人帳戶',
+              nickname: '大狗狗台幣活儲',
+              accountNumber: '',
+              balance: data.userA || 0,
+              currency: 'TWD',
+              isDefaultExpense: true,
+              isDefaultIncome: true,
+              isDefaultSettle: true,
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: 'acc_userB_twd',
+              owner: 'userB',
+              type: 'bank',
+              name: '阿陞個人帳戶',
+              nickname: '阿陞台幣活儲',
+              accountNumber: '',
+              balance: data.userB || 0,
+              currency: 'TWD',
+              isDefaultExpense: true,
+              isDefaultIncome: true,
+              isDefaultSettle: true,
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: 'acc_joint_twd',
+              owner: 'joint',
+              type: 'cash',
+              name: '共同現金',
+              nickname: '共同台幣現金',
+              accountNumber: '',
+              balance: data.jointCash || 0,
+              currency: 'TWD',
+              isDefaultExpense: true,
+              isDefaultIncome: true,
+              isDefaultSettle: false,
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: 'acc_userA_usd',
+              owner: 'userA',
+              type: 'bank',
+              name: '大狗狗美金帳戶',
+              nickname: '大狗狗美金存款',
+              accountNumber: '',
+              balance: data.userA_usd || 0,
+              currency: 'USD',
+              isDefaultExpense: false,
+              isDefaultIncome: false,
+              isDefaultSettle: false,
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: 'acc_userB_usd',
+              owner: 'userB',
+              type: 'bank',
+              name: '阿陞美金帳戶',
+              nickname: '阿陞美金存款',
+              accountNumber: '',
+              balance: data.userB_usd || 0,
+              currency: 'USD',
+              isDefaultExpense: false,
+              isDefaultIncome: false,
+              isDefaultSettle: false,
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: 'acc_joint_usd',
+              owner: 'joint',
+              type: 'bank',
+              name: '共同美金帳戶',
+              nickname: '共同美金存款',
+              accountNumber: '',
+              balance: data.jointCash_usd || 0,
+              currency: 'USD',
+              isDefaultExpense: false,
+              isDefaultIncome: false,
+              isDefaultSettle: false,
+              createdAt: new Date().toISOString()
+            }
+          ];
+          data.accounts = initAccounts;
+          needsUpdate = true;
+        }
+
+        // --- Credit Card Auto Payoff Engine ---
+        const autoPayDate = new Date();
+        const currentMonthStr = `${autoPayDate.getFullYear()}-${String(autoPayDate.getMonth() + 1).padStart(2, '0')}`;
+        const currentDay = autoPayDate.getDate();
+        
+        if (data.accounts && data.accounts.length > 0) {
+          const updatedAccs = [...data.accounts];
+          let changed = false;
+          
+          for (let i = 0; i < updatedAccs.length; i++) {
+            const acc = updatedAccs[i];
+            if (acc.type === 'credit' && acc.autoPay && currentDay >= acc.billingDay && acc.balance < 0 && acc.lastAutoPayMonth !== currentMonthStr) {
+              const linkedBankIndex = updatedAccs.findIndex(b => b.id === acc.linkedBankAccountId);
+              if (linkedBankIndex !== -1) {
+                const linkedBank = updatedAccs[linkedBankIndex];
+                const payAmount = Math.abs(acc.balance);
+                
+                if (linkedBank.balance >= payAmount) {
+                  // Perform payoff
+                  updatedAccs[linkedBankIndex] = {
+                    ...linkedBank,
+                    balance: linkedBank.balance - payAmount
+                  };
+                  updatedAccs[i] = {
+                    ...acc,
+                    balance: 0,
+                    lastAutoPayMonth: currentMonthStr
+                  };
+                  
+                  const autoPayoffRecord = {
+                    date: autoPayDate.toISOString().split('T')[0],
+                    month: currentMonthStr,
+                    type: 'transfer',
+                    category: '信用卡自動扣款',
+                    total: payAmount,
+                    payer: '系統自動扣款',
+                    accountId: linkedBank.id,
+                    targetAccountId: acc.id,
+                    note: `[自動扣款] ${acc.nickname} 帳單結清`,
+                    timestamp: autoPayDate.toISOString()
+                  };
+                  
+                  if (!data.monthlyExpenses) data.monthlyExpenses = [];
+                  data.monthlyExpenses.push(autoPayoffRecord);
+                  
+                  changed = true;
+                  console.log(`[Auto-Pay] Successfully paid off credit card bill for: ${acc.nickname} ($${payAmount})`);
+                }
+              }
+            }
+          }
+          
+          if (changed) {
+            data.accounts = updatedAccs;
+            needsUpdate = true;
+          }
+        }
+
+        // --- Sync accounts back to legacy root properties for backwards compatibility ---
+        if (data.accounts && data.accounts.length > 0) {
+          data.userA = data.accounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+          data.userB = data.accounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+          data.jointCash = data.accounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+          data.userA_usd = data.accounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+          data.userB_usd = data.accounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+          data.jointCash_usd = data.accounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+        }
         if (!data.config || !data.config.categories || JSON.stringify(data.config.categories) !== JSON.stringify(["餐費", "購物", "娛樂", "其他"])) {
           data.config = {
             ...(data.config || {}),
@@ -1231,7 +1391,7 @@ function App() {
 
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
 
-  const getBudgetProgressText = (newAssets, nextSpendAmount = 0) => {
+  const getBudgetProgressText = (newAssets = assets, nextSpendAmount = 0) => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     const budgets = getBudgetForMonth(newAssets, currentMonth);
     const budget = Object.values(budgets).reduce((sum, val) => sum + Number(val || 0), 0) || newAssets.monthlyBudget || 25000;
@@ -1265,7 +1425,10 @@ function App() {
     jointInvestments: { ...(currentAssets.jointInvestments || {}) },
     userInvestments: currentAssets.userInvestments
       ? JSON.parse(JSON.stringify(currentAssets.userInvestments))
-      : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } }
+      : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } },
+    accounts: currentAssets.accounts
+      ? JSON.parse(JSON.stringify(currentAssets.accounts))
+      : []
   });
 
   const logOperation = (newAssets, actionType, detail) => {
@@ -1495,18 +1658,28 @@ function App() {
     }
   };
 
-  const handleAddExpense = async (date, expenseData, totalAmount, payer, note, updatedBills = null) => {
+  const handleAddExpense = async (date, expenseData, totalAmount, payer, note, updatedBills = null, updatedAccounts = null) => {
     const payerKey = payer === 'userA' ? 'userA' : 'userB';
     const payerName = payer === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
-    // Fix #2: 加入 return 攔截餘額不足的操作
-    if (assets[payerKey] < totalAmount) {
-      await customAlert(`⚠️ ${payerName} 的個人餘額不足！`);
-      return;
-    }
-
     const finalNote = note || '日記帳';
-    const newAssetsTemp = { ...assets, [payerKey]: assets[payerKey] - totalAmount };
+    let newAssetsTemp = { ...assets };
+    
+    if (updatedAccounts) {
+      newAssetsTemp.accounts = updatedAccounts;
+      newAssetsTemp.userA = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssetsTemp.userB = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssetsTemp.jointCash = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssetsTemp.userA_usd = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+      newAssetsTemp.userB_usd = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+      newAssetsTemp.jointCash_usd = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+    } else {
+      if (assets[payerKey] < totalAmount) {
+        await customAlert(`⚠️ ${payerName} 的個人餘額不足！`);
+        return;
+      }
+      newAssetsTemp[payerKey] = assets[payerKey] - totalAmount;
+    }
 
     const targetTimestamp = new Date().toISOString();
     const finalAssets = {
@@ -1533,31 +1706,42 @@ function App() {
     setCurrentPage('monthly');
   };
 
-  const handleAddJointExpense = async (date, category, amount, advancedBy, note, updatedBills = null) => {
+  const handleAddJointExpense = async (date, category, amount, advancedBy, note, updatedBills = null, updatedAccounts = null) => {
     const val = Number(amount) || 0;
     const newAssets = { ...assets };
 
     let paymentMethodName = "共同帳戶直接付";
-    if (advancedBy === 'jointCash') {
-      if (newAssets.jointCash < val) {
-        await customAlert("❌ 共同現金不足！");
-        return;
+    if (updatedAccounts) {
+      newAssets.accounts = updatedAccounts;
+      newAssets.userA = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.userB = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.jointCash = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.userA_usd = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.userB_usd = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.jointCash_usd = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+      paymentMethodName = advancedBy === 'jointCash' ? '共同直接付' : `${advancedBy === 'userA' ? '大狗狗' : '阿陞'}代墊`;
+    } else {
+      if (advancedBy === 'jointCash') {
+        if (newAssets.jointCash < val) {
+          await customAlert("❌ 共同現金不足！");
+          return;
+        }
+        newAssets.jointCash -= val;
+      } else if (advancedBy === 'userA') {
+        if (newAssets.userA < val) {
+          await customAlert("❌ 大狗狗🐕的個人餘額不足以代墊！");
+          return;
+        }
+        newAssets.userA -= val;
+        paymentMethodName = "大狗狗🐕先墊 (User A)";
+      } else if (advancedBy === 'userB') {
+        if (newAssets.userB < val) {
+          await customAlert("❌ 阿陞🐶的個人餘額不足以代墊！");
+          return;
+        }
+        newAssets.userB -= val;
+        paymentMethodName = "阿陞🐶先墊 (User B)";
       }
-      newAssets.jointCash -= val;
-    } else if (advancedBy === 'userA') {
-      if (newAssets.userA < val) {
-        await customAlert("❌ 大狗狗🐕的個人餘額不足以代墊！");
-        return;
-      }
-      newAssets.userA -= val;
-      paymentMethodName = "大狗狗🐕先墊 (User A)";
-    } else if (advancedBy === 'userB') {
-      if (newAssets.userB < val) {
-        await customAlert("❌ 阿陞🐶的個人餘額不足以代墊！");
-        return;
-      }
-      newAssets.userB -= val;
-      paymentMethodName = "阿陞🐶先墊 (User B)";
     }
 
     const safeNote = note ? String(note).trim() : '';
@@ -2078,12 +2262,19 @@ function App() {
           <InvestmentView
             key="invest"
             assets={assets}
+            setAssets={handleAssetsUpdate}
             isFetchingArchive={isFetchingArchive}
             newlyAddedInvestSymbol={newlyAddedInvestSymbol}
             newlyAddedInvestPayer={newlyAddedInvestPayer}
+            operatorName={operatorName}
+            customAlert={customAlert}
+            customConfirm={customConfirm}
+            customPrompt={customPrompt}
+            currentFxRate={currentFxRate}
+            onTransaction={handleTransaction}
           />
         )}
-        {currentPage === 'transfer' && <AssetTransfer key="transfer" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} currentFxRate={currentFxRate} customAlert={customAlert} customConfirm={customConfirm} />}
+        {currentPage === 'accounts' && <AccountsManager key="accounts" assets={assets} setAssets={handleAssetsUpdate} currentUser={currentUser} operatorName={operatorName} customAlert={customAlert} customConfirm={customConfirm} currentFxRate={currentFxRate} onTransaction={handleTransaction} />}
         {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} />}
         {currentPage === 'settings' && (
           <SettingsView

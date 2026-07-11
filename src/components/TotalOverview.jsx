@@ -987,6 +987,32 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 </div>
             </div>
 
+            {/* 🏦 帳戶快速概述 (MOZE Style Asset Hub) */}
+            <div className="glass-card card-animate" style={{ marginBottom: '18px', padding: '16px 18px' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '14px', fontSize: '0.94rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    🏦 帳戶資產概況
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                  {(assets.accounts || []).map(acc => {
+                    const isCredit = acc.type === 'credit';
+                    const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗 🐕' : '阿陞 🐶');
+                    const balanceColor = isCredit ? '#ff9500' : '#fff';
+                    return (
+                      <div key={acc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                        <div>
+                          <span style={{ fontWeight: '700', fontSize: '0.84rem', color: '#fff' }}>{acc.nickname}</span>
+                          <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginLeft: '6px' }}>({ownerLabel})</span>
+                          <span style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.4)', marginLeft: '6px' }}>{acc.name}</span>
+                        </div>
+                        <span style={{ fontWeight: '800', fontSize: '0.86rem', color: balanceColor }}>
+                          ${acc.balance.toLocaleString()} {acc.currency}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+            </div>
+
             {activeHistory && (
                 <div className="glass-card card-animate" style={{ marginBottom: '18px', borderLeft: `4px solid ${activeHistory === 'userA' ? 'var(--accent-pink)' : activeHistory === 'userB' ? 'var(--accent-green)' : 'var(--accent-orange)'}` }}>
                     <div style={{ fontWeight: '700', color: 'var(--text-primary)', marginBottom: '10px', fontSize: '1rem' }}>

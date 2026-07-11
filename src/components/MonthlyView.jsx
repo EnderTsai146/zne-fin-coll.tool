@@ -434,8 +434,12 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                     </div>
                 </div>
 
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
                     {record.payer === '共同帳戶' ? <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '6px' }}>共同出資</span> : <span style={{ background: 'rgba(10,132,255,0.08)', color: '#409eff', padding: '2px 6px', borderRadius: '6px' }}>👤 {record.payer}</span>}
+                    {record.accountId && (() => {
+                        const acc = (assets.accounts || []).find(a => a.id === record.accountId);
+                        return acc ? <span style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: '6px' }}>💳 {acc.nickname}</span> : null;
+                    })()}
                     {(record.type === 'expense' || record.type === 'spend') && (
                         <span style={{
                             background: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? 'rgba(255, 149, 0, 0.08)' : 'rgba(10, 132, 255, 0.08)',
