@@ -1288,19 +1288,60 @@ function App() {
     return newAssets;
   };
 
-  const sendTransactionPush = (title, body) => {
-    try {
-      const userATokens = getTokensArray(assets?.fcmTokens?.['userA']);
-      const userBTokens = getTokensArray(assets?.fcmTokens?.['userB']);
-      const allTokens = Array.from(new Set([...userATokens, ...userBTokens]));
+  const handleRemoveBadToken = (badToken) => {
+    if (!badToken) return;
+    setAssets(prev => {
+      const existingTokens = prev.fcmTokens || {};
+      const newTokens = { ...existingTokens };
+      let changed = false;
       
-      console.log("[Push] userATokens:", userATokens);
-      console.log("[Push] userBTokens:", userBTokens);
-      console.log("[Push] allTokens:", allTokens);
+      ['userA', 'userB'].forEach(userKey => {
+        const val = existingTokens[userKey];
+        if (typeof val === 'object' && val) {
+          if (val[badToken]) {
+            const updated = { ...val };
+            delete updated[badToken];
+            newTokens[userKey] = updated;
+            changed = true;
+          }
+        } else if (typeof val === 'string' && val === badToken) {
+          newTokens[userKey] = {};
+          changed = true;
+        }
+      });
+      
+      if (changed) {
+        const nextAssets = { ...prev, fcmTokens: newTokens };
+        if (currentUser && window.location.hostname !== 'localhost') {
+          const docRef = doc(db, "finance", "data");
+          setDoc(docRef, nextAssets).catch(err => console.error("Error removing bad token:", err));
+        }
+        return nextAssets;
+      }
+      return prev;
+    });
+  };
+
+  const sendTransactionPush = (title, body, isTest = false) => {
+    try {
+      const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
+      const targetUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
+      
+      const tokensToNotify = isTest 
+        ? getTokensArray(assets?.fcmTokens?.[currentUserKey])
+        : getTokensArray(assets?.fcmTokens?.[targetUserKey]);
+        
+      const allTokens = Array.from(new Set(tokensToNotify));
+      
+      console.log("[Push] currentUserKey:", currentUserKey);
+      console.log("[Push] tokensToNotify:", tokensToNotify);
+      console.log("[Push] allTokens to target:", allTokens);
       
       if (allTokens.length === 0) {
-        console.log(`[Push] No registered FCM tokens. Skip push.`);
-        customAlert("⚠️ 無法發送推播：目前資料庫中尚未登記任何裝置 Token！請確認您是否已經成功將網頁加入主畫面並啟用推播。", "推播通知");
+        console.log(`[Push] No registered FCM tokens for target. Skip push.`);
+        if (isTest) {
+          customAlert("⚠️ 無法發送測試推播：目前您尚未登記任何裝置 Token！請確認您是否已經成功將網頁加入主畫面並啟用推播。", "推播通知");
+        }
         return Promise.resolve();
       }
       
@@ -1328,7 +1369,12 @@ function App() {
             try {
               const json = JSON.parse(text);
               if (json && json.status === 'error') {
-                customAlert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || json.message || text}`, "推播失敗");
+                if (json.errorType === 'UNREGISTERED') {
+                  console.warn(`[Push] Token ${json.token} is unregistered. Automatically removing from database...`);
+                  handleRemoveBadToken(json.token);
+                } else {
+                  customAlert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || json.message || text}`, "推播失敗");
+                }
               } else if (json && json.status === 'success') {
                 console.log(`[Push] Push sent successfully for token prefix: ${token.substring(0, 8)}`);
                 if (title.includes("測試")) {
@@ -1354,6 +1400,7 @@ function App() {
       return Promise.resolve();
     }
   };
+
 
   const handleTransaction = (newAssets, historyRecordsInput) => {
     const timestamp = new Date().toISOString();
@@ -2051,7 +2098,7 @@ function App() {
             logOperation={logOperation}
             onRequestNotificationPermission={handleRegisterNotification}
             fcmDiagnostic={fcmDiagnostic}
-            onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`)}
+            onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`, true)}
           />
         )}
       </div>
