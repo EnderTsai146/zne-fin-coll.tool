@@ -49,6 +49,7 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
 
     const [editModalData, setEditModalData] = useState(null);
     const [activeActionRecord, setActiveActionRecord] = useState(null); // HIG 2 Action Sheet state
+    const [selectedAuditTrail, setSelectedAuditTrail] = useState(null);
 
     const dynamicNecessityMap = useMemo(() => {
         return computeDynamicNecessities(historyWithIndex, assets);
@@ -825,6 +826,26 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                                         const diff = (record.auditTrail.after.userB || 0) - (record.auditTrail.before.userB || 0);
                                                         return <div>阿陞: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userB || 0)}</span> ➡️ <span style={{ fontWeight: '700', color: diff > 0 ? '#30d158' : '#ff453a' }}>{formatMoney(record.auditTrail.after.userB || 0)}</span> <span style={{ fontSize: '0.7rem' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
                                                     })()}
+
+                                                    {record.auditTrail.before.accounts && (
+                                                        <button 
+                                                            onClick={() => setSelectedAuditTrail(record.auditTrail)}
+                                                            style={{
+                                                                background: 'rgba(0,122,255,0.08)',
+                                                                color: 'var(--accent-blue)',
+                                                                border: 'none',
+                                                                borderRadius: '6px',
+                                                                padding: '4px 8px',
+                                                                fontSize: '0.68rem',
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer',
+                                                                marginTop: '4px',
+                                                                alignSelf: 'flex-start'
+                                                            }}
+                                                        >
+                                                            🔍 查看多帳戶變動明細
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -951,6 +972,78 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                 ))}
                             </div>
                         </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* 📊 帳戶餘額變動詳情彈窗 */}
+            {selectedAuditTrail && createPortal(
+                <div className="liquid-modal-overlay" onClick={() => setSelectedAuditTrail(null)}>
+                    <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '92%', maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }} className="liquid-modal-title">
+                                📊 帳戶餘額變動詳情
+                            </div>
+                            <button onClick={() => setSelectedAuditTrail(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.3rem', cursor: 'pointer' }}>✕</button>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                            {(() => {
+                                const beforeAccs = selectedAuditTrail.before?.accounts || [];
+                                const afterAccs = selectedAuditTrail.after?.accounts || [];
+                                
+                                const changes = [];
+                                afterAccs.forEach(afterAcc => {
+                                    const beforeAcc = beforeAccs.find(b => b.id === afterAcc.id);
+                                    const beforeBal = beforeAcc ? beforeAcc.balance : 0;
+                                    const afterBal = afterAcc.balance;
+                                    const diff = afterBal - beforeBal;
+                                    if (diff !== 0) {
+                                        changes.push({
+                                            nickname: afterAcc.nickname,
+                                            currency: afterAcc.currency,
+                                            before: beforeBal,
+                                            after: afterBal,
+                                            diff: diff,
+                                            owner: afterAcc.owner
+                                        });
+                                    }
+                                });
+
+                                if (changes.length === 0) {
+                                    return <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textAlign: 'center', padding: '12px' }}>此交易無帳戶餘額異動</div>;
+                                }
+
+                                return changes.map((c, i) => {
+                                    const diffColor = c.diff > 0 ? '#30d158' : '#ff453a';
+                                    const diffSign = c.diff > 0 ? '+' : '';
+                                    const ownerLabel = c.owner === 'joint' ? '共同' : (c.owner === 'userA' ? '大狗狗' : '阿陞');
+                                    return (
+                                        <div key={i} style={{ padding: '10px 12px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                                <strong style={{ fontSize: '0.82rem', color: '#fff' }}>{c.nickname}</strong>
+                                                <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: '4px' }}>{ownerLabel}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
+                                                <span style={{ color: 'var(--text-secondary)' }}>
+                                                    <span style={{ textDecoration: 'line-through', opacity: 0.6 }}>${c.before.toLocaleString()}</span>
+                                                    <span style={{ margin: '0 6px' }}>➡️</span>
+                                                    <strong>${c.after.toLocaleString()}</strong>
+                                                </span>
+                                                <span style={{ color: diffColor, fontWeight: '750' }}>
+                                                    ({diffSign}${c.diff.toLocaleString()} {c.currency})
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+
+                        <button onClick={() => setSelectedAuditTrail(null)} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '40px', borderRadius: '10px', marginTop: '16px', fontWeight: '800' }}>
+                            確定返回
+                        </button>
                     </div>
                 </div>,
                 document.body

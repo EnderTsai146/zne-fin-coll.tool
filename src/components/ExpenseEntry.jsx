@@ -573,6 +573,60 @@ const ExpenseEntry = ({
 
   const safeBills = assets.bills || [];
 
+  const renderAccountSelector = (selectedValue, onChange, filterFn = () => true) => {
+    const list = accounts.filter(filterFn);
+    if (list.length === 0) {
+      return <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '6px' }}>無相符帳戶</div>;
+    }
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
+        {list.map(acc => {
+          const isSelected = selectedValue === acc.id;
+          const ownerLabel = acc.owner === 'joint' ? '共同' : (acc.owner === 'userA' ? '大狗狗' : '阿陞');
+          const isCredit = acc.type === 'credit';
+          const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+          
+          return (
+            <button
+              key={acc.id}
+              type="button"
+              onClick={() => onChange(acc.id)}
+              style={{
+                padding: '8px 10px',
+                borderRadius: '10px',
+                border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                background: isSelected ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.02)',
+                color: isSelected ? '#fff' : 'var(--text-secondary)',
+                fontSize: '0.78rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+                transition: 'all 0.2s ease',
+                boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
+                minHeight: '52px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {acc.nickname}
+                </span>
+                <span style={{ fontSize: '0.58rem', opacity: 0.6, background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: '4px' }}>
+                  {ownerLabel}
+                </span>
+              </div>
+              <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
+                ${acc.balance.toLocaleString()} {acc.currency}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="overview-container" style={{ paddingBottom: '90px' }}>
       
@@ -589,7 +643,7 @@ const ExpenseEntry = ({
         {/* Dynamic Budget Ring/Text Progress */}
         {entryMode === 'expense' && (
           <div style={{ marginTop: '14px', fontSize: '0.78rem', background: 'rgba(255,255,255,0.06)', padding: '8px 12px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.1)', color: '#fff' }}>
-            📊 {getBudgetProgressText()}
+            📊 {getBudgetProgressText()?.text || ""}
           </div>
         )}
       </div>
@@ -656,19 +710,7 @@ const ExpenseEntry = ({
                 {/* Account */}
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 支付帳戶</span>
-                  <select
-                    value={persAccountId}
-                    onChange={(e) => setPersAccountId(e.target.value)}
-                    className="glass-input"
-                    style={{ width: '100%', height: '36px', borderRadius: '8px' }}
-                  >
-                    <option value="">-- 選擇支付帳戶 --</option>
-                    {accounts.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.nickname} (${a.balance.toLocaleString()} {a.currency}) [{a.owner === 'joint' ? '共同' : (a.owner === 'userA' ? '大狗狗' : '阿陞')}]
-                      </option>
-                    ))}
-                  </select>
+                  {renderAccountSelector(persAccountId, setPersAccountId)}
                 </div>
 
                 {/* Amount */}
@@ -753,19 +795,7 @@ const ExpenseEntry = ({
                 {/* Joint Account Selector */}
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 支付帳戶</span>
-                  <select
-                    value={jointAccountId}
-                    onChange={(e) => setJointAccountId(e.target.value)}
-                    className="glass-input"
-                    style={{ width: '100%', height: '36px', borderRadius: '8px' }}
-                  >
-                    <option value="">-- 選擇支付帳戶 --</option>
-                    {accounts.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.nickname} (${a.balance.toLocaleString()} {a.currency}) [{a.owner === 'joint' ? '共同直接付' : `${a.owner === 'userA' ? '大狗狗' : '阿陞'}代墊`}]
-                      </option>
-                    ))}
-                  </select>
+                  {renderAccountSelector(jointAccountId, setJointAccountId)}
                 </div>
 
                 {/* Amount */}
@@ -893,19 +923,7 @@ const ExpenseEntry = ({
             {/* Account Selector */}
             <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
               <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 存入帳戶</span>
-              <select
-                value={incAccountId}
-                onChange={(e) => setIncAccountId(e.target.value)}
-                className="glass-input"
-                style={{ width: '100%', height: '36px', borderRadius: '8px' }}
-              >
-                <option value="">-- 選擇存入帳戶 --</option>
-                {accounts.filter(a => a.type !== 'credit').map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.nickname} (${a.balance.toLocaleString()} {a.currency}) [{a.owner === 'joint' ? '共同' : (a.owner === 'userA' ? '大狗狗' : '阿陞')}]
-                  </option>
-                ))}
-              </select>
+              {renderAccountSelector(incAccountId, setIncAccountId, a => a.type !== 'credit')}
             </div>
 
             {/* Amount */}
@@ -969,19 +987,7 @@ const ExpenseEntry = ({
 
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '6px' }}>請選擇扣款支付帳戶</label>
-              <select
-                value={billPayAccountId}
-                onChange={(e) => setBillPayAccountId(e.target.value)}
-                className="glass-input"
-                style={{ width: '100%', height: '38px', borderRadius: '8px' }}
-              >
-                <option value="">-- 選擇支付帳戶 --</option>
-                {accounts.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.nickname} (${a.balance.toLocaleString()} {a.currency})
-                  </option>
-                ))}
-              </select>
+              {renderAccountSelector(billPayAccountId, setBillPayAccountId)}
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>

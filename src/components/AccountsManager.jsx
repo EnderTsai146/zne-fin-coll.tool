@@ -1,6 +1,26 @@
 // src/components/AccountsManager.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import SegmentedControl from './SegmentedControl';
+
+const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
+
+const formatInputMoney = (valStr) => {
+  if (valStr === '' || valStr === undefined || valStr === null) return '';
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  const parts = clean.split('.');
+  if (parts.length > 2) {
+    parts[1] = parts.slice(1).join('');
+  }
+  const integerPart = parts[0] ? Number(parts[0]).toLocaleString() : '';
+  const decimalPart = parts.length > 1 ? '.' + parts[1] : '';
+  return `$${integerPart}${decimalPart}`;
+};
+
+const parseMoney = (valStr) => {
+  if (!valStr) return 0;
+  const clean = valStr.toString().replace(/[^\d.]/g, '');
+  return Number(clean) || 0;
+};
 
 const AccountsManager = ({
   assets,
@@ -114,7 +134,9 @@ const AccountsManager = ({
     setAccName(acc.name);
     setAccNickname(acc.nickname);
     setAccNumber(acc.accountNumber);
-    setAccBalance(acc.balance.toString());
+    // Show correct absolute balance in editable state
+    const rawVal = acc.balance;
+    setAccBalance(acc.type === 'credit' ? Math.abs(rawVal).toString() : rawVal.toString());
     setAccCurrency(acc.currency);
     setIsDefaultExpense(acc.isDefaultExpense || false);
     setIsDefaultIncome(acc.isDefaultIncome || false);
@@ -123,7 +145,6 @@ const AccountsManager = ({
     setBillingDay((acc.billingDay || 10).toString());
     setAutoPay(acc.autoPay !== undefined ? acc.autoPay : true);
 
-    // Enforce ownership: if not owner and not joint, it's read-only
     const cannotEdit = acc.owner !== userKey && acc.owner !== 'joint';
     setIsReadOnly(cannotEdit);
     setShowModal(true);
@@ -136,7 +157,12 @@ const AccountsManager = ({
       await customAlert("請輸入帳戶名稱與暱稱！");
       return;
     }
-    const val = Number(accBalance) || 0;
+    
+    // Parse on save
+    let val = parseMoney(accBalance);
+    if (accType === 'credit') {
+      val = -Math.abs(val); // Save as negative liability
+    }
 
     let updatedAccounts = [...accounts];
 
@@ -277,12 +303,12 @@ const AccountsManager = ({
   // Action Form: Transfer
   const handleExecuteTransfer = async () => {
     if (!tfSource || !tfTarget || !tfAmount) {
-      await customAlert("請填寫完整的轉帳資訊！");
+      await customAlert("請選擇帳戶並填寫劃撥金額！");
       return;
     }
-    const val = Number(tfAmount) || 0;
+    const val = parseMoney(tfAmount);
     if (val <= 0) {
-      await customAlert("轉帳金額必須大於 0！");
+      await customAlert("劃撥金額必須大於 0！");
       return;
     }
     if (tfSource === tfTarget) {
@@ -298,7 +324,7 @@ const AccountsManager = ({
       return;
     }
     if (srcAcc.currency !== tgtAcc.currency) {
-      await customAlert(`❌ 轉出與轉入帳戶幣別不同，請改用「貨幣換匯」功能進行轉帳！`);
+      await customAlert(`❌ 轉出與轉入帳戶幣別不同，請改用「貨幣換匯」功能！`);
       return;
     }
 
@@ -317,11 +343,11 @@ const AccountsManager = ({
       payer: operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶',
       accountId: tfSource,
       targetAccountId: tfTarget,
-      note: tfNote.trim() || `資金調度: ${srcAcc.nickname} ➔ ${tgtAcc.nickname}`,
+      note: tfNote.trim() || `資金劃撥: ${srcAcc.nickname} ➔ ${tgtAcc.nickname}`,
     };
 
     onTransaction({ ...assets, accounts: updatedAccounts }, txRecord);
-    await customAlert(`✅ 資金調度轉帳成功！`);
+    await customAlert(`✅ 資金劃撥劃撥成功！`);
     setTfAmount('');
     setTfNote('');
   };
@@ -329,11 +355,11 @@ const AccountsManager = ({
   // Action Form: Exchange
   const handleExecuteExchange = async () => {
     if (!exSource || !exTarget || !exSourceAmount || !exTargetAmount) {
-      await customAlert("請填寫完整的換匯資訊！");
+      await customAlert("請選擇帳戶並填寫換匯金額！");
       return;
     }
-    const sellVal = Number(exSourceAmount) || 0;
-    const buyVal = Number(exTargetAmount) || 0;
+    const sellVal = parseMoney(exSourceAmount);
+    const buyVal = parseMoney(exTargetAmount);
 
     if (sellVal <= 0 || buyVal <= 0) {
       await customAlert("換匯金額必須大於 0！");
@@ -348,7 +374,7 @@ const AccountsManager = ({
       return;
     }
     if (srcAcc.currency === tgtAcc.currency) {
-      await customAlert(`❌ 相同的貨幣無須換匯，請改用「資金調度」功能！`);
+      await customAlert(`❌ 相同的貨幣無須換匯，請改用「資金劃撥」功能！`);
       return;
     }
 
@@ -384,10 +410,10 @@ const AccountsManager = ({
   // Action Form: Calibrate
   const handleExecuteCalibrate = async () => {
     if (!calAcc || !calNewBalance) {
-      await customAlert("請選擇帳戶並輸入校正後的金額！");
+      await customAlert("請選擇帳戶並輸入校正後的真實餘額！");
       return;
     }
-    const newVal = Number(calNewBalance);
+    const newVal = parseMoney(calNewBalance);
     const acc = accounts.find(a => a.id === calAcc);
     const diff = newVal - acc.balance;
 
@@ -418,37 +444,243 @@ const AccountsManager = ({
     setCalNote('');
   };
 
+  // Custom Account grid selector helper
+  const renderAccountSelector = (selectedValue, onChange, filterFn = () => true) => {
+    const list = accounts.filter(filterFn);
+    if (list.length === 0) {
+      return <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '6px' }}>無相符帳戶</div>;
+    }
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
+        {list.map(acc => {
+          const isSelected = selectedValue === acc.id;
+          const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗 🐕' : '阿陞 🐶');
+          const isCredit = acc.type === 'credit';
+          const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+          
+          return (
+            <button
+              key={acc.id}
+              type="button"
+              onClick={() => onChange(acc.id)}
+              style={{
+                padding: '8px 10px',
+                borderRadius: '10px',
+                border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                background: isSelected ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.02)',
+                color: isSelected ? '#fff' : 'var(--text-secondary)',
+                fontSize: '0.78rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+                transition: 'all 0.2s ease',
+                boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
+                minHeight: '52px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {acc.nickname}
+                </span>
+                <span style={{ fontSize: '0.58rem', opacity: 0.6, background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: '4px' }}>
+                  {acc.owner === 'joint' ? '共同' : (acc.owner === 'userA' ? '大狗狗' : '阿陞')}
+                </span>
+              </div>
+              <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
+                ${acc.balance.toLocaleString()} {acc.currency}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Custom iOS Styled Toggle Switch Row Helper
+  const renderToggleRow = (label, value, onChange, disabled = false) => {
+    return (
+      <div 
+        onClick={() => !disabled && onChange(!value)}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 14px',
+          borderRadius: '12px',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
+          transition: 'all 0.2s ease',
+          userSelect: 'none'
+        }}
+      >
+        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>{label}</span>
+        <div style={{
+          width: '46px',
+          height: '26px',
+          borderRadius: '13px',
+          background: value ? '#34c759' : 'rgba(255,255,255,0.15)',
+          position: 'relative',
+          transition: 'background-color 0.2s ease',
+          flexShrink: 0
+        }}>
+          <div style={{
+            width: '22px',
+            height: '22px',
+            borderRadius: '50%',
+            background: '#fff',
+            position: 'absolute',
+            top: '2px',
+            left: value ? '22px' : '2px',
+            transition: 'left 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
+          }} />
+        </div>
+      </div>
+    );
+  };
+
+  // Apple settings-style list renderer
+  const renderAccountListGroup = (title, list) => {
+    if (list.length === 0) return null;
+    return (
+      <div style={{ marginBottom: '22px' }}>
+        <div style={{ fontSize: '0.74rem', fontWeight: '700', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', paddingLeft: '4px' }}>
+          {title}
+        </div>
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.06)',
+          borderRadius: '14px',
+          overflow: 'hidden'
+        }}>
+          {list.map((acc, index) => {
+            const isCredit = acc.type === 'credit';
+            const balanceColor = isCredit ? '#ff9500' : '#fff';
+            
+            let typeIcon = '🏦';
+            if (acc.type === 'cash') typeIcon = '💵';
+            else if (acc.type === 'credit') typeIcon = '💳';
+            else if (acc.type === 'virtual') typeIcon = '📱';
+            
+            const isLast = index === list.length - 1;
+            
+            return (
+              <div
+                key={acc.id}
+                onClick={() => handleOpenEdit(acc)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 16px',
+                  cursor: 'pointer',
+                  borderBottom: isLast ? 'none' : '0.5px solid rgba(255,255,255,0.06)',
+                  transition: 'background 0.2s ease',
+                }}
+                className="apple-list-item"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontSize: '1.2rem',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    background: isCredit ? 'rgba(255,149,0,0.08)' : (acc.type === 'cash' ? 'rgba(52,199,89,0.08)' : 'rgba(10,132,255,0.08)'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    {typeIcon}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: '700', fontSize: '0.88rem', color: '#fff' }}>{acc.nickname}</span>
+                      <div style={{ display: 'inline-flex', gap: '3px' }}>
+                        {acc.isDefaultExpense && <span style={{ fontSize: '0.58rem', background: 'rgba(255,45,85,0.15)', color: '#ff2d55', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>支</span>}
+                        {acc.isDefaultIncome && <span style={{ fontSize: '0.58rem', background: 'rgba(52,199,89,0.15)', color: '#30d158', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>收</span>}
+                        {acc.isDefaultSettle && <span style={{ fontSize: '0.58rem', background: 'rgba(10,132,255,0.15)', color: '#0a84ff', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>結</span>}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {acc.name} {acc.accountNumber ? `· ${maskNumber(acc.accountNumber, acc.owner)}` : ''}
+                    </div>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '12px' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: '800', fontSize: '0.94rem', color: balanceColor }}>
+                      ${acc.balance.toLocaleString()}
+                    </div>
+                    <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>{acc.currency}</span>
+                  </div>
+                  <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '1.1rem', paddingLeft: '4px' }}>›</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="overview-container" style={{ paddingBottom: '90px' }}>
-      {/* Dynamic Aurora Header */}
-      <div className="header-glass-banner" style={{ marginBottom: '20px' }}>
+      
+      {/* Apple-style Net Worth Hero Card */}
+      <div className="header-glass-banner" style={{ marginBottom: '20px', paddingBottom: '16px' }}>
         <div className="banner-glow-spot" />
         <h2 style={{ fontSize: '1.4rem', fontWeight: '850', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
           🏦 多帳戶總覽管理
         </h2>
         <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', margin: '4px 0 0 0' }}>
-          安全、無感的多帳戶收支與債務調度核心
+          安全、無感的多帳戶收支與債務劃撥核心
         </p>
 
-        {/* Global Net Worth Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '16px' }}>
-          <div className="networth-sub-card">
-            <span className="networth-sub-label">淨資產 (TWD)</span>
-            <span className="networth-sub-val" style={{ color: netWorth >= 0 ? '#34c759' : '#ff453a' }}>
-              ${Math.round(netWorth).toLocaleString()}
-            </span>
-          </div>
-          <div className="networth-sub-card">
-            <span className="networth-sub-label">總資產 (TWD)</span>
-            <span className="networth-sub-val" style={{ color: '#007aff' }}>
-              ${Math.round(totalAssets).toLocaleString()}
-            </span>
-          </div>
-          <div className="networth-sub-card">
-            <span className="networth-sub-label">總負債 (TWD)</span>
-            <span className="networth-sub-val" style={{ color: '#ff9500' }}>
-              ${Math.round(Math.abs(totalLiabilities)).toLocaleString()}
-            </span>
+        {/* Hero Card */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '16px',
+          padding: '16px 18px',
+          marginTop: '16px',
+          textAlign: 'center',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)'
+        }}>
+          <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            淨資產總計
+          </span>
+          <h1 style={{
+            fontSize: '1.8rem',
+            fontWeight: '850',
+            color: netWorth >= 0 ? '#34c759' : '#ff453a',
+            margin: '4px 0 14px 0',
+            letterSpacing: '-0.02em'
+          }}>
+            ${Math.round(netWorth).toLocaleString()} <span style={{ fontSize: '0.9rem', fontWeight: '500', opacity: 0.8 }}>TWD</span>
+          </h1>
+          <div style={{ display: 'flex', gap: '12px', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+            <div style={{ flex: 1, textAlign: 'left', display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>總資產 (TWD)</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: '750', color: '#fff', marginTop: '2px' }}>
+                ${Math.round(totalAssets).toLocaleString()}
+              </span>
+            </div>
+            <div style={{ width: '0.5px', background: 'rgba(255,255,255,0.06)' }} />
+            <div style={{ flex: 1, textAlign: 'right', display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>總負債 (TWD)</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: '750', color: '#ff9500', marginTop: '2px' }}>
+                ${Math.round(Math.abs(totalLiabilities)).toLocaleString()}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -458,7 +690,7 @@ const AccountsManager = ({
         <SegmentedControl
           options={[
             { label: '📇 帳戶管理', value: 'list' },
-            { label: '🔄 資金調度', value: 'transfer' },
+            { label: '🔄 資金劃撥', value: 'transfer' },
             { label: '💱 貨幣換匯', value: 'exchange' },
             { label: '⚖️ 餘額校正', value: 'calibrate' }
           ]}
@@ -471,159 +703,20 @@ const AccountsManager = ({
       {subTab === 'list' && (
         <div className="slide-in">
           {/* Create Button */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', paddingRight: '4px' }}>
             <button className="glass-btn primary-gradient-btn" onClick={handleOpenAdd} style={{ padding: '8px 16px', borderRadius: '10px', fontSize: '0.8rem', fontWeight: '700' }}>
               ➕ 建立新帳戶
             </button>
           </div>
 
-          {/* Group: Joint Accounts */}
-          {accounts.some(a => a.owner === 'joint') && (
-            <div className="account-group-section" style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'rgba(255,255,255,0.5)', marginBottom: '8px', paddingLeft: '4px' }}>🏫 共同帳戶 (雙方可編輯)</div>
-              {accounts.filter(a => a.owner === 'joint').map(acc => (
-                <div key={acc.id} className="account-item-card glass-card" onClick={() => handleOpenEdit(acc)}>
-                  <div className="acc-item-header">
-                    <div>
-                      <div className="acc-nickname">{acc.nickname}</div>
-                      <div className="acc-meta">{acc.name} · {acc.type === 'credit' ? '信用卡' : (acc.type === 'cash' ? '現金' : '活儲')}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="acc-balance" style={{ color: acc.type === 'credit' ? '#ff9500' : '#fff' }}>
-                        ${acc.balance.toLocaleString()} <span style={{ fontSize: '0.65rem' }}>{acc.currency}</span>
-                      </div>
-                      <div className="acc-badges">
-                        {acc.isDefaultExpense && <span className="acc-badge expense">支</span>}
-                        {acc.isDefaultIncome && <span className="acc-badge income">收</span>}
-                        {acc.isDefaultSettle && <span className="acc-badge settle">結</span>}
-                      </div>
-                    </div>
-                  </div>
-                  {acc.accountNumber && (
-                    <div className="acc-number-footer">帳號: {maskNumber(acc.accountNumber, acc.owner)}</div>
-                  )}
-                  {acc.type === 'credit' && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
-                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>
-                        帳單日: 每月 {acc.billingDay} 號 ({acc.autoPay ? '自動扣繳' : '手動繳納'})
-                      </span>
-                      {acc.balance < 0 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleManualPayoff(acc);
-                          }}
-                          className="payoff-sub-btn"
-                        >
-                          💳 結清帳單
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Group 1: Joint Accounts */}
+          {renderAccountListGroup("🏫 共同帳戶 (雙方可編輯)", accounts.filter(a => a.owner === 'joint'))}
 
-          {/* Group: User A Private Accounts */}
-          <div className="account-group-section" style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'rgba(255,255,255,0.5)', marginBottom: '8px', paddingLeft: '4px' }}>🐕 大狗狗🐕的個人帳戶 ({userKey === 'userA' ? '可創建編輯' : '唯讀預覽'})</div>
-            {accounts.filter(a => a.owner === 'userA').length === 0 ? (
-              <div className="glass-card text-center" style={{ padding: '16px', color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem' }}>無帳戶</div>
-            ) : (
-              accounts.filter(a => a.owner === 'userA').map(acc => (
-                <div key={acc.id} className="account-item-card glass-card" onClick={() => handleOpenEdit(acc)}>
-                  <div className="acc-item-header">
-                    <div>
-                      <div className="acc-nickname">{acc.nickname}</div>
-                      <div className="acc-meta">{acc.name} · {acc.type === 'credit' ? '信用卡' : (acc.type === 'cash' ? '現金' : '活儲')}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="acc-balance" style={{ color: acc.type === 'credit' ? '#ff9500' : '#fff' }}>
-                        ${acc.balance.toLocaleString()} <span style={{ fontSize: '0.65rem' }}>{acc.currency}</span>
-                      </div>
-                      <div className="acc-badges">
-                        {acc.isDefaultExpense && <span className="acc-badge expense">支</span>}
-                        {acc.isDefaultIncome && <span className="acc-badge income">收</span>}
-                        {acc.isDefaultSettle && <span className="acc-badge settle">結</span>}
-                      </div>
-                    </div>
-                  </div>
-                  {acc.accountNumber && (
-                    <div className="acc-number-footer">帳號: {maskNumber(acc.accountNumber, acc.owner)}</div>
-                  )}
-                  {acc.type === 'credit' && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
-                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>
-                        帳單日: 每月 {acc.billingDay} 號 ({acc.autoPay ? '自動扣繳' : '手動繳納'})
-                      </span>
-                      {acc.balance < 0 && userKey === 'userA' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleManualPayoff(acc);
-                          }}
-                          className="payoff-sub-btn"
-                        >
-                          💳 結清帳單
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+          {/* Group 2: User A Private Accounts */}
+          {renderAccountListGroup(`🐕 大狗狗🐕的個人帳戶 (${userKey === 'userA' ? '可建立編輯' : '唯讀預覽'})`, accounts.filter(a => a.owner === 'userA'))}
 
-          {/* Group: User B Private Accounts */}
-          <div className="account-group-section" style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'rgba(255,255,255,0.5)', marginBottom: '8px', paddingLeft: '4px' }}>🐶 阿陞🐶的個人帳戶 ({userKey === 'userB' ? '可創建編輯' : '唯讀預覽'})</div>
-            {accounts.filter(a => a.owner === 'userB').length === 0 ? (
-              <div className="glass-card text-center" style={{ padding: '16px', color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem' }}>無帳戶</div>
-            ) : (
-              accounts.filter(a => a.owner === 'userB').map(acc => (
-                <div key={acc.id} className="account-item-card glass-card" onClick={() => handleOpenEdit(acc)}>
-                  <div className="acc-item-header">
-                    <div>
-                      <div className="acc-nickname">{acc.nickname}</div>
-                      <div className="acc-meta">{acc.name} · {acc.type === 'credit' ? '信用卡' : (acc.type === 'cash' ? '現金' : '活儲')}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="acc-balance" style={{ color: acc.type === 'credit' ? '#ff9500' : '#fff' }}>
-                        ${acc.balance.toLocaleString()} <span style={{ fontSize: '0.65rem' }}>{acc.currency}</span>
-                      </div>
-                      <div className="acc-badges">
-                        {acc.isDefaultExpense && <span className="acc-badge expense">支</span>}
-                        {acc.isDefaultIncome && <span className="acc-badge income">收</span>}
-                        {acc.isDefaultSettle && <span className="acc-badge settle">結</span>}
-                      </div>
-                    </div>
-                  </div>
-                  {acc.accountNumber && (
-                    <div className="acc-number-footer">帳號: {maskNumber(acc.accountNumber, acc.owner)}</div>
-                  )}
-                  {acc.type === 'credit' && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
-                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>
-                        帳單日: 每月 {acc.billingDay} 號 ({acc.autoPay ? '自動扣繳' : '手動繳納'})
-                      </span>
-                      {acc.balance < 0 && userKey === 'userB' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleManualPayoff(acc);
-                          }}
-                          className="payoff-sub-btn"
-                        >
-                          💳 結清帳單
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+          {/* Group 3: User B Private Accounts */}
+          {renderAccountListGroup(`🐶 阿陞🐶的個人帳戶 (${userKey === 'userB' ? '可建立編輯' : '唯讀預覽'})`, accounts.filter(a => a.owner === 'userB'))}
         </div>
       )}
 
@@ -634,70 +727,46 @@ const AccountsManager = ({
           
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉出帳戶</label>
-            <select
-              value={tfSource}
-              onChange={(e) => setTfSource(e.target.value)}
-              className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px' }}
-            >
-              <option value="">-- 選擇轉出帳戶 --</option>
-              {accounts.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.nickname} (${a.balance.toLocaleString()} {a.currency}) [{a.owner === 'joint' ? '共同' : (a.owner === 'userA' ? '大狗狗' : '阿陞')}]
-                </option>
-              ))}
-            </select>
+            {renderAccountSelector(tfSource, setTfSource)}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉入帳戶</label>
-            <select
-              value={tfTarget}
-              onChange={(e) => setTfTarget(e.target.value)}
-              className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px' }}
-            >
-              <option value="">-- 選擇轉入帳戶 --</option>
-              {accounts.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.nickname} (${a.balance.toLocaleString()} {a.currency}) [{a.owner === 'joint' ? '共同' : (a.owner === 'userA' ? '大狗狗' : '阿陞')}]
-                </option>
-              ))}
-            </select>
+            {renderAccountSelector(tfTarget, setTfTarget)}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉帳金額</label>
+            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>劃撥金額</label>
             <input
-              type="number"
-              value={tfAmount}
+              type="text"
+              value={formatInputMoney(tfAmount)}
               onChange={(e) => setTfAmount(e.target.value)}
-              placeholder="輸入金額"
+              placeholder="$0"
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉帳備註</label>
+            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>劃撥備註</label>
             <input
               type="text"
               value={tfNote}
               onChange={(e) => setTfNote(e.target.value)}
               placeholder="選填備註"
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉帳日期</label>
+            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>劃撥日期</label>
             <input
               type="date"
               value={tfDate}
               onChange={(e) => setTfDate(e.target.value)}
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
@@ -714,59 +783,35 @@ const AccountsManager = ({
           
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉出外幣帳戶 (售出)</label>
-            <select
-              value={exSource}
-              onChange={(e) => setExSource(e.target.value)}
-              className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px' }}
-            >
-              <option value="">-- 選擇轉出帳戶 --</option>
-              {accounts.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.nickname} (${a.balance.toLocaleString()} {a.currency})
-                </option>
-              ))}
-            </select>
+            {renderAccountSelector(exSource, setExSource)}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉入外幣帳戶 (買入)</label>
-            <select
-              value={exTarget}
-              onChange={(e) => setExTarget(e.target.value)}
-              className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px' }}
-            >
-              <option value="">-- 選擇轉入帳戶 --</option>
-              {accounts.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.nickname} (${a.balance.toLocaleString()} {a.currency})
-                </option>
-              ))}
-            </select>
+            {renderAccountSelector(exTarget, setExTarget)}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
             <div>
               <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>售出金額</label>
               <input
-                type="number"
-                value={exSourceAmount}
+                type="text"
+                value={formatInputMoney(exSourceAmount)}
                 onChange={(e) => setExSourceAmount(e.target.value)}
-                placeholder="轉出金額"
+                placeholder="$0"
                 className="glass-input"
-                style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+                style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
               />
             </div>
             <div>
               <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>買入金額</label>
               <input
-                type="number"
-                value={exTargetAmount}
+                type="text"
+                value={formatInputMoney(exTargetAmount)}
                 onChange={(e) => setExTargetAmount(e.target.value)}
-                placeholder="轉入金額"
+                placeholder="$0"
                 className="glass-input"
-                style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+                style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
               />
             </div>
           </div>
@@ -779,7 +824,7 @@ const AccountsManager = ({
               onChange={(e) => setExNote(e.target.value)}
               placeholder="選填備註"
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
@@ -790,7 +835,7 @@ const AccountsManager = ({
               value={exDate}
               onChange={(e) => setExDate(e.target.value)}
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
@@ -807,30 +852,18 @@ const AccountsManager = ({
           
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>要校正的帳戶</label>
-            <select
-              value={calAcc}
-              onChange={(e) => setCalAcc(e.target.value)}
-              className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px' }}
-            >
-              <option value="">-- 選擇帳戶 --</option>
-              {accounts.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.nickname} (${a.balance.toLocaleString()} {a.currency})
-                </option>
-              ))}
-            </select>
+            {renderAccountSelector(calAcc, setCalAcc)}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>真實餘額 (校正後)</label>
             <input
-              type="number"
-              value={calNewBalance}
+              type="text"
+              value={formatInputMoney(calNewBalance)}
               onChange={(e) => setCalNewBalance(e.target.value)}
-              placeholder="輸入最新真實餘額"
+              placeholder="$0"
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
@@ -842,7 +875,7 @@ const AccountsManager = ({
               onChange={(e) => setCalNote(e.target.value)}
               placeholder="例如：手續費誤差、錢包找零誤差"
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
@@ -853,7 +886,7 @@ const AccountsManager = ({
               value={calDate}
               onChange={(e) => setCalDate(e.target.value)}
               className="glass-input"
-              style={{ width: '100%', height: '40px', borderRadius: '10px', padding: '0 10px' }}
+              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
             />
           </div>
 
@@ -865,34 +898,34 @@ const AccountsManager = ({
 
       {/* ACCOUNT DETAIL MODAL (ADD / EDIT) */}
       {showModal && (
-        <div className="custom-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content glass-card slide-in" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }}>
+        <div className="liquid-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div style={{ fontWeight: '850', fontSize: '1.15rem', color: '#fff' }} className="liquid-modal-title">
                 {isReadOnly ? '📋 帳戶唯讀預覽' : (editingAccount ? '✏️ 編輯帳戶資料' : '🏦 建立全新帳戶')}
               </div>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
             </div>
 
             {/* Read Only Notice */}
             {isReadOnly && (
-              <div style={{ backgroundColor: 'rgba(255,149,0,0.12)', border: '0.5px solid rgba(255,149,0,0.3)', color: '#ffb94f', padding: '8px 12px', borderRadius: '8px', fontSize: '0.74rem', marginBottom: '14px', lineHeight: '1.4' }}>
+              <div style={{ backgroundColor: 'rgba(255,149,0,0.12)', border: '0.5px solid rgba(255,149,0,0.3)', color: '#ffb94f', padding: '10px 14px', borderRadius: '10px', fontSize: '0.74rem', marginBottom: '14px', lineHeight: '1.4' }}>
                 🔒 這是您伴侶的個人私有帳戶。您目前僅能預覽其金額，無權對其進行修改或刪除。
               </div>
             )}
 
             {/* Form Fields */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '8px' }}>
               
               {/* Owner */}
               <div>
                 <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>持有人</label>
                 <select
-                  disabled={isReadOnly || editingAccount} // Creator/Owner cannot be changed after creation
+                  disabled={isReadOnly || editingAccount}
                   value={accOwner}
                   onChange={(e) => setAccOwner(e.target.value)}
                   className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 >
                   <option value="userA">大狗狗 🐕 (個人私有)</option>
                   <option value="userB">阿陞 🐶 (個人私有)</option>
@@ -908,7 +941,7 @@ const AccountsManager = ({
                   value={accType}
                   onChange={(e) => setAccType(e.target.value)}
                   className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 >
                   <option value="bank">🏦 銀行活期存款 (活儲)</option>
                   <option value="cash">💵 現金錢包 (Cash)</option>
@@ -927,7 +960,7 @@ const AccountsManager = ({
                   onChange={(e) => setAccName(e.target.value)}
                   placeholder="例如：國泰世華、現金、悠遊卡"
                   className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 />
               </div>
 
@@ -941,7 +974,7 @@ const AccountsManager = ({
                   onChange={(e) => setAccNickname(e.target.value)}
                   placeholder="例如：薪轉帳戶、主力信用卡、皮夾"
                   className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 />
               </div>
 
@@ -955,30 +988,23 @@ const AccountsManager = ({
                   onChange={(e) => setAccNumber(e.target.value)}
                   placeholder={isReadOnly ? '••••••••' : '輸入帳號或卡號'}
                   className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 />
               </div>
 
               {/* Balance */}
               <div>
                 <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>
-                  {accType === 'credit' ? '目前未繳帳單金額 (請輸入正值，系統將儲存為負債)' : '目前帳戶餘額'}
+                  {accType === 'credit' ? '目前未繳帳單金額' : '目前帳戶餘額'}
                 </label>
                 <input
                   disabled={isReadOnly}
-                  type="number"
-                  value={accType === 'credit' && Number(accBalance) < 0 ? Math.abs(Number(accBalance)) : accBalance}
-                  onChange={(e) => {
-                    const typed = e.target.value;
-                    if (accType === 'credit') {
-                      setAccBalance(typed ? (-Math.abs(Number(typed))).toString() : '');
-                    } else {
-                      setAccBalance(typed);
-                    }
-                  }}
-                  placeholder="0"
+                  type="text"
+                  value={formatInputMoney(accBalance)}
+                  onChange={(e) => setAccBalance(e.target.value)}
+                  placeholder="$0"
                   className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 />
               </div>
 
@@ -990,7 +1016,7 @@ const AccountsManager = ({
                   value={accCurrency}
                   onChange={(e) => setAccCurrency(e.target.value)}
                   className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px' }}
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 >
                   <option value="TWD">TWD (新台幣)</option>
                   <option value="USD">USD (美金)</option>
@@ -999,7 +1025,7 @@ const AccountsManager = ({
 
               {/* CREDIT CARD FIELDS */}
               {accType === 'credit' && (
-                <div style={{ border: '0.5px solid rgba(255,255,255,0.08)', padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ border: '0.5px solid rgba(255,255,255,0.08)', padding: '12px 10px', borderRadius: '12px', backgroundColor: 'rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   
                   {/* Linked Bank Account */}
                   <div>
@@ -1009,7 +1035,7 @@ const AccountsManager = ({
                       value={linkedBankId}
                       onChange={(e) => setLinkedBankId(e.target.value)}
                       className="glass-input"
-                      style={{ width: '100%', height: '30px', borderRadius: '6px', fontSize: '0.74rem' }}
+                      style={{ width: '100%', height: '40px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 8px' }}
                     >
                       <option value="">-- 選擇扣款帳戶 --</option>
                       {bankAndCashAccounts.map(b => (
@@ -1029,71 +1055,24 @@ const AccountsManager = ({
                       value={billingDay}
                       onChange={(e) => setBillingDay(e.target.value)}
                       className="glass-input"
-                      style={{ width: '100%', height: '30px', borderRadius: '6px', fontSize: '0.74rem', padding: '0 8px' }}
+                      style={{ width: '100%', height: '40px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 12px' }}
                     />
                   </div>
 
-                  {/* Auto Pay toggle */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    <input
-                      disabled={isReadOnly}
-                      type="checkbox"
-                      id="chkAutoPay"
-                      checked={autoPay}
-                      onChange={(e) => setAutoPay(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <label htmlFor="chkAutoPay" style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}>
-                      在扣款日當天自動執行扣款結清 (Auto-Pay)
-                    </label>
-                  </div>
+                  {/* Auto Pay toggle switch */}
+                  {renderToggleRow("自動執行扣款結清 (Auto-Pay)", autoPay, setAutoPay, isReadOnly)}
                 </div>
               )}
 
               {/* Default presets settings */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
-                <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>預設帳戶設定：</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>預設帳戶設定：</div>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <input
-                    disabled={isReadOnly}
-                    type="checkbox"
-                    id="chkDefExpense"
-                    checked={isDefaultExpense}
-                    onChange={(e) => setIsDefaultExpense(e.target.checked)}
-                  />
-                  <label htmlFor="chkDefExpense" style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.7)' }}>
-                    設為【支出時】的預設出帳帳戶
-                  </label>
-                </div>
+                {renderToggleRow("設為【支出時】的預設出帳帳戶", isDefaultExpense, setIsDefaultExpense, isReadOnly)}
+                
+                {renderToggleRow("設為【收入時】的預設存入帳戶", isDefaultIncome, setIsDefaultIncome, isReadOnly)}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <input
-                    disabled={isReadOnly}
-                    type="checkbox"
-                    id="chkDefIncome"
-                    checked={isDefaultIncome}
-                    onChange={(e) => setIsDefaultIncome(e.target.checked)}
-                  />
-                  <label htmlFor="chkDefIncome" style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.7)' }}>
-                    設為【收入時】的預設存入帳戶
-                  </label>
-                </div>
-
-                {accType !== 'credit' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <input
-                      disabled={isReadOnly}
-                      type="checkbox"
-                      id="chkDefSettle"
-                      checked={isDefaultSettle}
-                      onChange={(e) => setIsDefaultSettle(e.target.checked)}
-                    />
-                    <label htmlFor="chkDefSettle" style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.7)' }}>
-                      設為【伴侶代墊結算】的預設劃撥帳戶
-                    </label>
-                  </div>
-                )}
+                {accType !== 'credit' && renderToggleRow("設為【伴侶代墊結算】的預設劃撥帳戶", isDefaultSettle, setIsDefaultSettle, isReadOnly)}
               </div>
 
             </div>
@@ -1106,7 +1085,7 @@ const AccountsManager = ({
                   className="glass-btn"
                   style={{
                     flex: 1,
-                    padding: '10px 0',
+                    padding: '12px 0',
                     borderRadius: '10px',
                     color: '#ff453a',
                     borderColor: 'rgba(255,69,58,0.2)',
@@ -1120,7 +1099,7 @@ const AccountsManager = ({
               <button
                 onClick={isReadOnly ? () => setShowModal(false) : handleSaveAccount}
                 className="glass-btn primary-gradient-btn"
-                style={{ flex: 2, padding: '10px 0', borderRadius: '10px', fontWeight: '800' }}
+                style={{ flex: 2, padding: '12px 0', borderRadius: '10px', fontWeight: '800' }}
               >
                 {isReadOnly ? '確定返回' : (editingAccount ? '儲存帳戶修改' : '確定建立帳戶')}
               </button>

@@ -13,14 +13,14 @@ const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const formatDate = (date) => date.toISOString().split('T')[0];
 const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingArchive, setAssets, currentFxRate, setCurrentFxRate, hasNewUpdate, onOpenChangelog }) => {
     // ★ Fix: 將日期移入元件內，避免模組級別變數在跨日後過期
-    const today = useMemo(() => new Date(), []);
-    const lastYear = useMemo(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d; }, []);
+    const today = new Date();
     const [chartDateRange, setChartDateRange] = useState({ start: formatDate(new Date(new Date().setFullYear(new Date().getFullYear() - 1))), end: formatDate(new Date()) });
     const [activeHistory, setActiveHistory] = useState(null);
+    const [selectedAuditTrail, setSelectedAuditTrail] = useState(null);
     const [chartViewMode, setChartViewMode] = useState('line'); // Task 3 Stacked Area Toggle
     const [historyDateRange, setHistoryDateRange] = useState({ start: '', end: '' });
     const [backupWarning, setBackupWarning] = useState(false);
-    const [selectedChartDate, setSelectedChartDate] = useState(null);
+    const [selectedChartDate, setSelectedChartDate] = useState('');
     const yesterday = useMemo(() => {
         const d = new Date();
         d.setDate(d.getDate() - 1);
@@ -986,33 +986,6 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     <button onClick={() => handleToggleHistory('userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
                 </div>
             </div>
-
-            {/* 🏦 帳戶快速概述 (MOZE Style Asset Hub) */}
-            <div className="glass-card card-animate" style={{ marginBottom: '18px', padding: '16px 18px' }}>
-                <h3 style={{ marginTop: 0, marginBottom: '14px', fontSize: '0.94rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    🏦 帳戶資產概況
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
-                  {(assets.accounts || []).map(acc => {
-                    const isCredit = acc.type === 'credit';
-                    const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗 🐕' : '阿陞 🐶');
-                    const balanceColor = isCredit ? '#ff9500' : '#fff';
-                    return (
-                      <div key={acc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                        <div>
-                          <span style={{ fontWeight: '700', fontSize: '0.84rem', color: '#fff' }}>{acc.nickname}</span>
-                          <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginLeft: '6px' }}>({ownerLabel})</span>
-                          <span style={{ fontSize: '0.64rem', color: 'rgba(255,255,255,0.4)', marginLeft: '6px' }}>{acc.name}</span>
-                        </div>
-                        <span style={{ fontWeight: '800', fontSize: '0.86rem', color: balanceColor }}>
-                          ${acc.balance.toLocaleString()} {acc.currency}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-            </div>
-
             {activeHistory && (
                 <div className="glass-card card-animate" style={{ marginBottom: '18px', borderLeft: `4px solid ${activeHistory === 'userA' ? 'var(--accent-pink)' : activeHistory === 'userB' ? 'var(--accent-green)' : 'var(--accent-orange)'}` }}>
                     <div style={{ fontWeight: '700', color: 'var(--text-primary)', marginBottom: '10px', fontSize: '1rem' }}>
@@ -1137,6 +1110,25 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                                                         <span className="nobrk">| 投 {formatMoney(aInv)}</span>
                                                     </span>
                                                 </div>
+                                                {b.accounts && (
+                                                    <button 
+                                                        onClick={() => setSelectedAuditTrail(record.auditTrail)}
+                                                        style={{
+                                                            background: 'rgba(0,122,255,0.08)',
+                                                            color: 'var(--accent-blue)',
+                                                            border: 'none',
+                                                            borderRadius: '6px',
+                                                            padding: '4px 8px',
+                                                            fontSize: '0.68rem',
+                                                            fontWeight: '700',
+                                                            cursor: 'pointer',
+                                                            marginTop: '4px',
+                                                            alignSelf: 'flex-start'
+                                                        }}
+                                                    >
+                                                        🔍 查看多帳戶變動明細
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -1146,6 +1138,59 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     </div>
                 </div>
             )}
+
+            {/* 🏦 帳戶資產概況 (Apple HIG Widget Card) */}
+            <div className="glass-card card-animate" style={{ marginBottom: '18px', padding: '16px 18px' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '14px', fontSize: '0.96rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🏦 帳戶資產概況
+                </h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                    gap: '10px'
+                }}>
+                  {(assets.accounts || []).map(acc => {
+                    const isCredit = acc.type === 'credit';
+                    const ownerLabel = acc.owner === 'joint' ? '共同' : (acc.owner === 'userA' ? '大狗狗' : '阿陞');
+                    const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+                    
+                    let typeIcon = '🏦';
+                    if (acc.type === 'cash') typeIcon = '💵';
+                    else if (acc.type === 'credit') typeIcon = '💳';
+                    else if (acc.type === 'virtual') typeIcon = '📱';
+
+                    return (
+                      <div 
+                        key={acc.id} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          padding: '10px 12px', 
+                          borderRadius: '12px', 
+                          border: '0.5px solid rgba(255,255,255,0.06)', 
+                          backgroundColor: 'rgba(255,255,255,0.02)' 
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{typeIcon}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: '700', fontSize: '0.82rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {acc.nickname}
+                            </div>
+                            <div style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)', marginTop: '1px' }}>
+                              {ownerLabel} · {acc.name || '帳戶'}
+                            </div>
+                          </div>
+                        </div>
+                        <span style={{ fontWeight: '800', fontSize: '0.86rem', color: balanceColor, flexShrink: 0, marginLeft: '8px' }}>
+                          ${acc.balance.toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+            </div>
 
             {/* 【第三層】資產分佈圓餅圖 */}
             <div className="glass-card card-animate" style={{ marginBottom: '18px', display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: '15px' }}>
@@ -1218,6 +1263,76 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
             {/* 📋 更新日誌與使用教學彈窗 */}
             
+            {/* 📊 帳戶餘額變動詳情彈窗 */}
+            {selectedAuditTrail && (
+                <div className="liquid-modal-overlay" onClick={() => setSelectedAuditTrail(null)}>
+                    <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '92%', maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }} className="liquid-modal-title">
+                                📊 帳戶餘額變動詳情
+                            </div>
+                            <button onClick={() => setSelectedAuditTrail(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.3rem', cursor: 'pointer' }}>✕</button>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                            {(() => {
+                                const beforeAccs = selectedAuditTrail.before?.accounts || [];
+                                const afterAccs = selectedAuditTrail.after?.accounts || [];
+                                
+                                const changes = [];
+                                afterAccs.forEach(afterAcc => {
+                                    const beforeAcc = beforeAccs.find(b => b.id === afterAcc.id);
+                                    const beforeBal = beforeAcc ? beforeAcc.balance : 0;
+                                    const afterBal = afterAcc.balance;
+                                    const diff = afterBal - beforeBal;
+                                    if (diff !== 0) {
+                                        changes.push({
+                                            nickname: afterAcc.nickname,
+                                            currency: afterAcc.currency,
+                                            before: beforeBal,
+                                            after: afterBal,
+                                            diff: diff,
+                                            owner: afterAcc.owner
+                                        });
+                                    }
+                                });
+
+                                if (changes.length === 0) {
+                                    return <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textAlign: 'center', padding: '12px' }}>此交易無帳戶餘額異動</div>;
+                                }
+
+                                return changes.map((c, i) => {
+                                    const diffColor = c.diff > 0 ? '#30d158' : '#ff453a';
+                                    const diffSign = c.diff > 0 ? '+' : '';
+                                    const ownerLabel = c.owner === 'joint' ? '共同' : (c.owner === 'userA' ? '大狗狗' : '阿陞');
+                                    return (
+                                        <div key={i} style={{ padding: '10px 12px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                                <strong style={{ fontSize: '0.82rem', color: '#fff' }}>{c.nickname}</strong>
+                                                <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: '4px' }}>{ownerLabel}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
+                                                <span style={{ color: 'var(--text-secondary)' }}>
+                                                    <span style={{ textDecoration: 'line-through', opacity: 0.6 }}>${c.before.toLocaleString()}</span>
+                                                    <span style={{ margin: '0 6px' }}>➡️</span>
+                                                    <strong>${c.after.toLocaleString()}</strong>
+                                                </span>
+                                                <span style={{ color: diffColor, fontWeight: '750' }}>
+                                                    ({diffSign}${c.diff.toLocaleString()} {c.currency})
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+
+                        <button onClick={() => setSelectedAuditTrail(null)} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '40px', borderRadius: '10px', marginTop: '16px', fontWeight: '800' }}>
+                            確定返回
+                        </button>
+                    </div>
+                </div>
+            )}
 
         </div>
     );
