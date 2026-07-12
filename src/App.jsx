@@ -1892,8 +1892,21 @@ function App() {
       ? 'userA'
       : ((safePayer.includes('阿陞🐶') || safePayer.includes('用戶2')) ? 'userB' : null);
 
-    // 依據交易類型，進行精準的反向加減 (包含美金與台幣)
+    let updatedAccounts = assets.accounts ? [...assets.accounts] : null;
+
+    const modifyAccountBalance = (accId, diffAmount) => {
+      if (!updatedAccounts || !accId) return;
+      updatedAccounts = updatedAccounts.map(a => {
+        if (a.id === accId) return { ...a, balance: a.balance + diffAmount };
+        return a;
+      });
+    };
+
+    // 依據交易類型，進行精準的反向加減 (包含多帳戶核心與舊版相容處理)
     switch (record.type) {
+      case 'settlement':
+        // 歷史結算作廢交由底下 settleId 區塊處理，這裡免操作餘額
+        break;
       case 'settle':
         if (record.settledUser) {
           newAssets.jointCash += record.total;
@@ -1902,56 +1915,99 @@ function App() {
         break;
       case 'income':
       case 'personal_invest_profit':
-        if (payerKey) newAssets[payerKey] -= record.total; break;
+        if (record.accountId) {
+          modifyAccountBalance(record.accountId, -record.total);
+        } else {
+          if (payerKey) newAssets[payerKey] -= record.total;
+        }
+        break;
       case 'expense':
       case 'personal_invest_loss':
-        if (payerKey) newAssets[payerKey] += record.total; break;
+        if (record.accountId) {
+          modifyAccountBalance(record.accountId, record.total);
+        } else {
+          if (payerKey) newAssets[payerKey] += record.total;
+        }
+        break;
       case 'spend':
-        if (record.advancedBy === 'jointCash' || !record.advancedBy) newAssets.jointCash += record.total;
-        else newAssets[record.advancedBy] += record.total;
+        if (record.accountId) {
+          modifyAccountBalance(record.accountId, record.total);
+        } else {
+          if (record.advancedBy === 'jointCash' || !record.advancedBy) newAssets.jointCash += record.total;
+          else newAssets[record.advancedBy] += record.total;
+        }
         break;
       case 'transfer':
-        if (payerKey) newAssets[payerKey] += record.total;
-        newAssets.jointCash -= record.total;
+        if (record.accountId && record.targetAccountId) {
+          const sourceAmt = record.sourceAmount || record.total;
+          const targetAmt = record.targetAmount || record.total;
+          modifyAccountBalance(record.accountId, sourceAmt);
+          modifyAccountBalance(record.targetAccountId, -targetAmt);
+        } else {
+          if (payerKey) newAssets[payerKey] += record.total;
+          newAssets.jointCash -= record.total;
+        }
         break;
       case 'exchange':
-        if (record.note && record.note.includes('台幣換美金')) {
-          newAssets[record.accountKey] += record.total;
-          if (record.usdAmount) newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
+        if (record.accountId && record.targetAccountId) {
+          const sourceAmt = record.sourceAmount || record.total;
+          const targetAmt = record.targetAmount || (record.usdAmount || record.total);
+          modifyAccountBalance(record.accountId, sourceAmt);
+          modifyAccountBalance(record.targetAccountId, -targetAmt);
         } else {
-          newAssets[record.accountKey] -= record.total;
-          if (record.usdAmount) newAssets[`${record.accountKey}_usd`] += record.usdAmount;
+          if (record.note && record.note.includes('台幣換美金')) {
+            newAssets[record.accountKey] += record.total;
+            if (record.usdAmount) newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
+          } else {
+            newAssets[record.accountKey] -= record.total;
+            if (record.usdAmount) newAssets[`${record.accountKey}_usd`] += record.usdAmount;
+          }
         }
         break;
       case 'calibrate':
-        if (record.accountKey) {
+        if (record.accountId) {
+          modifyAccountBalance(record.accountId, -record.total);
+        } else if (record.accountKey) {
           if (record.twdDiff !== undefined) newAssets[record.accountKey] -= record.twdDiff;
           if (record.usdDiff !== undefined) newAssets[`${record.accountKey}_usd`] -= record.usdDiff;
         }
         break;
       case 'joint_invest_buy':
-        if (record.settleCurrency === 'USD') newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) + record.usdAmount;
-        else newAssets.jointCash += record.total;
-
+        if (record.accountId) {
+          const refundAmt = record.settleCurrency === 'USD' ? record.usdAmount : record.total;
+          modifyAccountBalance(record.accountId, refundAmt);
+        } else {
+          if (record.settleCurrency === 'USD') newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) + record.usdAmount;
+          else newAssets.jointCash += record.total;
+        }
         if (record.investType && newAssets.jointInvestments[record.investType] !== undefined) {
           newAssets.jointInvestments[record.investType] -= record.total;
         }
         break;
       case 'personal_invest_buy':
-        if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
+        if (record.accountId) {
+          const refundAmt = record.settleCurrency === 'USD' ? record.usdAmount : record.total;
+          modifyAccountBalance(record.accountId, refundAmt);
+        } else if (record.accountKey) {
           if (record.settleCurrency === 'USD') {
             newAssets[`${record.accountKey}_usd`] = (newAssets[`${record.accountKey}_usd`] || 0) + record.usdAmount;
           } else {
             newAssets[record.accountKey] += record.total;
           }
+        }
+        if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
           newAssets.userInvestments[record.accountKey][record.investType] -= record.total;
         }
         break;
       case 'joint_invest_sell':
       case 'liquidate': {
-        if (record.settleCurrency === 'USD') newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
-        else newAssets.jointCash -= record.total;
-
+        if (record.accountId) {
+          const deductAmt = record.settleCurrency === 'USD' ? record.usdAmount : record.total;
+          modifyAccountBalance(record.accountId, -deductAmt);
+        } else {
+          if (record.settleCurrency === 'USD') newAssets.jointCash_usd = (newAssets.jointCash_usd || 0) - record.usdAmount;
+          else newAssets.jointCash -= record.total;
+        }
         const sellType = record.investType || (record.note && record.note.split(' ')[1]);
         if (sellType && newAssets.jointInvestments[sellType] !== undefined) {
           newAssets.jointInvestments[sellType] += (record.principal || record.total);
@@ -1959,24 +2015,48 @@ function App() {
         break;
       }
       case 'personal_invest_sell':
-        if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
+        if (record.accountId) {
+          const deductAmt = record.settleCurrency === 'USD' ? record.usdAmount : record.total;
+          modifyAccountBalance(record.accountId, -deductAmt);
+        } else if (record.accountKey) {
           if (record.settleCurrency === 'USD') {
             newAssets[`${record.accountKey}_usd`] -= record.usdAmount;
           } else {
             newAssets[record.accountKey] -= record.total;
           }
+        }
+        if (record.accountKey && newAssets.userInvestments && newAssets.userInvestments[record.accountKey]) {
           newAssets.userInvestments[record.accountKey][record.investType] += (record.principal || record.total);
         }
         break;
       case 'personal_invest_day_trade':
       case 'joint_invest_day_trade':
-        if (record.note && record.note.includes('獲利')) {
-          newAssets[record.accountKey] -= record.total;
-        } else if (record.note && record.note.includes('虧損')) {
-          newAssets[record.accountKey] += record.total;
+        if (record.accountId) {
+          if (record.note && record.note.includes('獲利')) {
+            modifyAccountBalance(record.accountId, -record.total);
+          } else if (record.note && record.note.includes('虧損')) {
+            modifyAccountBalance(record.accountId, record.total);
+          }
+        } else if (record.accountKey) {
+          if (record.note && record.note.includes('獲利')) {
+            newAssets[record.accountKey] -= record.total;
+          } else if (record.note && record.note.includes('虧損')) {
+            newAssets[record.accountKey] += record.total;
+          }
         }
         break;
       default: break;
+    }
+
+    // 重新校正同步頂層 legacy 帳戶餘額以確保一致性
+    if (updatedAccounts) {
+      newAssets.accounts = updatedAccounts;
+      newAssets.userA = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.userB = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.jointCash = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.userA_usd = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.userB_usd = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
+      newAssets.jointCash_usd = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
     }
 
     // Check if any balance went below 0
