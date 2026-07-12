@@ -195,10 +195,20 @@ const MonthlyView = ({
         let transfer = 0;
         let exchange = 0;
         let calibrate = 0;
+        let userAPersonal = 0;
+        let userBPersonal = 0;
         
         filteredHistory.forEach(r => {
             if (r.isDeleted) return;
-            if (r.type === 'expense') personal += r.total;
+            if (r.type === 'expense') {
+                personal += r.total;
+                const payer = r.payer || '';
+                if (payer.includes('大狗狗') || payer.includes('userA')) {
+                    userAPersonal += r.total;
+                } else if (payer.includes('阿陞') || payer.includes('userB')) {
+                    userBPersonal += r.total;
+                }
+            }
             else if (r.type === 'spend') joint += r.total;
             else if (r.type === 'income') income += r.total;
             else if (r.type === 'transfer') transfer += r.total;
@@ -206,7 +216,7 @@ const MonthlyView = ({
             else if (r.type === 'calibrate') calibrate += r.total;
         });
         
-        return { personal, joint, income, transfer, exchange, calibrate };
+        return { personal, joint, income, transfer, exchange, calibrate, userAPersonal, userBPersonal };
     }, [filteredHistory]);
 
     // Pie chart helper datasets
@@ -486,9 +496,13 @@ const MonthlyView = ({
                         gap: '10px',
                         marginBottom: '14px'
                     }}>
-                        <div className="glass-card" style={{ padding: '12px', textAlign: 'center' }}>
+                        <div className="glass-card" style={{ padding: '12px 10px', textAlign: 'center' }}>
                             <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)' }}>個人支出小計</div>
                             <strong style={{ fontSize: '1rem', color: '#fff' }}>{formatMoney(totals.personal)}</strong>
+                            <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '4px', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '4px', display: 'flex', justifyContent: 'space-between', gap: '4px', paddingLeft: '2px', paddingRight: '2px' }}>
+                                <span>🐕 {formatMoney(totals.userAPersonal)}</span>
+                                <span>🐶 {formatMoney(totals.userBPersonal)}</span>
+                            </div>
                         </div>
                         <div className="glass-card" style={{ padding: '12px', textAlign: 'center' }}>
                             <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)' }}>共同支出小計</div>

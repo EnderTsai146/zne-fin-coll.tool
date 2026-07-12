@@ -739,16 +739,16 @@ const InvestmentView = ({
                 }
 
                 return (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                    <div>
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)', gap: '10px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>{r.date || r.month}</div>
-                      <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{r.note} <span style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', fontWeight: '400' }}>({actionSign})</span></div>
+                      <div style={{ fontWeight: '600', color: 'var(--text-primary)', wordBreak: 'break-word', fontSize: '0.84rem' }}>{r.note} <span style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', fontWeight: '400' }}>({actionSign})</span></div>
                       {r.symbol && <div style={{ fontSize: '0.73rem', color: 'var(--accent-blue)', marginTop: '2px' }}>{r.symbol} | {r.shares}股</div>}
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: '700', fontSize: '1.05rem', color: amountColor }}>{amountStr}</div>
-                      {!!r.usdAmount && <div style={{ fontSize: '0.73rem', color: 'var(--accent-orange)', fontWeight: '600' }}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
-                      {profitStr && <div style={{ fontSize: '0.73rem', color: profitStr.includes('賺') ? 'var(--accent-green)' : 'var(--accent-red)' }}>{profitStr}</div>}
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontWeight: '700', fontSize: '1.05rem', color: amountColor, whiteSpace: 'nowrap' }}>{amountStr}</div>
+                      {!!r.usdAmount && <div style={{ fontSize: '0.73rem', color: 'var(--accent-orange)', fontWeight: '600', whiteSpace: 'nowrap' }}>(含美金 ${r.usdAmount.toFixed(2)})</div>}
+                      {profitStr && <div style={{ fontSize: '0.73rem', color: profitStr.includes('賺') ? 'var(--accent-green)' : 'var(--accent-red)', whiteSpace: 'nowrap' }}>{profitStr}</div>}
                     </div>
                   </div>
                 );
