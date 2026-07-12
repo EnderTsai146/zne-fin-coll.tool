@@ -325,9 +325,16 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             setIsFetchingLive(true); // ★ 顯示載入中 UI
             try {
                 const symbols = Object.keys(stockHoldings);
-                let fxRate = currentFxRate || 31.5;
+                const querySymbols = symbols.map(sym => {
+                    const holding = stockHoldings[sym];
+                    if (holding.market === 'TW') {
+                        return sym.includes('.') ? sym : `${sym}.TW`;
+                    }
+                    return sym;
+                });
 
-                const allSymbols = symbols.length > 0 ? [...symbols, 'TWD=X'].join(',') : 'TWD=X';
+                let fxRate = currentFxRate || 31.5;
+                const allSymbols = querySymbols.length > 0 ? [...querySymbols, 'TWD=X'].join(',') : 'TWD=X';
                 const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${allSymbols}`, { redirect: 'follow' });
                 if (!res.ok) throw new Error('API 連線失敗');
                 const data = await res.json();
@@ -343,12 +350,15 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     const newPrices = {};
                     let stockMarketValue = 0;
                     symbols.forEach(sym => {
-                        const q = quotes.find(q => q.symbol === sym);
+                        const holding = stockHoldings[sym];
+                        const querySym = holding.market === 'TW' ? (sym.includes('.') ? sym : `${sym}.TW`) : sym;
+                        
+                        const q = quotes.find(q => q.symbol === querySym || q.symbol === sym || q.symbol === sym.replace('.TW', ''));
                         if (q) {
                             const price = q.regularMarketPrice || q.regularMarketPreviousClose || 0;
                             newPrices[sym] = price;
-                            const holding = stockHoldings[sym];
-                            let val = price * holding.shares;
+                            newPrices[querySym] = price;
+                            const val = price * holding.shares;
                             if (holding.market === 'TW') {
                                 const fee = Math.max(20, Math.floor(val * 0.001425 * 0.6));
                                 const tax = Math.floor(val * 0.003);

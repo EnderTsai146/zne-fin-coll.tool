@@ -267,14 +267,17 @@ const InvestmentView = ({
     if (!hasHoldings) return;
     setIsFetching(true);
     try {
-      const symbols = Object.keys(stockHoldings).map(sym => {
+      const querySymbols = Object.keys(stockHoldings).map(sym => {
         if (stockHoldings[sym].market === 'TW') {
           return sym.includes('.') ? sym : `${sym}.TW`;
         }
         return sym;
-      }).join(',');
+      });
 
-      const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${encodeURIComponent(symbols)}`);
+      // Add exchange rate quote query
+      const allSymbols = querySymbols.length > 0 ? [...querySymbols, 'TWD=X'].join(',') : 'TWD=X';
+
+      const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${encodeURIComponent(allSymbols)}`, { redirect: 'follow' });
       const data = await res.json();
 
       if (data?.quoteResponse?.result) {
@@ -283,9 +286,10 @@ const InvestmentView = ({
         data.quoteResponse.result.forEach(item => {
           const sym = item.symbol;
           const cleanSym = sym.replace('.TW', '');
-          prices[cleanSym] = item.regularMarketPrice;
+          prices[sym] = item.regularMarketPrice || item.regularMarketPreviousClose || 0;
+          prices[cleanSym] = item.regularMarketPrice || item.regularMarketPreviousClose || 0;
           if (sym === 'TWD=X' || sym === 'USDTWD=X') {
-            usdFx = item.regularMarketPrice;
+            usdFx = item.regularMarketPrice || item.regularMarketPreviousClose || 31.5;
           }
         });
         setLivePrices(prices);

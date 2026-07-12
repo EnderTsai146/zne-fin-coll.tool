@@ -1,5 +1,6 @@
 // src/components/AccountsManager.jsx
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import SegmentedControl from './SegmentedControl';
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
@@ -735,9 +736,23 @@ const AccountsManager = ({
             fontWeight: '850',
             color: netWorth >= 0 ? '#34c759' : '#ff453a',
             margin: '0 0 14px 0',
-            letterSpacing: '-0.02em'
+            letterSpacing: '-0.02em',
+            position: 'relative',
+            display: 'inline-block'
           }}>
-            ${Math.round(netWorth).toLocaleString()} <span style={{ fontSize: '0.9rem', fontWeight: '500', opacity: 0.8 }}>TWD</span>
+            ${Math.round(netWorth).toLocaleString()}
+            <span style={{ 
+              position: 'absolute', 
+              left: '100%', 
+              bottom: '4px', 
+              marginLeft: '6px', 
+              fontSize: '0.78rem', 
+              fontWeight: '600', 
+              opacity: 0.6,
+              color: 'var(--text-secondary)'
+            }}>
+              TWD
+            </span>
           </h1>
           <div style={{ display: 'flex', gap: '12px', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
             <div style={{ flex: 1, textAlign: 'left', display: 'flex', flexDirection: 'column' }}>
@@ -990,7 +1005,7 @@ const AccountsManager = ({
       )}
 
       {/* ACCOUNT DETAIL MODAL (ADD / EDIT) */}
-      {showModal && (
+      {showModal && createPortal(
         <div className="liquid-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}>
             
@@ -1216,11 +1231,12 @@ const AccountsManager = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ACCOUNT DELETION SAFEGUARD MODAL */}
-      {showDeleteSafeguard && editingAccount && (
+      {showDeleteSafeguard && editingAccount && createPortal(
         <div className="liquid-modal-overlay" style={{ zIndex: 11000 }} onClick={() => setShowDeleteSafeguard(false)}>
           <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '92%' }}>
             <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#ff9500', marginBottom: '8px' }}>
@@ -1260,7 +1276,8 @@ const AccountsManager = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

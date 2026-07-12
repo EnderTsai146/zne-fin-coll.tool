@@ -1,5 +1,6 @@
 // src/components/ExpenseEntry.jsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import SegmentedControl from './SegmentedControl';
 
 const formatInputMoney = (valStr) => {
@@ -950,7 +951,7 @@ const ExpenseEntry = ({
       )}
 
       {/* BILL PAYMENT POPUP MODAL */}
-      {showBillPayModal && selectedBill && (
+      {showBillPayModal && selectedBill && createPortal(
         <div className="liquid-modal-overlay" onClick={() => setShowBillPayModal(false)}>
           <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -972,7 +973,8 @@ const ExpenseEntry = ({
               <button onClick={handleExecuteBillPay} className="glass-btn primary-gradient-btn" style={{ flex: 2, padding: '10px 0', borderRadius: '8px', fontWeight: '800' }}>確定繳款</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

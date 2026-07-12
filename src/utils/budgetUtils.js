@@ -115,9 +115,11 @@ export const computeDynamicNecessities = (records, assets) => {
       }
     });
     
+    const roundedNeed = Math.round(itemNeedTotal);
+    const roundedWant = Math.max(0, Math.round(r.total - roundedNeed));
     results[r.originalIndex] = {
-      needAmount: itemNeedTotal,
-      wantAmount: itemWantTotal
+      needAmount: roundedNeed,
+      wantAmount: roundedWant
     };
   });
   
