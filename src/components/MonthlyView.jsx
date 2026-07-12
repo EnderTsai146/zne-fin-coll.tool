@@ -29,7 +29,19 @@ const parseMoney = (valStr) => {
 
 const generateSettleId = () => `settle_${Date.now()}`;
 
-const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEdit, setAssets, currentUser, customAlert, customConfirm, logOperation, newlyAddedRecordTimestamp }) => {
+const MonthlyView = ({
+  assets,
+  combinedHistory,
+  loadArchiveMonth,
+  onDelete,
+  onEdit,
+  setAssets,
+  currentUser,
+  customAlert,
+  customConfirm,
+  logOperation,
+  newlyAddedRecordTimestamp
+}) => {
     const history = useMemo(() => combinedHistory || [], [combinedHistory]);
     const historyWithIndex = useMemo(() => history.map((record, index) => ({ ...record, originalIndex: index })), [history]);
 
@@ -47,9 +59,10 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     const [showSettlementModal, setShowSettlementModal] = useState(false);
     const [settlementTarget, setSettlementTarget] = useState(null);
 
-    const [editModalData, setEditModalData] = useState(null);
-    const [activeActionRecord, setActiveActionRecord] = useState(null); // HIG 2 Action Sheet state
-    const [selectedAuditTrail, setSelectedAuditTrail] = useState(null);
+    // Unified Detail & Edit modal states
+    const [detailModalRecord, setDetailModalRecord] = useState(null);
+    const [editDate, setEditDate] = useState('');
+    const [editNote, setEditNote] = useState('');
 
     const dynamicNecessityMap = useMemo(() => {
         return computeDynamicNecessities(historyWithIndex, assets);
@@ -58,800 +71,542 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
     // Unify month filter & default to the latest month with data if current month is empty
     const defaultAttempted = useRef(false);
     useEffect(() => {
-        if (defaultAttempted.current || !combinedHistory || combinedHistory.length === 0) return;
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        const months = combinedHistory
-            .map(r => r.month || (r.date || '').slice(0, 7))
-            .filter(m => m)
-            .sort();
-            
-        if (months.length > 0 && !months.includes(currentMonth)) {
-            const latestMonth = months[months.length - 1];
-            setFilterDate(latestMonth);
+        if (history.length > 0 && !defaultAttempted.current) {
+            const currentMonthStr = new Date().toISOString().slice(0, 7);
+            const currentMonthHasData = history.some(r => (r.month || r.date?.slice(0, 7)) === currentMonthStr);
+            if (!currentMonthHasData) {
+                const months = history.map(r => r.month || r.date?.slice(0, 7)).filter(Boolean);
+                if (months.length > 0) {
+                    const sorted = [...new Set(months)].sort();
+                    const latest = sorted[sorted.length - 1];
+                    setFilterDate(latest);
+                }
+            }
+            defaultAttempted.current = true;
         }
-        defaultAttempted.current = true;
-    }, [combinedHistory]);
+    }, [history]);
+
+    // Apply filters
+    const filteredHistory = useMemo(() => {
+        return historyWithIndex.filter(record => {
+            // Month filter
+            const recMonth = record.month || record.date?.slice(0, 7);
+            if (recMonth !== filterDate) return false;
+            
+            // Type filter
+            if (filterType !== 'all') {
+                if (filterType === 'expense' && record.type !== 'expense' && record.type !== 'spend') return false;
+                if (filterType === 'income' && record.type !== 'income') return false;
+                if (filterType === 'transfer' && record.type !== 'transfer') return false;
+                if (filterType === 'exchange' && record.type !== 'exchange') return false;
+                if (filterType === 'calibrate' && record.type !== 'calibrate') return false;
+            }
+            
+            // User filter
+            if (filterUser !== 'all') {
+                const payer = record.payer || '';
+                if (filterUser === 'joint') {
+                    if (record.type !== 'spend' && record.category !== '共同支出' && !record.type.includes('joint_invest')) return false;
+                } else if (filterUser === 'userA') {
+                    if (!payer.includes('大狗狗') && !payer.includes('用戶1') && !payer.includes('userA')) return false;
+                } else if (filterUser === 'userB') {
+                    if (!payer.includes('阿陞') && !payer.includes('用戶2') && !payer.includes('userB')) return false;
+                }
+            }
+
+            // Necessity filter using split object
+            if (filterNecessity !== 'all') {
+                const itemNec = dynamicNecessityMap[record.originalIndex] || { needAmount: record.total, wantAmount: 0 };
+                if (filterNecessity === 'need' && !(itemNec.needAmount > 0)) return false;
+                if (filterNecessity === 'want' && !(itemNec.wantAmount > 0)) return false;
+            }
+            
+            // Search & amount filters
+            if (searchTerm.trim()) {
+                const term = searchTerm.toLowerCase();
+                const noteMatch = record.note ? record.note.toLowerCase().includes(term) : false;
+                const catMatch = record.category ? record.category.toLowerCase().includes(term) : false;
+                const payerMatch = record.payer ? record.payer.toLowerCase().includes(term) : false;
+                const symbolMatch = record.symbol ? record.symbol.toLowerCase().includes(term) : false;
+                if (!noteMatch && !catMatch && !payerMatch && !symbolMatch) return false;
+            }
+            if (minAmount !== '') {
+                const minVal = parseMoney(minAmount);
+                if (record.total < minVal) return false;
+            }
+            if (maxAmount !== '') {
+                const maxVal = parseMoney(maxAmount);
+                if (record.total > maxVal) return false;
+            }
+            
+            return true;
+        });
+    }, [historyWithIndex, filterDate, filterType, filterUser, filterNecessity, searchTerm, minAmount, maxAmount, dynamicNecessityMap]);
+
+    // Sort: newest first
+    const sortedHistory = useMemo(() => {
+        return [...filteredHistory].sort((a, b) => {
+            const dateA = a.date || '';
+            const dateB = b.date || '';
+            if (dateA !== dateB) return dateB.localeCompare(dateA);
+            const tsA = a.timestamp || '';
+            const tsB = b.timestamp || '';
+            return tsB.localeCompare(tsA);
+        });
+    }, [filteredHistory]);
+
+    // Infinite scroll
+    const [renderCount, setRenderCount] = useState(30);
+    const loadMoreRef = useRef(null);
 
     useEffect(() => {
-        if (loadArchiveMonth) loadArchiveMonth(filterDate);
-    }, [filterDate, loadArchiveMonth]);
+        setRenderCount(30); // Reset when filter changes
+    }, [filterDate, filterType, filterUser, filterNecessity, searchTerm, minAmount, maxAmount]);
 
-    // ★ 控制 MonthlyView 本地彈窗開啟時的背景滾動鎖定
     useEffect(() => {
-        const shouldLock = !!editModalData || showSettlementModal || !!activeActionRecord;
+        if (viewMode !== 'list') return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                setRenderCount(prev => Math.min(prev + 30, sortedHistory.length));
+            }
+        }, { threshold: 0.1 });
+        if (loadMoreRef.current) observer.observe(loadMoreRef.current);
+        return () => observer.disconnect();
+    }, [sortedHistory, viewMode]);
+
+    // Block page scrolling when overlay modals are open
+    useEffect(() => {
+        const shouldLock = !!detailModalRecord || showSettlementModal;
         if (shouldLock) {
-            document.documentElement.classList.add('modal-open');
             document.body.classList.add('modal-open');
         } else {
-            document.documentElement.classList.remove('modal-open');
             document.body.classList.remove('modal-open');
         }
         return () => {
-            document.documentElement.classList.remove('modal-open');
             document.body.classList.remove('modal-open');
         };
-    }, [editModalData, showSettlementModal, activeActionRecord]);
+    }, [detailModalRecord, showSettlementModal]);
 
-
-
-    // ★ 增加校正專屬顏色標籤
-    const getTypeColor = (type) => {
-        if (type === 'income') return '#2ecc71';
-        if (type === 'expense') return '#ff6b6b';
-        if (type === 'spend') return '#ff9f43';
-        if (type === 'transfer' || type === 'exchange') return '#3498db';
-        if (type === 'calibrate') return '#95a5a6'; // 校正為低調的灰色
-        if (type === 'settle') return '#00b894';
-        if (type === 'liquidate' || type === 'joint_invest_sell' || type === 'personal_invest_sell') return '#f1c40f';
-        if (type === 'joint_invest_buy' || type === 'personal_invest_buy') return '#8e44ad';
-        if (type === 'personal_invest_profit') return '#e67e22';
-        if (type === 'personal_invest_loss') return '#7f8c8d';
-        return '#666';
-    };
-
-    const calculateDebt = (userKey) => history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false).reduce((sum, r) => sum + Number(r.total), 0);
-    const getDebtList = (userKey) => history.filter(r => !r.isDeleted && r.advancedBy === userKey && r.isSettled === false);
-
-    const handleSettle = async (targetUser) => {
-        const targetName = targetUser === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
-        const debtAmount = calculateDebt(targetUser);
-        if (debtAmount === 0) return await customAlert("目前沒有未結清的款項喔！");
-        if (assets.jointCash < debtAmount) return await customAlert(`❌ 共同現金餘額不足以結清 (需 $${debtAmount.toLocaleString()})！`);
-        if (!await customConfirm(`【確認結清】\n要將 ${targetName} 代墊的 $${debtAmount.toLocaleString()} 標記為「已結清」嗎？\n(這將會從共同現金扣除，並加回 ${targetName} 的個人帳戶)`)) return;
-
-        const safeInvestments = assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 };
-        const snapshotBefore = { userA: assets.userA || 0, userB: assets.userB || 0, userA_usd: assets.userA_usd || 0, userB_usd: assets.userB_usd || 0, jointCash_usd: assets.jointCash_usd || 0, jointCash: assets.jointCash || 0, jointInvestments: { ...safeInvestments } };
-        const newAssets = { ...assets };
-        newAssets.jointCash -= debtAmount; newAssets[targetUser] += debtAmount;
-        const snapshotAfter = { userA: newAssets.userA, userB: newAssets.userB, userA_usd: newAssets.userA_usd || 0, userB_usd: newAssets.userB_usd || 0, jointCash_usd: newAssets.jointCash_usd || 0, jointCash: newAssets.jointCash, jointInvestments: { ...safeInvestments } };
-
-        const currentSettleId = generateSettleId();
-        const newHistory = newAssets.monthlyExpenses.map(record => {
-            if (!record.isDeleted && record.advancedBy === targetUser && record.isSettled === false) return { ...record, isSettled: true, settleId: currentSettleId };
-            return record;
-        });
-
-        const timestamp = new Date().toISOString();
-        newHistory.push({ date: timestamp.split('T')[0], month: timestamp.slice(0, 7), type: 'settle', category: '帳務結算', payer: '共同帳戶', total: debtAmount, note: `撥款結清 ${targetName} 的代墊`, operator: currentUser || "系統", timestamp: timestamp, settledUser: targetUser, settleId: currentSettleId, auditTrail: { before: snapshotBefore, after: snapshotAfter } });
-
-        newAssets.monthlyExpenses = newHistory;
-
-        setAssets(prev => {
-            // Re-apply the transaction log on top of the latest state to be absolutely safe
-            const finalAssets = { ...prev, ...newAssets };
-            let loggedAssets = finalAssets;
-            if (logOperation) {
-                loggedAssets = logOperation(finalAssets, 'settle', `代墊款結清：共同帳戶撥款 $${debtAmount.toLocaleString()} 給 ${targetName}`);
-            }
-            return loggedAssets;
-        });
-        await customAlert("✅ 結清完成！資金已轉移，並已產生結清軌跡。"); 
-        setShowSettlementModal(false);
-    };
-
-    const dashboardData = useMemo(() => {
-        const currentMonth = filterDate;
-        const [yearStr, monthStr] = currentMonth.split('-');
-        let date = new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1);
-        date.setMonth(date.getMonth() - 1);
-        const prevMonthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-        const monthRecords = history.filter(r => r.month === currentMonth && !r.isDeleted);
-        const prevMonthRecords = history.filter(r => r.month === prevMonthStr && !r.isDeleted);
-
-        const stats = { income: { total: 0, userA: 0, userB: 0 }, expense: { total: 0, joint: 0, userA: 0, userB: 0 } };
-        let dailyData = {};
-
-        // Task 1: Dynamic Categories alignment
-        const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
-        const catStats = {};
-        dynamicCategories.forEach(cat => {
-            catStats[cat] = 0;
-        });
-        if (!catStats["其他"]) catStats["其他"] = 0;
-
-        monthRecords.forEach(r => {
-            const day = parseInt(r.date.split('-')[2]);
-            if (r.type === 'income') {
-                stats.income.total += r.total;
-                if (r.payer.includes('大狗狗') || r.payer.includes('用戶1') || r.payer.includes('userA')) stats.income.userA += r.total; 
-                else if (r.payer.includes('阿陞') || r.payer.includes('用戶2') || r.payer.includes('userB')) stats.income.userB += r.total;
-            } else if (r.type === 'expense' || r.type === 'spend') {
-                stats.expense.total += r.total; 
-                dailyData[day] = (dailyData[day] || 0) + r.total;
-                if (r.type === 'spend') stats.expense.joint += r.total;
-                else if (r.type === 'expense') {
-                    if (r.payer.includes('大狗狗') || r.payer.includes('用戶1') || r.payer.includes('userA')) stats.expense.userA += r.total; 
-                    else if (r.payer.includes('阿陞') || r.payer.includes('用戶2') || r.payer.includes('userB')) stats.expense.userB += r.total;
-                }
-
-                if (r.type === 'expense' && r.details) {
-                    dynamicCategories.forEach(cat => {
-                        if (cat === '餐費') {
-                            catStats[cat] += Number(r.details.food || 0);
-                        } else if (cat === '購物') {
-                            catStats[cat] += Number(r.details.shopping || 0);
-                        } else if (cat === '娛樂') {
-                            catStats[cat] += Number(r.details.entertainment || 0);
-                        } else if (cat === '其他') {
-                            catStats[cat] += Number((r.details.other || 0) + (r.details.fixed || 0));
-                        }
-                    });
-                } else if (r.type === 'spend') {
-                    let cat = r.subCategory || '其他';
-                    if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) cat = '餐費';
-                    else if (cat.includes('購') || cat.includes('用') || cat.includes('生')) cat = '購物';
-                    else if (cat.includes('玩') || cat.includes('樂') || cat.includes('娛')) cat = '娛樂';
-                    else cat = '其他';
-
-                    if (catStats[cat] !== undefined) {
-                        catStats[cat] += r.total;
-                    } else {
-                        catStats["其他"] += r.total;
-                    }
-                }
-            }
-        });
-
-        // Task 3: Compare Month Stats per category
-        const prevCatStats = {};
-        dynamicCategories.forEach(cat => {
-            prevCatStats[cat] = 0;
-        });
-        if (!prevCatStats["其他"]) prevCatStats["其他"] = 0;
-
-        prevMonthRecords.forEach(r => {
-            if (r.type === 'expense' || r.type === 'spend') {
-                if (r.type === 'expense' && r.details) {
-                    dynamicCategories.forEach(cat => {
-                        if (cat === '餐費') {
-                            prevCatStats[cat] += Number(r.details.food || 0);
-                        } else if (cat === '購物') {
-                            prevCatStats[cat] += Number(r.details.shopping || 0);
-                        } else if (cat === '娛樂') {
-                            prevCatStats[cat] += Number(r.details.entertainment || 0);
-                        } else if (cat === '其他') {
-                            prevCatStats[cat] += Number((r.details.other || 0) + (r.details.fixed || 0));
-                        }
-                    });
-                } else if (r.type === 'spend') {
-                    let cat = r.subCategory || '其他';
-                    if (cat.includes('餐') || cat.includes('食') || cat.includes('喝')) cat = '餐費';
-                    else if (cat.includes('購') || cat.includes('用') || cat.includes('生')) cat = '購物';
-                    else if (cat.includes('玩') || cat.includes('樂') || cat.includes('娛')) cat = '娛樂';
-                    else cat = '其他';
-
-                    if (prevCatStats[cat] !== undefined) {
-                        prevCatStats[cat] += r.total;
-                    } else {
-                        prevCatStats["其他"] += r.total;
-                    }
-                }
-            }
-        });
-
-        let prevMonthExpense = 0;
-        prevMonthRecords.forEach(r => { if (r.type === 'expense' || r.type === 'spend') prevMonthExpense += r.total; });
-
-        const momDiff = stats.expense.total - prevMonthExpense;
-        const momText = prevMonthExpense === 0 ? (stats.expense.total > 0 ? '無上月對比資料' : '與上月持平') : (momDiff > 0 ? `比上月多花 $${momDiff.toLocaleString()}` : `比上月省了 $${Math.abs(momDiff).toLocaleString()}`);
-        const momColor = momDiff > 0 ? '#ff453a' : '#30d158';
-
-        const netCashFlow = stats.income.total - stats.expense.total;
-        const savingsRate = stats.income.total > 0 ? ((netCashFlow / stats.income.total) * 100).toFixed(1) : 0;
-
-        const today = new Date();
-        const realCurrentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-        const daysInMonth = new Date(parseInt(yearStr), parseInt(monthStr), 0).getDate();
-        let daysPassed = 1;
-        if (currentMonth === realCurrentMonthStr) daysPassed = today.getDate() || 1; else if (currentMonth < realCurrentMonthStr) daysPassed = daysInMonth;
-
-        const leaderboard = Object.entries(catStats).map(([name, amount]) => ({ name, amount, percentage: stats.expense.total > 0 ? ((amount / stats.expense.total) * 100).toFixed(1) : 0, dailyAvg: Math.round(amount / daysPassed) })).filter(item => item.amount > 0).sort((a, b) => b.amount - a.amount);
+    // Math stats for filtered records
+    const totals = useMemo(() => {
+        let personal = 0;
+        let joint = 0;
+        let income = 0;
+        let transfer = 0;
+        let exchange = 0;
+        let calibrate = 0;
         
-        const pieColors = Object.keys(catStats).map((_, i) => {
-            const colors = ['#ff9f43', '#54a0ff', '#ff6b6b', '#10ac84', '#af52de', '#ffcc00', '#5856d6', '#34c759'];
-            return colors[i % colors.length];
+        filteredHistory.forEach(r => {
+            if (r.isDeleted) return;
+            if (r.type === 'expense') personal += r.total;
+            else if (r.type === 'spend') joint += r.total;
+            else if (r.type === 'income') income += r.total;
+            else if (r.type === 'transfer') transfer += r.total;
+            else if (r.type === 'exchange') exchange += r.total;
+            else if (r.type === 'calibrate') calibrate += r.total;
         });
-        const pieData = { labels: Object.keys(catStats), datasets: [{ data: Object.values(catStats), backgroundColor: pieColors, borderWidth: 1 }] };
+        
+        return { personal, joint, income, transfer, exchange, calibrate };
+    }, [filteredHistory]);
 
-        const barLabels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-        const barValues = barLabels.map(day => dailyData[day] || 0);
-        const barChartData = { labels: barLabels, datasets: [{ label: '每日支出', data: barValues, backgroundColor: '#30d158', borderRadius: 4 }] };
+    // Pie chart helper datasets
+    const categoryDistribution = useMemo(() => {
+        const categories = {};
+        filteredHistory.forEach(r => {
+            if (r.isDeleted) return;
+            if (r.type !== 'expense' && r.type !== 'spend') return;
+            
+            const details = r.details || {};
+            if (details.food) categories['餐費'] = (categories['餐費'] || 0) + Number(details.food);
+            if (details.shopping) categories['購物'] = (categories['購物'] || 0) + Number(details.shopping);
+            if (details.entertainment) categories['娛樂'] = (categories['娛樂'] || 0) + Number(details.entertainment);
+            
+            const otherVal = Number(details.other || 0) + Number(details.fixed || 0);
+            if (otherVal > 0) categories['其他'] = (categories['其他'] || 0) + otherVal;
+            
+            if (!details.food && !details.shopping && !details.entertainment && !details.other) {
+                const legacyCat = r.category || '其他';
+                categories[legacyCat] = (categories[legacyCat] || 0) + r.total;
+            }
+        });
+        
+        const labels = Object.keys(categories);
+        const data = Object.values(categories);
+        const colors = ['#ff2d55', '#ff9500', '#af52de', '#8e8e93', '#30d158', '#0a84ff'];
+        
+        return {
+            labels,
+            datasets: [{
+                data,
+                backgroundColor: colors.slice(0, labels.length),
+                borderWidth: 0
+            }]
+        };
+    }, [filteredHistory]);
 
-        // Cross-month column chart (Task 3)
-        const compChartData = {
-            labels: Object.keys(catStats),
-            datasets: [
-                {
-                    label: '上月支出',
-                    data: Object.keys(catStats).map(cat => prevCatStats[cat] || 0),
-                    backgroundColor: 'rgba(142, 142, 147, 0.4)',
-                    borderRadius: 4
-                },
-                {
-                    label: '本月支出',
-                    data: Object.values(catStats),
-                    backgroundColor: '#0a84ff',
-                    borderRadius: 4
-                }
+    // Bar chart daily spending
+    const dailySpendingData = useMemo(() => {
+        const days = {};
+        filteredHistory.forEach(r => {
+            if (r.isDeleted) return;
+            if (r.type !== 'expense' && r.type !== 'spend') return;
+            const d = r.date || '其他';
+            days[d] = (days[d] || 0) + r.total;
+        });
+        const labels = Object.keys(days).sort();
+        const data = labels.map(l => days[l]);
+        
+        return {
+            labels,
+            datasets: [{
+                label: '每日支出',
+                data,
+                backgroundColor: 'rgba(10, 132, 255, 0.6)',
+                borderRadius: 4
+            }]
+        };
+    }, [filteredHistory]);
+
+    // Payers distribution stats
+    const payerStats = useMemo(() => {
+        let dogTwd = 0;
+        let shengTwd = 0;
+        
+        filteredHistory.forEach(r => {
+            if (r.isDeleted) return;
+            if (r.type !== 'expense' && r.type !== 'spend') return;
+            const payer = r.payer || '';
+            if (payer.includes('大狗狗') || payer.includes('用戶1') || payer.includes('userA')) {
+                dogTwd += r.total;
+            } else if (payer.includes('阿陞') || payer.includes('用戶2') || payer.includes('userB')) {
+                shengTwd += r.total;
+            }
+        });
+        
+        return { dogTwd, shengTwd };
+    }, [filteredHistory]);
+
+    // Debt lists calculation
+    const getDebtList = (user) => {
+        return filteredHistory.filter(r => {
+            if (r.isDeleted) return false;
+            if (r.type !== 'spend') return false;
+            if (r.isSettled) return false;
+            if (user === 'userA' && r.advancedBy === 'userA') return true;
+            if (user === 'userB' && r.advancedBy === 'userB') return true;
+            return false;
+        });
+    };
+
+    const handleSettle = async (user) => {
+        const debts = getDebtList(user);
+        const totalDebt = debts.reduce((sum, r) => sum + r.total, 0);
+        const half = Math.round(totalDebt / 2);
+
+        const label = user === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
+        const partnerLabel = user === 'userA' ? '阿陞 🐶' : '大狗狗 🐕';
+        
+        const confirmMsg = `確定為 ${label} 辦理一鍵結清嗎？\n本次結清 ${debts.length} 筆，代墊總額 ${formatMoney(totalDebt)}。\n應由 ${partnerLabel} 轉移支付半數 $${half.toLocaleString()} 元。`;
+        
+        if (!(await customConfirm(confirmMsg, "一鍵結清"))) return;
+
+        // Reset and update state
+        const settleId = generateSettleId();
+        const updatedHistory = history.map(r => {
+            const match = debts.some(d => d.originalIndex === r.originalIndex);
+            if (match) {
+                return { ...r, isSettled: true, settlementId: settleId };
+            }
+            return r;
+        });
+
+        // Add settlement log record
+        const settlementLog = {
+            date: new Date().toISOString().split('T')[0],
+            month: filterDate,
+            type: 'settlement',
+            category: '代墊結清',
+            total: half,
+            payer: partnerLabel,
+            operator: currentUser,
+            note: `[代墊結清] 結清${label}代墊的 ${debts.length} 筆帳目 (代墊總額: $${totalDebt.toLocaleString()})`,
+            timestamp: new Date().toISOString()
+        };
+
+        const finalAssets = {
+            ...assets,
+            monthlyExpenses: [
+                ...updatedHistory,
+                settlementLog
             ]
         };
 
-        return { stats, pieData, barChartData, compChartData, momText, momColor, netCashFlow, savingsRate, leaderboard };
-    }, [history, filterDate, assets]);
-
-
-
-    const filteredHistory = historyWithIndex.filter(record => {
-        const recordMonth = record.month || record.date.slice(0, 7);
-        if (recordMonth !== filterDate) return false;
-        if (filterType === 'income') { if (record.type !== 'income') return false; }
-        else if (filterType === 'expense') { if (record.type !== 'expense' && record.type !== 'spend') return false; }
-        else if (filterType === 'invest') {
-            const investTypes = ['liquidate', 'joint_invest_buy', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_loss', 'personal_invest_buy', 'personal_invest_sell', 'exchange', 'calibrate'];
-            if (!investTypes.includes(record.type)) return false;
-        }
-        if (filterUser !== 'all') {
-            const payer = record.payer || '';
-            if (filterUser === 'joint') { if (record.type !== 'spend' && record.category !== '共同支出' && !record.type.includes('joint_invest')) return false; }
-            else if (filterUser === 'userA') { if (!payer.includes('大狗狗') && !payer.includes('用戶1') && !payer.includes('userA')) return false; }
-            else if (filterUser === 'userB') { if (!payer.includes('阿陞') && !payer.includes('用戶2') && !payer.includes('userB')) return false; }
-        }
-        if (filterNecessity !== 'all') {
-            const recNecessity = dynamicNecessityMap[record.originalIndex] || 'need';
-            if (recNecessity !== filterNecessity) return false;
-        }
-        
-        // Search & amount filters
-        if (searchTerm.trim()) {
-            const term = searchTerm.toLowerCase();
-            const noteMatch = record.note ? record.note.toLowerCase().includes(term) : false;
-            const catMatch = record.category ? record.category.toLowerCase().includes(term) : false;
-            const payerMatch = record.payer ? record.payer.toLowerCase().includes(term) : false;
-            const symbolMatch = record.symbol ? record.symbol.toLowerCase().includes(term) : false;
-            if (!noteMatch && !catMatch && !payerMatch && !symbolMatch) return false;
-        }
-        if (minAmount !== '') {
-            const minVal = parseMoney(minAmount);
-            if (record.total < minVal) return false;
-        }
-        if (maxAmount !== '') {
-            const maxVal = parseMoney(maxAmount);
-            if (record.total > maxVal) return false;
-        }
-        
-        return true;
-    });
-
-    const [renderCount, setRenderCount] = useState(15);
-    const [prevFilterKey, setPrevFilterKey] = useState('');
-    const currentFilterKey = `${filterDate}_${filterType}_${filterUser}_${searchTerm}_${minAmount}_${maxAmount}`;
-    if (currentFilterKey !== prevFilterKey) {
-        setPrevFilterKey(currentFilterKey);
-        setRenderCount(15);
-    }
-    const loadMoreRef = useRef(null);
-
-    const sortedHistory = useMemo(() =>
-        [...filteredHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
-        [filteredHistory]
-    );
-    const visibleHistory = sortedHistory.slice(0, renderCount);
-
-    useEffect(() => {
-        const sentinel = loadMoreRef.current;
-        if (!sentinel) return;
-        const observer = new IntersectionObserver(
-            (entries) => { if (entries[0].isIntersecting) setRenderCount(prev => prev + 15); },
-            { threshold: 0.1 }
-        );
-        observer.observe(sentinel);
-        return () => observer.disconnect();
-    }, [filteredHistory.length]);
-
-    const renderActionRecordPreview = (record) => {
-        if (!record) return null;
-        const isDeleted = record.isDeleted;
-        const textDeco = isDeleted ? 'line-through' : 'none';
-        const borderColor = getTypeColor(record.type);
-
-        let amountColor = '#ff453a';
-        let showSign = '-';
-        if (record.type === 'income') {
-            amountColor = '#30d158';
-            showSign = '+';
-        } else if (record.type === 'calibrate') {
-            amountColor = 'var(--text-tertiary)';
-            showSign = record.total >= 0 ? '+' : '-';
-        } else if (record.type.includes('invest_sell') || record.type === 'liquidate' || record.type === 'personal_invest_profit') {
-            amountColor = '#30d158';
-            showSign = '+';
-        } else if (record.type === 'personal_invest_loss') {
-            amountColor = '#ff453a';
-            showSign = '-';
-        } else if (record.type.includes('invest_day_trade')) {
-            const isProfit = record.note && record.note.includes('獲利');
-            amountColor = isProfit ? '#30d158' : '#ff453a';
-            showSign = isProfit ? '+' : '-';
-        } else if (record.type === 'spend' || record.type === 'expense' || record.type.includes('invest_buy') || record.type === 'exchange' || record.type === 'transfer') {
-            amountColor = '#ff453a';
-            showSign = '-';
-        }
-
-        return (
-            <div 
-                className="glass-card action-sheet-preview-card" 
-                style={{ 
-                    borderLeft: `4px solid ${borderColor}`, 
-                    position: 'relative', 
-                    padding: '14px 16px', 
-                    width: '100%',
-                    boxShadow: `0 12px 30px rgba(0, 0, 0, 0.25), 0 0 15px ${borderColor}2b`,
-                    textAlign: 'left',
-                    pointerEvents: 'none'
-                }}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: '700', fontSize: '0.95rem', color: 'var(--text-primary)', textDecoration: textDeco }}>{record.date || record.month}</span>
-                        <span style={{ fontSize: '0.72rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>{record.category}</span>
-                        {record.advancedBy && (
-                            <span style={{ fontSize: '0.72rem', border: record.isSettled ? '1px solid #30d158' : '1px solid #ff9f0a', color: record.isSettled ? '#30d158' : '#ff9f0a', padding: '1px 6px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', fontWeight: '700' }}>
-                                {record.advancedBy === 'userA' ? '大狗狗 🐕' : '阿陞 🐶'}代墊 {record.isSettled ? ' (已結)' : ' (未結)'}
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px', width: '100%' }}>
-                    <div style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: '600', textDecoration: textDeco, wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0, flex: 1 }}>{record.note === '月結記帳' ? '日常記帳' : record.note}</div>
-                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: '1.4rem', fontWeight: '900', color: amountColor, textDecoration: textDeco, fontFamily: 'monospace' }}>{showSign}{formatMoney(record.total)}</span>
-                        {!!record.usdAmount && (
-                            <div style={{ fontSize: '0.8rem', color: '#ff9f0a', fontWeight: '600', textDecoration: textDeco }}>
-                                (含美金 ${record.usdAmount.toFixed(2)} USD)
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
-                    {record.payer === '共同帳戶' ? <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '6px' }}>共同出資</span> : <span style={{ background: 'rgba(10,132,255,0.08)', color: '#409eff', padding: '2px 6px', borderRadius: '6px' }}>👤 {record.payer}</span>}
-                    {record.accountId && (() => {
-                        const acc = (assets.accounts || []).find(a => a.id === record.accountId);
-                        return acc ? <span style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: '6px' }}>💳 {acc.nickname}</span> : null;
-                    })()}
-                    {(record.type === 'expense' || record.type === 'spend') && (
-                        <span style={{
-                            background: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? 'rgba(255, 149, 0, 0.08)' : 'rgba(10, 132, 255, 0.08)',
-                            color: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '#ff9f0a' : '#0a84ff',
-                            padding: '2px 6px',
-                            borderRadius: '6px',
-                            fontWeight: '700'
-                        }}>
-                            {(dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '選擇性 ✨' : '必要 🍲'}
-                        </span>
-                    )}
-                </div>
-            </div>
-        );
+        setAssets(finalAssets);
+        onTransaction(finalAssets, settlementLog);
+        await customAlert(`🎉 結清成功！已生成一筆結清紀錄。`);
     };
 
+    const currentMonthLabel = filterDate.replace('-', ' 年 ') + ' 月';
+
     return (
-        <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h1 className="page-title" style={{ margin: 0 }}>財務資料庫</h1>
-                <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '20px', padding: '3px', display: 'flex', gap: '3px' }}>
-                    {['chart', 'list'].map(mode => (
-                        <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? 'rgba(255,255,255,0.12)' : 'transparent', border: 'none', borderRadius: 'var(--radius-pill)', padding: '6px 14px', cursor: 'pointer', fontWeight: '600', color: viewMode === mode ? 'var(--text-primary)' : 'var(--text-tertiary)', fontSize: '0.84rem' }}>
-                            {mode === 'chart' ? '儀表板' : '流水帳'}
-                        </button>
-                    ))}
+        <div className="overview-container" style={{ paddingBottom: '90px' }}>
+            
+            {/* Unified Top Banner */}
+            <div className="header-glass-banner" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div className="banner-glow-spot" />
+                <h2 style={{ fontSize: '1.4rem', fontWeight: '850', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    📖 財務流水帳 & 報表
+                </h2>
+                <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
+                    查詢、作廢交易紀錄，以及月度數據分析
+                </p>
+            </div>
+
+            {/* Filter controls widget */}
+            <div className="glass-card" style={{ marginBottom: '18px', padding: '14px 16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>📅 查詢月份</label>
+                        <input
+                            type="month"
+                            value={filterDate}
+                            onChange={(e) => {
+                                setFilterDate(e.target.value);
+                                if (loadArchiveMonth) loadArchiveMonth(e.target.value);
+                            }}
+                            className="glass-input"
+                            style={{ width: '100%', margin: 0, padding: '0 8px', height: '38px', fontSize: '0.82rem' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>📊 交易類型</label>
+                        <select
+                            value={filterType}
+                            onChange={(e) => setFilterType(e.target.value)}
+                            className="glass-input"
+                            style={{ width: '100%', margin: 0, padding: '0 8px', height: '38px', fontSize: '0.82rem' }}
+                        >
+                            <option value="all">全部類型</option>
+                            <option value="expense">個人支出</option>
+                            <option value="income">個人收入</option>
+                            <option value="transfer">資金劃撥</option>
+                            <option value="exchange">貨幣換匯</option>
+                            <option value="calibrate">餘額校正</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                    <div>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>👤 收支對象</label>
+                        <select
+                            value={filterUser}
+                            onChange={(e) => setFilterUser(e.target.value)}
+                            className="glass-input"
+                            style={{ width: '100%', margin: 0, padding: '0 8px', height: '38px', fontSize: '0.82rem' }}
+                        >
+                            <option value="all">全部成員</option>
+                            <option value="userA">大狗狗</option>
+                            <option value="userB">阿陞</option>
+                            <option value="joint">共同/雙方</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>🎯 需求度篩選</label>
+                        <select
+                            value={filterNecessity}
+                            onChange={(e) => setFilterNecessity(e.target.value)}
+                            className="glass-input"
+                            style={{ width: '100%', margin: 0, padding: '0 8px', height: '38px', fontSize: '0.82rem' }}
+                        >
+                            <option value="all">全部</option>
+                            <option value="need">🍲 必要 (Need)</option>
+                            <option value="want">✨ 選擇性 (Want)</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Advanced Search Toggle & Fields */}
+                <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="🔍 輸入備註/分類/對象關鍵字..."
+                        className="glass-input"
+                        style={{ width: '100%', margin: '0 0 10px 0', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <input
+                            type="text"
+                            value={formatInputMoney(minAmount)}
+                            onChange={(e) => setMinAmount(e.target.value)}
+                            placeholder="最低金額 $"
+                            className="glass-input"
+                            style={{ width: '100%', margin: 0, padding: '0 8px', height: '36px', fontSize: '0.8rem' }}
+                        />
+                        <input
+                            type="text"
+                            value={formatInputMoney(maxAmount)}
+                            onChange={(e) => setMaxAmount(e.target.value)}
+                            placeholder="最高金額 $"
+                            className="glass-input"
+                            style={{ width: '100%', margin: 0, padding: '0 8px', height: '36px', fontSize: '0.8rem' }}
+                        />
+                    </div>
                 </div>
             </div>
 
-            {viewMode === 'chart' && (
-                <div className="page-transition-enter">
-                    {/* Inset Grouped layout for analytics filters */}
-                    <div className="inset-group-card" style={{ marginBottom: '18px' }}>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label" style={{ fontWeight: '600' }}>📅 分析月份</span>
-                            <span className="inset-group-value">
-                                <input type="month" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
-                            </span>
-                        </div>
-                    </div>
+            {/* View Mode Tabs: List, Chart, Settlement */}
+            <div style={{ padding: '0 4px', marginBottom: '16px', display: 'flex', gap: '8px' }}>
+                {['list', 'charts', 'debts'].map(mode => {
+                    let label = '📋 流水帳';
+                    if (mode === 'charts') label = '📊 分析圖表';
+                    if (mode === 'debts') label = '🤝 代墊清算';
+                    return (
+                        <button
+                            key={mode}
+                            onClick={() => setViewMode(mode)}
+                            className={`glass-btn ${viewMode === mode ? 'active' : ''}`}
+                            style={{ flex: 1, fontSize: '0.82rem', fontWeight: '600' }}
+                        >
+                            {label}
+                        </button>
+                    );
+                })}
+            </div>
 
-
-
-                    <div style={{ display: 'flex', gap: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
-                        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '16px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(48,209,88,0.12), rgba(48,209,88,0.02))' }}>
-                            <div className="nobrk" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>總收入</div>
-                            <div className="nobrk" style={{ fontSize: '1.4rem', fontWeight: '900', color: '#30d158', marginBottom: '5px', letterSpacing: '-0.02em' }}>{formatMoney(dashboardData.stats.income.total)}</div>
-                            <div style={{ fontSize: '0.73rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: '6px', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                                <span className="nobrk">大狗狗: {formatMoney(dashboardData.stats.income.userA)}</span>
-                                <span className="nobrk">|</span>
-                                <span className="nobrk">阿陞: {formatMoney(dashboardData.stats.income.userB)}</span>
-                            </div>
-                        </div>
-                        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '120px', padding: '16px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(255,69,58,0.1), rgba(255,69,58,0.02))' }}>
-                            <div className="nobrk" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>總支出</div>
-                            <div className="nobrk" style={{ fontSize: '1.4rem', fontWeight: '900', color: '#ff453a', marginBottom: '5px', letterSpacing: '-0.02em' }}>{formatMoney(dashboardData.stats.expense.total)}</div>
-                            <div style={{ fontSize: '0.73rem', color: dashboardData.momColor, fontWeight: '700', borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: '6px' }}>
-                                <span className="nobrk">{dashboardData.momText}</span>
-                            </div>
-                        </div>
-                        <div className="glass-card card-animate" style={{ flex: 1, minWidth: '140px', padding: '16px', textAlign: 'center', background: 'linear-gradient(135deg, rgba(10,132,255,0.1), rgba(10,132,255,0.02))' }}>
-                            <div className="nobrk" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: '600' }}>本月儲蓄 (淨現金流)</div>
-                            <div className="nobrk" style={{ fontSize: '1.4rem', fontWeight: '900', color: dashboardData.netCashFlow >= 0 ? '#0a84ff' : '#ff453a', marginBottom: '5px', letterSpacing: '-0.02em' }}>
-                                {dashboardData.netCashFlow > 0 ? '+' : ''}{formatMoney(dashboardData.netCashFlow)}
-                            </div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: '6px' }}>
-                                <span className="nobrk">儲蓄率: <span style={{ fontWeight: '800', color: '#0a84ff' }}>{dashboardData.savingsRate}%</span></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {dashboardData.stats.expense.total === 0 ? (
-                        <div className="glass-card" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)' }}>🦕 本月尚無支出數據登錄。</div>
-                    ) : (
-                        <>
-                            <div style={{ display: 'flex', gap: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
-                                <div className="glass-card" style={{ flex: 1, minWidth: '280px' }}>
-                                    <h4 style={{ margin: '0 0 12px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '700', fontSize: '0.9rem' }}>支出比例分佈</h4>
-                                    <div style={{ height: '180px', display: 'flex', justifyContent: 'center' }}><Pie data={dashboardData.pieData} options={{
-                                        maintainAspectRatio: false,
-                                        plugins: {
-                                            legend: {
-                                                labels: { color: 'rgba(255, 255, 255, 0.85)', font: { size: 10 } }
-                                            },
-                                            tooltip: {
-                                                backgroundColor: 'rgba(28, 28, 30, 0.95)',
-                                                titleColor: '#ffffff',
-                                                bodyColor: '#ffffff',
-                                                borderColor: 'rgba(255, 255, 255, 0.12)',
-                                                borderWidth: 1,
-                                                padding: 10,
-                                                cornerRadius: 8,
-                                                titleFont: { size: 12, weight: 'bold' },
-                                                bodyFont: { size: 11 }
-                                            }
-                                        }
-                                    }} /></div>
-                                </div>
-                                <div className="glass-card" style={{ flex: 1.5, minWidth: '280px' }}>
-                                    <h4 style={{ margin: '0 0 12px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '700', fontSize: '0.9rem' }}>支出明細排行榜</h4>
-                                    <div>
-                                        {dashboardData.leaderboard.map((item, idx) => (
-                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ fontSize: '1rem', width: '24px', textAlign: 'center' }}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '•'}</span>
-                                                    <div>
-                                                        <div style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.88rem' }}>{item.name}</div>
-                                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>佔比 {item.percentage}%</div>
-                                                    </div>
-                                                </div>
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <div style={{ fontWeight: '700', color: '#ff453a', fontSize: '0.92rem' }}>{formatMoney(item.amount)}</div>
-                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>日均: <span style={{ fontWeight: '600' }}>{formatMoney(item.dailyAvg)}</span></div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Task 3: Cross-month comparison Column Chart */}
-                            <div className="glass-card" style={{ marginBottom: '18px' }}>
-                                <h4 style={{ margin: '0 0 12px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '700', fontSize: '0.9rem' }}>📊 本月 vs 上月同分類開銷對比</h4>
-                                <div style={{ height: '220px' }}>
-                                    <Bar data={dashboardData.compChartData} options={{
-                                        maintainAspectRatio: false,
-                                        plugins: {
-                                            legend: {
-                                                labels: { color: 'rgba(255, 255, 255, 0.85)', font: { size: 10 } }
-                                            },
-                                            tooltip: {
-                                                backgroundColor: 'rgba(28, 28, 30, 0.95)',
-                                                titleColor: '#ffffff',
-                                                bodyColor: '#ffffff',
-                                                borderColor: 'rgba(255, 255, 255, 0.12)',
-                                                borderWidth: 1,
-                                                padding: 10,
-                                                cornerRadius: 8
-                                            }
-                                        },
-                                        scales: {
-                                            x: { grid: { display: false }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 10 } } },
-                                            y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 10 } } }
-                                        }
-                                    }} />
-                                </div>
-                            </div>
-
-                            <div className="glass-card" style={{ marginBottom: '18px' }}>
-                                <h4 style={{ margin: '0 0 12px 0', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '700', fontSize: '0.9rem' }}>每日支出趨勢</h4>
-                                <div style={{ height: '200px' }}><Bar data={dashboardData.barChartData} options={{
-                                    maintainAspectRatio: false,
-                                    plugins: {
-                                        legend: { display: false },
-                                        tooltip: {
-                                            backgroundColor: 'rgba(28, 28, 30, 0.95)',
-                                            titleColor: '#ffffff',
-                                            bodyColor: '#ffffff',
-                                            borderColor: 'rgba(255, 255, 255, 0.12)',
-                                            borderWidth: 1,
-                                            padding: 10,
-                                            cornerRadius: 8
-                                        }
-                                    },
-                                    scales: {
-                                        x: { grid: { display: false }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 9 } } },
-                                        y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: 'rgba(255, 255, 255, 0.6)', font: { size: 9 } } }
-                                    }
-                                }} /></div>
-                            </div>
-                        </>
-                    )}
-
-                    <div className="glass-card card-animate" style={{ marginBottom: '18px', borderLeft: '4px solid var(--accent-yellow)', padding: '16px' }}>
-                        <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '0.95rem', color: 'var(--accent-orange)', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                <circle cx="9" cy="7" r="4" />
-                            </svg>
-                            代墊款結算中心
-                        </h3>
-                        {['userA', 'userB'].map(user => {
-                            const debt = calculateDebt(user);
-                            const name = user === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
-                            return (
-                                <div key={user} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
-                                    <div>
-                                        <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.88rem' }}>{name} 代墊款項</div>
-                                        {debt > 0 ? (<div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer', fontWeight: '600' }} onClick={() => { setSettlementTarget(user); setShowSettlementModal(true); }}>明細及對帳單</div>) : (<div style={{ fontSize: '0.78rem', color: '#30d158', fontWeight: '600' }}>已全數清算結案</div>)}
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <span style={{ fontSize: '1.2rem', fontWeight: '800', color: debt > 0 ? 'var(--accent-orange)' : 'var(--text-tertiary)', fontFamily: 'monospace' }}>{formatMoney(debt)}</span>
-                                        {debt > 0 && <button className="glass-btn glass-btn-cta" style={{ padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700' }} onClick={() => handleSettle(user)}>一鍵結清</button>}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
+            {/* VIEW MODE 1: LIST / DATABASE */}
             {viewMode === 'list' && (
-                <>
-                    {/* Inset Grouped lists for database filters */}
-                    <div className="inset-group-card" style={{ marginBottom: '18px' }}>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label">選擇月份</span>
-                            <span className="inset-group-value">
-                                <input type="month" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
-                            </span>
+                <div className="slide-in">
+                    {/* Header Summary Stats */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '10px',
+                        marginBottom: '14px'
+                    }}>
+                        <div className="glass-card" style={{ padding: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)' }}>個人支出小計</div>
+                            <strong style={{ fontSize: '1rem', color: '#fff' }}>{formatMoney(totals.personal)}</strong>
                         </div>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label">交易類型</span>
-                            <span className="inset-group-value">
-                                <select style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.88rem', fontFamily: 'var(--font-family)', direction: 'rtl' }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                                    <option value="all">全部類型</option>
-                                    <option value="expense">日常支出</option>
-                                    <option value="income">一般收入</option>
-                                    <option value="invest">投資與外幣</option>
-                                </select>
-                            </span>
-                        </div>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label">記帳對象</span>
-                            <span className="inset-group-value">
-                                <select style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.88rem', fontFamily: 'var(--font-family)', direction: 'rtl' }} value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
-                                    <option value="all">全部對象</option>
-                                    <option value="joint">共同帳戶 🏫</option>
-                                    <option value="userA">大狗狗 🐕</option>
-                                    <option value="userB">阿陞 🐶</option>
-                                </select>
-                            </span>
-                        </div>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label">支出性質</span>
-                            <span className="inset-group-value">
-                                <select style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.88rem', fontFamily: 'var(--font-family)', direction: 'rtl' }} value={filterNecessity} onChange={(e) => setFilterNecessity(e.target.value)}>
-                                    <option value="all">全部性質</option>
-                                    <option value="need">必要支出 🍲</option>
-                                    <option value="want">選擇性消費 ✨</option>
-                                </select>
-                            </span>
+                        <div className="glass-card" style={{ padding: '12px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)' }}>共同支出小計</div>
+                            <strong style={{ fontSize: '1rem', color: '#fff' }}>{formatMoney(totals.joint)}</strong>
                         </div>
                     </div>
 
-                    <div className="inset-group-card" style={{ marginBottom: '18px' }}>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label">關鍵字搜尋</span>
-                            <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                                <input type="text" placeholder="輸入備註/對象/分類" className="inset-group-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                            </span>
+                    {sortedHistory.length === 0 ? (
+                        <div className="glass-card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.88rem' }}>
+                            📭 本月無符合篩選條件的交易紀錄
                         </div>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label">金額下限</span>
-                            <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                                <input type="text" inputMode="numeric" placeholder="最小金額" className="inset-group-input" value={minAmount} onChange={(e) => setMinAmount(formatInputMoney(e.target.value))} />
-                            </span>
-                        </div>
-                        <div className="inset-group-row">
-                            <span className="inset-group-label">金額上限</span>
-                            <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                                <input type="text" inputMode="numeric" placeholder="最大金額" className="inset-group-input" value={maxAmount} onChange={(e) => setMaxAmount(formatInputMoney(e.target.value))} />
-                            </span>
-                        </div>
-                    </div>
-
-                    {filteredHistory.length === 0 ? (
-                        <div className="glass-card" style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '30px' }}><p>📭 沒有符合篩選條件的交易紀錄。</p></div>
                     ) : (
                         <>
-                            <div style={{
-                                fontSize: '0.78rem',
-                                color: 'var(--text-tertiary)',
-                                marginBottom: '10px',
-                                paddingLeft: '4px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                            }}>
-                                <span>✦ 輕觸任意紀錄可進行修改備註或作廢沖銷</span>
-                            </div>
-                            {visibleHistory.map((record) => {
-                                let showSign = ''; let amountColor = 'var(--text-primary)';
-                                if (['income', 'liquidate', 'joint_invest_sell', 'personal_invest_profit', 'personal_invest_sell'].includes(record.type)) { showSign = '+'; amountColor = '#30d158'; }
-                                else if (['expense', 'personal_invest_loss', 'spend', 'joint_invest_buy', 'personal_invest_buy'].includes(record.type)) { showSign = '-'; amountColor = 'var(--text-primary)'; }
-                                else if (record.type.includes('invest_day_trade')) {
-                                    const isProfit = record.note && record.note.includes('獲利');
-                                    showSign = isProfit ? '+' : '-';
-                                    amountColor = isProfit ? '#30d158' : 'var(--text-primary)';
-                                }
-                                else if (['settle', 'transfer', 'exchange', 'calibrate'].includes(record.type)) {
-                                    showSign = '🔄 ';
-                                    amountColor = record.type === 'calibrate' ? 'var(--text-tertiary)' : '#0a84ff';
-                                }
+                            {sortedHistory.slice(0, renderCount).map((record) => {
+                                const isDeleted = record.isDeleted || record.category === '作廢退款';
+                                const itemNec = dynamicNecessityMap[record.originalIndex] || { needAmount: record.total, wantAmount: 0 };
+                                const isNeed = itemNec.needAmount > 0;
+                                const isWant = itemNec.wantAmount > 0;
+                                
+                                const highlightClass = (newlyAddedRecordTimestamp && record.timestamp === newlyAddedRecordTimestamp)
+                                    ? 'newly-added-highlight'
+                                    : '';
 
-                                const isDeleted = record.isDeleted;
-                                const isNewlyAdded = record.timestamp && record.timestamp === newlyAddedRecordTimestamp;
-                                const opacity = isDeleted ? 0.5 : 1;
-                                const textDeco = isDeleted ? 'line-through' : 'none';
-                                if (isDeleted) amountColor = '#8e8e93';
-                                const borderColor = isDeleted ? '#8e8e93' : getTypeColor(record.type);
+                                // Currency or delta styles
+                                let amountColor = '#fff';
+                                let sign = '';
+                                if (record.type === 'income') {
+                                    amountColor = '#30d158';
+                                    sign = '+';
+                                } else if (record.type === 'expense' || record.type === 'spend') {
+                                    amountColor = '#fff';
+                                    sign = '-';
+                                } else if (record.type === 'calibrate') {
+                                    const diff = record.total;
+                                    amountColor = diff > 0 ? '#30d158' : '#ff453a';
+                                    sign = diff > 0 ? '+' : '';
+                                }
 
                                 return (
-                                    <div 
-                                        key={record.originalIndex} 
-                                        className={`glass-card ${isNewlyAdded ? 'newly-added-highlight' : ''}`} 
-                                        // HIG 2: Tap list row to open bottom action sheet modal
-                                        onClick={() => { if (!isDeleted) setActiveActionRecord(record); }}
-                                        style={{ 
-                                            marginBottom: '12px', 
-                                            borderLeft: `4px solid ${borderColor}`, 
-                                            position: 'relative', 
-                                            padding: '14px 16px', 
-                                            opacity: opacity,
+                                    <div
+                                        key={record.originalIndex}
+                                        className={`glass-card ${highlightClass}`}
+                                        onClick={() => {
+                                            if (!isDeleted) {
+                                                setDetailModalRecord(record);
+                                                setEditDate(record.date);
+                                                setEditNote(record.note || '');
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '14px 16px',
+                                            marginBottom: '10px',
                                             cursor: isDeleted ? 'default' : 'pointer',
-                                            transition: 'transform 0.2s ease, background 0.2s ease'
+                                            opacity: isDeleted ? 0.45 : 1,
+                                            borderLeft: isDeleted ? '3px solid #8e8e93' : undefined,
+                                            transition: 'transform 0.2s ease, background-color 0.2s ease'
                                         }}
                                     >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                                <span style={{ fontWeight: '700', fontSize: '0.95rem', color: 'var(--text-primary)', textDecoration: textDeco }}>{record.date || record.month}</span>
-                                                <span style={{ fontSize: '0.72rem', color: 'white', background: borderColor, padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>{record.category}</span>
-                                                {isNewlyAdded && (
-                                                    <span style={{ fontSize: '0.72rem', color: 'white', background: '#0a84ff', padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>
-                                                        剛剛新增的紀錄
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                {/* Line 1: Type / Category & Date */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                                                    <span style={{
+                                                        fontSize: '0.64rem',
+                                                        background: record.type === 'income' ? 'rgba(48,209,88,0.12)' : (record.type === 'expense' ? 'rgba(10,132,255,0.12)' : 'rgba(255,255,255,0.08)'),
+                                                        color: record.type === 'income' ? '#30d158' : (record.type === 'expense' ? '#0a84ff' : 'var(--text-secondary)'),
+                                                        padding: '1px 6px',
+                                                        borderRadius: '4px',
+                                                        fontWeight: '700'
+                                                    }}>
+                                                        {record.category || '交易'}
                                                     </span>
-                                                )}
-                                                {record.advancedBy && (
-                                                    <span style={{ fontSize: '0.72rem', border: record.isSettled ? '1px solid #30d158' : '1px solid #ff9f0a', color: record.isSettled ? '#30d158' : '#ff9f0a', padding: '1px 6px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', fontWeight: '700' }}>
-                                                        {record.advancedBy === 'userA' ? '大狗狗 🐕' : '阿陞 🐶'}代墊 {record.isSettled ? ' (已結)' : ' (未結)'}
+                                                    <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
+                                                        {record.date}
                                                     </span>
-                                                )}
-                                            </div>
-                                            {isDeleted && (
-                                                <span style={{ background: 'rgba(255,69,58,0.12)', color: '#ff453a', padding: '2px 8px', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '700' }}>🚫 作廢</span>
-                                            )}
-                                        </div>
-
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px', width: '100%' }}>
-                                            <div style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: '600', textDecoration: textDeco, wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0, flex: 1 }}>{record.note === '月結記帳' ? '日常記帳' : record.note}</div>
-                                            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px', whiteSpace: 'nowrap' }}>
-                                                <span style={{ fontSize: '1.4rem', fontWeight: '900', color: amountColor, textDecoration: textDeco, fontFamily: 'monospace' }}>{showSign}{formatMoney(record.total)}</span>
-                                                {!!record.usdAmount && (
-                                                    <div style={{ fontSize: '0.8rem', color: isDeleted ? 'var(--text-tertiary)' : '#ff9f0a', fontWeight: '600', textDecoration: textDeco }}>
-                                                        (含美金 ${record.usdAmount.toFixed(2)} USD)
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
-                                            {record.payer === '共同帳戶' ? <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '6px' }}>共同出資</span> : <span style={{ background: 'rgba(10,132,255,0.08)', color: '#409eff', padding: '2px 6px', borderRadius: '6px' }}>👤 {record.payer}</span>}
-                                            {(record.type === 'expense' || record.type === 'spend') && (
-                                                <span style={{
-                                                    background: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? 'rgba(255, 149, 0, 0.08)' : 'rgba(10, 132, 255, 0.08)',
-                                                    color: (dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '#ff9f0a' : '#0a84ff',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '6px',
-                                                    fontWeight: '700'
-                                                }}>
-                                                    {(dynamicNecessityMap[record.originalIndex] || 'need') === 'want' ? '選擇性 ✨' : '必要 🍲'}
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {isDeleted && record.deleteReason && (<div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#ff453a', background: 'rgba(255,69,58,0.05)', padding: '8px', borderRadius: '8px', border: '1px dashed rgba(255,69,58,0.15)' }}><strong>作廢原因：</strong> {record.deleteReason}</div>)}
-
-                                        {record.auditTrail && !isDeleted && (
-                                            <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '8px', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
-                                                <div style={{ marginBottom: '4px', fontWeight: '700', color: 'var(--text-primary)' }}>餘額變動軌跡：</div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                    {record.auditTrail.after.jointCash !== record.auditTrail.before.jointCash && (() => {
-                                                        const diff = (record.auditTrail.after.jointCash || 0) - (record.auditTrail.before.jointCash || 0);
-                                                        return <div>共同現金: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.jointCash || 0)}</span> ➡️ <span style={{ fontWeight: '700', color: diff > 0 ? '#30d158' : '#ff453a' }}>{formatMoney(record.auditTrail.after.jointCash || 0)}</span> <span style={{ fontSize: '0.7rem' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
-                                                    })()}
-
-                                                    {record.auditTrail.after.userA !== record.auditTrail.before.userA && (() => {
-                                                        const diff = (record.auditTrail.after.userA || 0) - (record.auditTrail.before.userA || 0);
-                                                        return <div>大狗狗: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userA || 0)}</span> ➡️ <span style={{ fontWeight: '700', color: diff > 0 ? '#30d158' : '#ff453a' }}>{formatMoney(record.auditTrail.after.userA || 0)}</span> <span style={{ fontSize: '0.7rem' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
-                                                    })()}
-
-                                                    {record.auditTrail.after.userB !== record.auditTrail.before.userB && (() => {
-                                                        const diff = (record.auditTrail.after.userB || 0) - (record.auditTrail.before.userB || 0);
-                                                        return <div>阿陞: <span style={{ textDecoration: 'line-through', color: 'var(--text-tertiary)' }}>{formatMoney(record.auditTrail.before.userB || 0)}</span> ➡️ <span style={{ fontWeight: '700', color: diff > 0 ? '#30d158' : '#ff453a' }}>{formatMoney(record.auditTrail.after.userB || 0)}</span> <span style={{ fontSize: '0.7rem' }}>({diff > 0 ? '+' : ''}{formatMoney(diff)})</span></div>;
-                                                    })()}
-
-                                                    {record.auditTrail.before.accounts && (
-                                                        <button 
-                                                            onClick={() => setSelectedAuditTrail(record.auditTrail)}
-                                                            style={{
-                                                                background: 'rgba(0,122,255,0.08)',
-                                                                color: 'var(--accent-blue)',
-                                                                border: 'none',
-                                                                borderRadius: '6px',
-                                                                padding: '4px 8px',
-                                                                fontSize: '0.68rem',
-                                                                fontWeight: '700',
-                                                                cursor: 'pointer',
-                                                                marginTop: '4px',
-                                                                alignSelf: 'flex-start'
-                                                            }}
-                                                        >
-                                                            🔍 查看多帳戶變動明細
-                                                        </button>
+                                                    {isDeleted && (
+                                                        <span style={{ fontSize: '0.6rem', backgroundColor: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                                            已作廢
+                                                        </span>
                                                     )}
                                                 </div>
+                                                
+                                                {/* Line 2: Note / Description */}
+                                                <div style={{ fontWeight: '700', fontSize: '0.88rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {record.note || record.category}
+                                                </div>
+                                            </div>
+
+                                            {/* Right Column: Amount & Member */}
+                                            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
+                                                <div style={{ fontSize: '0.94rem', fontWeight: '800', color: amountColor }}>
+                                                    {sign}{formatMoney(record.total)}
+                                                </div>
+                                                <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                                    👤 {record.payer || '無'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Dynamic Need/Want pill rendering (Only if not deleted/income) */}
+                                        {!isDeleted && record.type !== 'income' && (
+                                            <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                                {isNeed && (
+                                                    <span style={{ fontSize: '0.62rem', background: 'rgba(52,199,89,0.08)', color: '#30d158', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
+                                                        🍲 必要 ${itemNec.needAmount.toLocaleString()}
+                                                    </span>
+                                                )}
+                                                {isWant && (
+                                                    <span style={{ fontSize: '0.62rem', background: 'rgba(255,45,85,0.08)', color: '#ff2d55', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
+                                                        ✨ 選擇 ${itemNec.wantAmount.toLocaleString()}
+                                                    </span>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 );
                             })}
+                            
                             {renderCount < sortedHistory.length && (
                                 <div ref={loadMoreRef} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: '0.82rem', fontWeight: '600' }}>
                                     捲動載入更多 ({renderCount}/{sortedHistory.length})
@@ -859,91 +614,111 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                             )}
                         </>
                     )}
-                </>
+                </div>
             )}
 
-            {/* HIG 2: Centered Floating Action Menu with Context Highlight Preview */}
-            {activeActionRecord && createPortal(
-                <div className="action-sheet-overlay" onClick={() => setActiveActionRecord(null)}>
-                    <div className="action-sheet-container" onClick={e => e.stopPropagation()}>
-                        {/* Selected Item Preview Card */}
-                        {renderActionRecordPreview(activeActionRecord)}
-
-                        {/* Floating Action Menu Card */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-                            <div className="action-sheet-group" style={{ background: 'rgba(30, 30, 32, 0.95)', border: '1px solid rgba(255, 255, 255, 0.12)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)' }}>
-                                <div className="action-sheet-title" style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>選擇操作</div>
-                                <button className="action-sheet-btn" onClick={() => {
-                                    const record = activeActionRecord;
-                                    setActiveActionRecord(null);
-                                    setEditModalData({ context: record._context, index: record.originalIndex, date: record.date || record.month, category: record.category, note: record.note });
-                                }}>
-                                    ✏️ 修改備註與日期
-                                </button>
-                                {activeActionRecord.category !== '作廢退款' && (
-                                    <button className="action-sheet-btn destructive" onClick={async () => {
-                                        const record = activeActionRecord;
-                                        setActiveActionRecord(null);
-                                        if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
-                                            onDelete(record._context);
-                                        }
-                                    }}>
-                                        🗑️ 作廢此筆交易 (產生反向沖銷)
-                                    </button>
-                                )}
+            {/* VIEW MODE 2: CHARTS */}
+            {viewMode === 'charts' && (
+                <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                    {/* Category Distribution Chart */}
+                    <div className="glass-card" style={{ padding: '18px' }}>
+                        <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', marginBottom: '14px' }}>🍕 支出分類佔比 ({currentMonthLabel})</div>
+                        {categoryDistribution.labels.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>本月無支出數據</div>
+                        ) : (
+                            <div style={{ maxWidth: '280px', margin: '0 auto' }}>
+                                <Pie data={categoryDistribution} options={{ plugins: { legend: { labels: { color: '#fff', font: { size: 10 } } } } }} />
                             </div>
-                            <div className="action-sheet-group" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)' }}>
-                                <button className="action-sheet-btn action-sheet-cancel" onClick={() => setActiveActionRecord(null)}>
-                                    取消
-                                </button>
-                            </div>
-                        </div>
+                        )}
                     </div>
-                </div>,
-                document.body
+
+                    {/* Daily Spending Trend Chart */}
+                    <div className="glass-card" style={{ padding: '18px' }}>
+                        <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', marginBottom: '14px' }}>📈 每日支出趨勢 ({currentMonthLabel})</div>
+                        {dailySpendingData.labels.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>本月無每日趨勢數據</div>
+                        ) : (
+                            <div style={{ height: '220px' }}>
+                                <Bar data={dailySpendingData} options={{ responsive: true, maintainAspectRatio: false, scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'var(--text-tertiary)', font: { size: 9 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'var(--text-tertiary)', font: { size: 9 } } } }, plugins: { legend: { display: false } } }} />
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
 
-            {/* HIG 5: Card Sheet Edit Modal (Bottom Sheet style) */}
-            {editModalData && createPortal(
-                <div className="card-sheet-overlay active" onClick={() => setEditModalData(null)}>
-                    <div className="card-sheet active" onClick={e => e.stopPropagation()}>
-                        <div className="card-sheet-indicator" />
-                        <div className="card-sheet-header">
-                            <button className="card-sheet-btn-text" onClick={() => setEditModalData(null)}>取消</button>
-                            <span className="card-sheet-title">修改文字紀錄</span>
-                            <button className="card-sheet-btn-text bold-blue" onClick={() => { onEdit(editModalData.context, editModalData); setEditModalData(null); }}>儲存</button>
-                        </div>
-
-                        <div className="card-sheet-content">
-                            <div className="inset-group-card" style={{ marginBottom: '16px', background: 'rgba(255,69,58,0.06)', border: '1px solid rgba(255,69,58,0.15)' }}>
-                                <div style={{ padding: '12px', fontSize: '0.8rem', color: '#ff453a', lineHeight: '1.4' }}>
-                                    <strong>⚠️ 會計安全鎖定</strong><br />
-                                    系統禁止直接修改「金額」與「帳戶」。若金額輸入錯誤，請取消修改，並將原紀錄「作廢🗑️」後重新記帳。
+            {/* VIEW MODE 3: DEBT SETTLEMENT */}
+            {viewMode === 'debts' && (
+                <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    
+                    {/* Visual Card 1: User A */}
+                    {(() => {
+                        const debts = getDebtList('userA');
+                        const debt = debts.reduce((sum, r) => sum + r.total, 0);
+                        return (
+                            <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-pink)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>🐕 大狗狗 🐕</h4>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>大狗狗為「共同支出」代墊的未結算明細</span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontWeight: '850', fontSize: '1.25rem', color: '#fff' }}>{formatMoney(debt)}</div>
+                                        <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>累計代墊</span>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '6px' }}>
+                                    {debt > 0 ? (
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer', fontWeight: '600' }} onClick={() => { setSettlementTarget('userA'); setShowSettlementModal(true); }}>
+                                            明細及對帳單
+                                        </div>
+                                    ) : (
+                                        <div style={{ fontSize: '0.78rem', color: '#30d158', fontWeight: '600' }}>已全數清算結案</div>
+                                    )}
+                                    {debt > 0 && (
+                                        <button className="glass-btn" style={{ padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-pink)', borderColor: 'rgba(255,45,85,0.3)', backgroundColor: 'rgba(255,45,85,0.08)' }} onClick={() => handleSettle('userA')}>
+                                            一鍵結清
+                                        </button>
+                                    )}
                                 </div>
                             </div>
+                        );
+                    })()}
 
-                            <div className="inset-group-card">
-                                <div className="inset-group-row">
-                                    <span className="inset-group-label">📅 交易日期</span>
-                                    <span className="inset-group-value">
-                                        <input type="date" style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} value={editModalData.date} onChange={e => setEditModalData({ ...editModalData, date: e.target.value })} />
-                                    </span>
+                    {/* Visual Card 2: User B */}
+                    {(() => {
+                        const debts = getDebtList('userB');
+                        const debt = debts.reduce((sum, r) => sum + r.total, 0);
+                        return (
+                            <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-green)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>🐶 阿陞 🐶</h4>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>阿陞為「共同支出」代墊的未結算明細</span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontWeight: '850', fontSize: '1.25rem', color: '#fff' }}>{formatMoney(debt)}</div>
+                                        <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>累計代墊</span>
+                                    </div>
                                 </div>
-                                <div className="inset-group-row">
-                                    <span className="inset-group-label">🏷️ 分類 (唯讀)</span>
-                                    <span className="inset-group-value" style={{ color: 'var(--text-tertiary)' }}>{editModalData.category}</span>
-                                </div>
-                                <div className="inset-group-row">
-                                    <span className="inset-group-label">📝 備註</span>
-                                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                                        <input type="text" className="inset-group-input" value={editModalData.note} onChange={e => setEditModalData({ ...editModalData, note: e.target.value })} placeholder="例如：手搖杯飲料" />
-                                    </span>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '6px' }}>
+                                    {debt > 0 ? (
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer', fontWeight: '600' }} onClick={() => { setSettlementTarget('userB'); setShowSettlementModal(true); }}>
+                                            明細及對帳單
+                                        </div>
+                                    ) : (
+                                        <div style={{ fontSize: '0.78rem', color: '#30d158', fontWeight: '600' }}>已全數清算結案</div>
+                                    )}
+                                    {debt > 0 && (
+                                        <button className="glass-btn" style={{ padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.3)', backgroundColor: 'rgba(52,199,89,0.08)' }} onClick={() => handleSettle('userB')}>
+                                            一鍵結清
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>,
-                document.body
+                        );
+                    })()}
+
+                </div>
             )}
 
             {/* HIG 5: Card Sheet Settlement Details Modal (Bottom Sheet style) */}
@@ -977,21 +752,100 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                 document.body
             )}
 
-            {/* 📊 帳戶餘額變動詳情彈窗 */}
-            {selectedAuditTrail && createPortal(
-                <div className="liquid-modal-overlay" onClick={() => setSelectedAuditTrail(null)}>
-                    <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '92%', maxHeight: '80vh', overflowY: 'auto' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                            <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }} className="liquid-modal-title">
-                                📊 帳戶餘額變動詳情
-                            </div>
-                            <button onClick={() => setSelectedAuditTrail(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.3rem', cursor: 'pointer' }}>✕</button>
-                        </div>
+            {/* UNIFIED TRANSACTION DETAILS & MANAGEMENT MODAL */}
+            {detailModalRecord && createPortal(
+                <div className="liquid-modal-overlay" onClick={() => setDetailModalRecord(null)}>
+                    <div className="liquid-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}>
                         
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
-                            {(() => {
-                                const beforeAccs = selectedAuditTrail.before?.accounts || [];
-                                const afterAccs = selectedAuditTrail.after?.accounts || [];
+                        {/* Modal Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexShrink: 0 }}>
+                            <div style={{ fontWeight: '850', fontSize: '1.15rem', color: '#fff' }} className="liquid-modal-title">
+                                🔍 交易詳細資訊 & 管理
+                            </div>
+                            <button onClick={() => setDetailModalRecord(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+                        </div>
+
+                        {/* Scrollable Modal Content */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '52vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '10px', flexGrow: 1 }}>
+                            
+                            {/* Summary Card */}
+                            <div className="inset-group-card" style={{ padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)' }}>💰 交易金額</span>
+                                    <strong style={{ fontSize: '1.05rem', color: detailModalRecord.type === 'income' ? '#30d158' : '#fff' }}>
+                                        {detailModalRecord.type === 'income' ? '+' : '-'}${detailModalRecord.total.toLocaleString()} TWD
+                                    </strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.78rem' }}>
+                                    <span style={{ color: 'var(--text-tertiary)' }}>🏷️ 交易分類</span>
+                                    <span style={{ color: '#fff', fontWeight: '600' }}>{detailModalRecord.category}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                                    <span style={{ color: 'var(--text-tertiary)' }}>👤 記錄成員</span>
+                                    <span style={{ color: '#fff' }}>{detailModalRecord.payer || '無'} ({detailModalRecord.operator || '無'})</span>
+                                </div>
+                            </div>
+
+                            {/* Necessity Split Display */}
+                            {detailModalRecord.type !== 'income' && detailModalRecord.category !== '作廢退款' && (() => {
+                                const itemNec = dynamicNecessityMap[detailModalRecord.originalIndex] || { needAmount: detailModalRecord.total, wantAmount: 0 };
+                                const hasNeed = itemNec.needAmount > 0;
+                                const hasWant = itemNec.wantAmount > 0;
+                                
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: '750' }}>🎯 預算需求分析 (自動判定)</div>
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                            {hasNeed && (
+                                                <span style={{ fontSize: '0.74rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(52,199,89,0.2)' }}>
+                                                    🍲 必要支出: ${itemNec.needAmount.toLocaleString()} TWD
+                                                </span>
+                                            )}
+                                            {hasWant && (
+                                                <span style={{ fontSize: '0.74rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(255,45,85,0.2)' }}>
+                                                    ✨ 選擇性支出: ${itemNec.wantAmount.toLocaleString()} TWD
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Editable Fields */}
+                            <div className="inset-group-card">
+                                <div style={{ padding: '4px 10px 10px 10px', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                    <span>✏️</span>
+                                    <span>編輯交易屬性 (金額與帳戶屬唯讀)</span>
+                                </div>
+                                <div className="inset-group-row">
+                                    <span className="inset-group-label">📅 交易日期</span>
+                                    <span className="inset-group-value">
+                                        <input 
+                                            type="date" 
+                                            style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} 
+                                            value={editDate} 
+                                            onChange={e => setEditDate(e.target.value)} 
+                                        />
+                                    </span>
+                                </div>
+                                <div className="inset-group-row">
+                                    <span className="inset-group-label">📝 交易備註</span>
+                                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                                        <input 
+                                            type="text" 
+                                            className="inset-group-input" 
+                                            value={editNote} 
+                                            onChange={e => setEditNote(e.target.value)} 
+                                            placeholder="請輸入交易備註" 
+                                        />
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Audit Trail Balance Diffs Section */}
+                            {detailModalRecord.auditTrail && (() => {
+                                const beforeAccs = detailModalRecord.auditTrail.before?.accounts || [];
+                                const afterAccs = detailModalRecord.auditTrail.after?.accounts || [];
                                 
                                 const changes = [];
                                 afterAccs.forEach(afterAcc => {
@@ -1011,39 +865,83 @@ const MonthlyView = ({ assets, combinedHistory, loadArchiveMonth, onDelete, onEd
                                     }
                                 });
 
-                                if (changes.length === 0) {
-                                    return <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textAlign: 'center', padding: '12px' }}>此交易無帳戶餘額異動</div>;
-                                }
+                                if (changes.length === 0) return null;
 
-                                return changes.map((c, i) => {
-                                    const diffColor = c.diff > 0 ? '#30d158' : '#ff453a';
-                                    const diffSign = c.diff > 0 ? '+' : '';
-                                    const ownerLabel = c.owner === 'joint' ? '共同' : (c.owner === 'userA' ? '大狗狗' : '阿陞');
-                                    return (
-                                        <div key={i} style={{ padding: '10px 12px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                                <strong style={{ fontSize: '0.82rem', color: '#fff' }}>{c.nickname}</strong>
-                                                <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: '4px' }}>{ownerLabel}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>
-                                                    <span style={{ textDecoration: 'line-through', opacity: 0.6 }}>${c.before.toLocaleString()}</span>
-                                                    <span style={{ margin: '0 6px' }}>➡️</span>
-                                                    <strong>${c.after.toLocaleString()}</strong>
-                                                </span>
-                                                <span style={{ color: diffColor, fontWeight: '750' }}>
-                                                    ({diffSign}${c.diff.toLocaleString()} {c.currency})
-                                                </span>
-                                            </div>
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: '750' }}>📊 帳戶餘額變動軌跡</div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {changes.map((c, i) => {
+                                                const diffColor = c.diff > 0 ? '#30d158' : '#ff453a';
+                                                const diffSign = c.diff > 0 ? '+' : '';
+                                                const ownerLabel = c.owner === 'joint' ? '共同' : (c.owner === 'userA' ? '大狗狗' : '阿陞');
+                                                return (
+                                                    <div key={i} style={{ padding: '8px 10px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                                                <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#fff' }}>{c.nickname}</span>
+                                                                <span style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.4)' }}>({ownerLabel})</span>
+                                                            </div>
+                                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                                                <span style={{ textDecoration: 'line-through', opacity: 0.6 }}>${c.before.toLocaleString()}</span>
+                                                                <span style={{ margin: '0 4px' }}>➡️</span>
+                                                                <strong>${c.after.toLocaleString()}</strong>
+                                                            </div>
+                                                        </div>
+                                                        <span style={{ color: diffColor, fontWeight: '750', fontSize: '0.78rem' }}>
+                                                            {diffSign}${c.diff.toLocaleString()} {c.currency}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    );
-                                });
+                                    </div>
+                                );
                             })()}
+
                         </div>
 
-                        <button onClick={() => setSelectedAuditTrail(null)} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '40px', borderRadius: '10px', marginTop: '16px', fontWeight: '800' }}>
-                            確定返回
-                        </button>
+                        {/* Fixed Actions Footer */}
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexShrink: 0 }}>
+                            {detailModalRecord.category !== '作廢退款' && (
+                                <button
+                                    onClick={async () => {
+                                        const rec = detailModalRecord;
+                                        if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
+                                            onDelete(rec._context);
+                                            setDetailModalRecord(null);
+                                        }
+                                    }}
+                                    className="glass-btn"
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px 0',
+                                        borderRadius: '10px',
+                                        color: '#ff453a',
+                                        borderColor: 'rgba(255,69,58,0.2)',
+                                        background: 'rgba(255,69,58,0.08)'
+                                    }}
+                                >
+                                    🗑️ 作廢此交易
+                                </button>
+                            )}
+
+                            <button
+                                onClick={() => {
+                                    onEdit(detailModalRecord._context, {
+                                        index: detailModalRecord.originalIndex,
+                                        date: editDate,
+                                        note: editNote
+                                    });
+                                    setDetailModalRecord(null);
+                                }}
+                                className="glass-btn primary-gradient-btn"
+                                style={{ flex: 2, padding: '12px 0', borderRadius: '10px', fontWeight: '800' }}
+                            >
+                                💾 儲存修改
+                            </button>
+                        </div>
+
                     </div>
                 </div>,
                 document.body

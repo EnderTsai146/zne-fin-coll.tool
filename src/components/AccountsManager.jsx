@@ -22,6 +22,12 @@ const parseMoney = (valStr) => {
   return Number(clean) || 0;
 };
 
+const cleanIconInput = (val) => {
+  if (!val) return '';
+  const chars = Array.from(val.trim());
+  return chars.length > 0 ? chars[0] : '';
+};
+
 const AccountsManager = ({
   assets,
   setAssets,
@@ -39,11 +45,16 @@ const AccountsManager = ({
   const [editingAccount, setEditingAccount] = useState(null); // null means adding new
   const [isReadOnly, setIsReadOnly] = useState(false);
 
+  // Deletion safeguard state
+  const [showDeleteSafeguard, setShowDeleteSafeguard] = useState(false);
+  const [safeguardTargetId, setSafeguardTargetId] = useState('');
+
   // Form states
   const [accOwner, setAccOwner] = useState('userA');
   const [accType, setAccType] = useState('bank'); // 'cash', 'bank', 'credit', 'virtual'
   const [accName, setAccName] = useState('');
   const [accNickname, setAccNickname] = useState('');
+  const [accIcon, setAccIcon] = useState('🏦');
   const [accNumber, setAccNumber] = useState('');
   const [accBalance, setAccBalance] = useState('');
   const [accCurrency, setAccCurrency] = useState('TWD');
@@ -58,6 +69,7 @@ const AccountsManager = ({
   const [tfSource, setTfSource] = useState('');
   const [tfTarget, setTfTarget] = useState('');
   const [tfAmount, setTfAmount] = useState('');
+  const [tfTargetAmount, setTfTargetAmount] = useState(''); // Only used if cross-currency
   const [tfNote, setTfNote] = useState('');
   const [tfDate, setTfDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -108,6 +120,7 @@ const AccountsManager = ({
     setAccType('bank');
     setAccName('');
     setAccNickname('');
+    setAccIcon('🏦');
     setAccNumber('');
     setAccBalance('');
     setAccCurrency('TWD');
@@ -133,8 +146,8 @@ const AccountsManager = ({
     setAccType(acc.type);
     setAccName(acc.name);
     setAccNickname(acc.nickname);
+    setAccIcon(acc.icon || '');
     setAccNumber(acc.accountNumber);
-    // Show correct absolute balance in editable state
     const rawVal = acc.balance;
     setAccBalance(acc.type === 'credit' ? Math.abs(rawVal).toString() : rawVal.toString());
     setAccCurrency(acc.currency);
@@ -158,11 +171,17 @@ const AccountsManager = ({
       return;
     }
     
-    // Parse on save
     let val = parseMoney(accBalance);
     if (accType === 'credit') {
       val = -Math.abs(val); // Save as negative liability
     }
+
+    let defaultTypeIcon = '🏦';
+    if (accType === 'cash') defaultTypeIcon = '💵';
+    else if (accType === 'credit') defaultTypeIcon = '💳';
+    else if (accType === 'virtual') defaultTypeIcon = '📱';
+
+    const finalIcon = cleanIconInput(accIcon) || defaultTypeIcon;
 
     let updatedAccounts = [...accounts];
 
@@ -202,6 +221,7 @@ const AccountsManager = ({
             type: accType,
             name: accName.trim(),
             nickname: accNickname.trim(),
+            icon: finalIcon,
             accountNumber: accNumber.trim(),
             balance: val,
             currency: accCurrency,
@@ -224,6 +244,7 @@ const AccountsManager = ({
         type: accType,
         name: accName.trim(),
         nickname: accNickname.trim(),
+        icon: finalIcon,
         accountNumber: accNumber.trim(),
         balance: val,
         currency: accCurrency,
@@ -243,61 +264,75 @@ const AccountsManager = ({
     setShowModal(false);
   };
 
-  // Delete Account
+  // Delete Account with Safeguard
   const handleDeleteAccount = async () => {
     if (!editingAccount || isReadOnly) return;
-    const confirmMsg = `⚠️ 確定要刪除帳戶【${editingAccount.nickname}】嗎？\n刪除此帳戶將會清除其餘額紀錄！`;
-    if (!(await customConfirm(confirmMsg, "刪除帳戶"))) return;
 
-    const updatedAccounts = accounts.filter(a => a.id !== editingAccount.id);
-    setAssets({ ...assets, accounts: updatedAccounts });
-    setShowModal(false);
-    await customAlert("🗑️ 帳戶已成功刪除。");
+    const remainingBal = editingAccount.balance;
+
+    if (remainingBal === 0) {
+      // Zero balance, direct delete
+      const confirmMsg = `⚠️ 確定要刪除帳戶【${editingAccount.nickname}】嗎？`;
+      if (!(await customConfirm(confirmMsg, "刪除帳戶"))) return;
+
+      const updatedAccounts = accounts.filter(a => a.id !== editingAccount.id);
+      setAssets({ ...assets, accounts: updatedAccounts });
+      setShowModal(false);
+      await customAlert("🗑️ 帳戶已成功刪除。");
+    } else {
+      // Safeguard: Balance is not zero
+      const otherAccs = accounts.filter(a => a.currency === editingAccount.currency && a.id !== editingAccount.id);
+      
+      if (otherAccs.length === 0) {
+        // No other accounts of the same currency
+        await customAlert(
+          `❌ 無法刪除帳戶！\n這是您唯一的 ${editingAccount.currency} 帳戶，且餘額不為 0（目前餘額: ${remainingBal.toLocaleString()}）。為防資金憑空消失，請先建立另一個 ${editingAccount.currency} 帳戶，或是進行「貨幣換匯」將所有餘額結清轉移後，才能刪除此帳戶。`, 
+          "安全性鎖定"
+        );
+      } else {
+        // Offer transfer selection
+        setSafeguardTargetId('');
+        setShowDeleteSafeguard(true);
+      }
+    }
   };
 
-  // Credit Card Manual Payoff
-  const handleManualPayoff = async (card) => {
-    if (card.balance >= 0) {
-      await customAlert("此信用卡目前無須繳款（餘額為正或零）。");
-      return;
-    }
-    const linkedBank = accounts.find(a => a.id === card.linkedBankAccountId);
-    if (!linkedBank) {
-      await customAlert("❌ 未設定此信用卡的扣款活儲帳戶，請先編輯信用卡綁定。");
+  // Execute Safeguard Deletion Transfer
+  const handleExecuteSafeguardDelete = async () => {
+    if (!safeguardTargetId) {
+      await customAlert("請選擇一個目標帳戶來接收餘額！");
       return;
     }
 
-    const payAmount = Math.abs(card.balance);
-    const confirmMsg = `💳 準備繳清信用卡【${card.nickname}】帳單：\n• 繳款金額：$${payAmount.toLocaleString()} ${card.currency}\n• 扣款帳戶：${linkedBank.nickname} (目前餘額: $${linkedBank.balance.toLocaleString()})\n確定要進行扣款結清嗎？`;
-    
-    if (!(await customConfirm(confirmMsg, "結清帳單"))) return;
+    const targetAcc = accounts.find(a => a.id === safeguardTargetId);
+    const amountToTransfer = editingAccount.balance;
 
-    if (linkedBank.balance < payAmount) {
-      await customAlert(`❌ 扣款帳戶【${linkedBank.nickname}】餘額不足以支付此筆帳單！`);
-      return;
-    }
+    const updatedAccounts = accounts
+      .map(a => {
+        if (a.id === targetAcc.id) {
+          return { ...a, balance: a.balance + amountToTransfer };
+        }
+        return a;
+      })
+      .filter(a => a.id !== editingAccount.id);
 
-    // Update balances
-    const updatedAccounts = accounts.map(a => {
-      if (a.id === card.id) return { ...a, balance: 0 };
-      if (a.id === linkedBank.id) return { ...a, balance: a.balance - payAmount };
-      return a;
-    });
-
-    const payoffRecord = {
+    // Create deletion transfer record
+    const transferRecord = {
       date: new Date().toISOString().split('T')[0],
       month: new Date().toISOString().slice(0, 7),
       type: 'transfer',
-      category: '信用卡扣款',
-      total: payAmount,
+      category: '帳戶註銷劃撥',
+      total: Math.abs(amountToTransfer),
       payer: operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶',
-      accountId: linkedBank.id,
-      targetAccountId: card.id,
-      note: `[手動結清] ${card.nickname} 帳單`,
+      accountId: editingAccount.id,
+      targetAccountId: targetAcc.id,
+      note: `[帳戶註銷] 餘額自動劃撥移轉自已刪除的 ${editingAccount.nickname}`
     };
 
-    onTransaction({ ...assets, accounts: updatedAccounts }, payoffRecord);
-    await customAlert(`✅ 信用卡帳單繳款成功！\n${linkedBank.nickname} 已扣除 $${payAmount.toLocaleString()}`);
+    onTransaction({ ...assets, accounts: updatedAccounts }, transferRecord);
+    setShowDeleteSafeguard(false);
+    setShowModal(false);
+    await customAlert(`🗑️ 帳戶已成功刪除！\n帳戶內餘額 $${amountToTransfer.toLocaleString()} ${editingAccount.currency} 已自動劃撥至【${targetAcc.nickname}】。`);
   };
 
   // Action Form: Transfer
@@ -306,8 +341,8 @@ const AccountsManager = ({
       await customAlert("請選擇帳戶並填寫劃撥金額！");
       return;
     }
-    const val = parseMoney(tfAmount);
-    if (val <= 0) {
+    const sellVal = parseMoney(tfAmount);
+    if (sellVal <= 0) {
       await customAlert("劃撥金額必須大於 0！");
       return;
     }
@@ -319,36 +354,57 @@ const AccountsManager = ({
     const srcAcc = accounts.find(a => a.id === tfSource);
     const tgtAcc = accounts.find(a => a.id === tfTarget);
 
-    if (srcAcc.balance < val) {
+    if (srcAcc.balance < sellVal) {
       await customAlert(`❌ 轉出帳戶【${srcAcc.nickname}】餘額不足！`);
       return;
     }
-    if (srcAcc.currency !== tgtAcc.currency) {
-      await customAlert(`❌ 轉出與轉入帳戶幣別不同，請改用「貨幣換匯」功能！`);
-      return;
+
+    const isCrossCurrency = srcAcc.currency !== tgtAcc.currency;
+    let buyVal = sellVal;
+    let impliedRateText = "";
+
+    if (isCrossCurrency) {
+      buyVal = parseMoney(tfTargetAmount);
+      if (buyVal <= 0) {
+        await customAlert("跨幣別劃撥時，轉入金額必須大於 0！");
+        return;
+      }
+      // Calculate rate: TWD per 1 USD
+      let rate = 0;
+      if (srcAcc.currency === 'TWD') {
+        rate = sellVal / buyVal;
+        impliedRateText = ` (匯率 1 USD = ${rate.toFixed(4)} TWD)`;
+      } else {
+        rate = buyVal / sellVal;
+        impliedRateText = ` (匯率 1 USD = ${rate.toFixed(4)} TWD)`;
+      }
     }
 
     const updatedAccounts = accounts.map(a => {
-      if (a.id === tfSource) return { ...a, balance: a.balance - val };
-      if (a.id === tfTarget) return { ...a, balance: a.balance + val };
+      if (a.id === tfSource) return { ...a, balance: a.balance - sellVal };
+      if (a.id === tfTarget) return { ...a, balance: a.balance + buyVal };
       return a;
     });
+
+    // Save TWD value for history total
+    const historyTotal = srcAcc.currency === 'TWD' ? sellVal : buyVal * (currentFxRate || 31.5);
 
     const txRecord = {
       date: tfDate,
       month: tfDate.slice(0, 7),
       type: 'transfer',
       category: '資產劃撥',
-      total: val,
+      total: historyTotal,
       payer: operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶',
       accountId: tfSource,
       targetAccountId: tfTarget,
-      note: tfNote.trim() || `資金劃撥: ${srcAcc.nickname} ➔ ${tgtAcc.nickname}`,
+      note: tfNote.trim() || `資金劃撥: ${srcAcc.nickname} ➔ ${tgtAcc.nickname}${impliedRateText}`,
     };
 
     onTransaction({ ...assets, accounts: updatedAccounts }, txRecord);
-    await customAlert(`✅ 資金劃撥劃撥成功！`);
+    await customAlert(`✅ 資金劃撥成功！`);
     setTfAmount('');
+    setTfTargetAmount('');
     setTfNote('');
   };
 
@@ -454,9 +510,15 @@ const AccountsManager = ({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
         {list.map(acc => {
           const isSelected = selectedValue === acc.id;
-          const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗 🐕' : '阿陞 🐶');
           const isCredit = acc.type === 'credit';
           const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+          
+          let defaultIcon = '🏦';
+          if (acc.type === 'cash') defaultIcon = '💵';
+          else if (acc.type === 'credit') defaultIcon = '💳';
+          else if (acc.type === 'virtual') defaultIcon = '📱';
+          
+          const iconToRender = acc.icon || defaultIcon;
           
           return (
             <button
@@ -483,10 +545,7 @@ const AccountsManager = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {acc.nickname}
-                </span>
-                <span style={{ fontSize: '0.58rem', opacity: 0.6, background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: '4px' }}>
-                  {acc.owner === 'joint' ? '共同' : (acc.owner === 'userA' ? '大狗狗' : '阿陞')}
+                  {iconToRender} {acc.nickname}
                 </span>
               </div>
               <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
@@ -544,7 +603,7 @@ const AccountsManager = ({
     );
   };
 
-  // Apple settings-style list renderer
+  // Apple settings-style list renderer (owner name omitted from group items)
   const renderAccountListGroup = (title, list) => {
     if (list.length === 0) return null;
     return (
@@ -562,11 +621,20 @@ const AccountsManager = ({
             const isCredit = acc.type === 'credit';
             const balanceColor = isCredit ? '#ff9500' : '#fff';
             
-            let typeIcon = '🏦';
-            if (acc.type === 'cash') typeIcon = '💵';
-            else if (acc.type === 'credit') typeIcon = '💳';
-            else if (acc.type === 'virtual') typeIcon = '📱';
+            let defaultIcon = '🏦';
+            let typeName = '銀行活儲';
+            if (acc.type === 'cash') {
+              defaultIcon = '💵';
+              typeName = '現金';
+            } else if (acc.type === 'credit') {
+              defaultIcon = '💳';
+              typeName = '信用卡';
+            } else if (acc.type === 'virtual') {
+              defaultIcon = '📱';
+              typeName = '電子票證/虛擬帳戶';
+            }
             
+            const iconToRender = acc.icon || defaultIcon;
             const isLast = index === list.length - 1;
             
             return (
@@ -586,7 +654,7 @@ const AccountsManager = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
                   <div style={{
-                    fontSize: '1.2rem',
+                    fontSize: '1.25rem',
                     width: '36px',
                     height: '36px',
                     borderRadius: '10px',
@@ -596,7 +664,7 @@ const AccountsManager = ({
                     justifyContent: 'center',
                     flexShrink: 0
                   }}>
-                    {typeIcon}
+                    {iconToRender}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -608,7 +676,7 @@ const AccountsManager = ({
                       </div>
                     </div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {acc.name} {acc.accountNumber ? `· ${maskNumber(acc.accountNumber, acc.owner)}` : ''}
+                      {typeName} · {acc.name} {acc.accountNumber ? `(${maskNumber(acc.accountNumber, acc.owner)})` : ''}
                     </div>
                   </div>
                 </div>
@@ -630,6 +698,10 @@ const AccountsManager = ({
     );
   };
 
+  const selectedSrcAcc = accounts.find(a => a.id === tfSource);
+  const selectedTgtAcc = accounts.find(a => a.id === tfTarget);
+  const isTransferCrossCurrency = selectedSrcAcc && selectedTgtAcc && selectedSrcAcc.currency !== selectedTgtAcc.currency;
+
   return (
     <div className="overview-container" style={{ paddingBottom: '90px' }}>
       
@@ -643,7 +715,7 @@ const AccountsManager = ({
           安全、無感的多帳戶收支與債務劃撥核心
         </p>
 
-        {/* Hero Card */}
+        {/* Hero Card with "淨資產總計" moved above the number */}
         <div style={{
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -655,14 +727,14 @@ const AccountsManager = ({
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)'
         }}>
-          <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <span style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-tertiary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
             淨資產總計
           </span>
           <h1 style={{
             fontSize: '1.8rem',
             fontWeight: '850',
             color: netWorth >= 0 ? '#34c759' : '#ff453a',
-            margin: '4px 0 14px 0',
+            margin: '0 0 14px 0',
             letterSpacing: '-0.02em'
           }}>
             ${Math.round(netWorth).toLocaleString()} <span style={{ fontSize: '0.9rem', fontWeight: '500', opacity: 0.8 }}>TWD</span>
@@ -732,19 +804,40 @@ const AccountsManager = ({
 
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉入帳戶</label>
-            {renderAccountSelector(tfTarget, setTfTarget)}
+            {/* Filter target account: omit the source account so it cannot be selected */}
+            {renderAccountSelector(tfTarget, setTfTarget, a => a.id !== tfSource)}
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>劃撥金額</label>
-            <input
-              type="text"
-              value={formatInputMoney(tfAmount)}
-              onChange={(e) => setTfAmount(e.target.value)}
-              placeholder="$0"
-              className="glass-input"
-              style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
-            />
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>
+                {isTransferCrossCurrency ? `轉出金額 (${selectedSrcAcc?.currency})` : '劃撥金額'}
+              </label>
+              <input
+                type="text"
+                value={formatInputMoney(tfAmount)}
+                onChange={(e) => setTfAmount(e.target.value)}
+                placeholder="$0"
+                className="glass-input"
+                style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
+              />
+            </div>
+
+            {isTransferCrossCurrency && (
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>
+                  轉入金額 ({selectedTgtAcc?.currency})
+                </label>
+                <input
+                  type="text"
+                  value={formatInputMoney(tfTargetAmount)}
+                  onChange={(e) => setTfTargetAmount(e.target.value)}
+                  placeholder="$0"
+                  className="glass-input"
+                  style={{ width: '100%', height: '44px', borderRadius: '10px', padding: '0 12px' }}
+                />
+              </div>
+            )}
           </div>
 
           <div style={{ marginBottom: '16px' }}>
@@ -899,8 +992,10 @@ const AccountsManager = ({
       {/* ACCOUNT DETAIL MODAL (ADD / EDIT) */}
       {showModal && (
         <div className="liquid-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}>
+            
+            {/* Fixed Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexShrink: 0 }}>
               <div style={{ fontWeight: '850', fontSize: '1.15rem', color: '#fff' }} className="liquid-modal-title">
                 {isReadOnly ? '📋 帳戶唯讀預覽' : (editingAccount ? '✏️ 編輯帳戶資料' : '🏦 建立全新帳戶')}
               </div>
@@ -909,13 +1004,13 @@ const AccountsManager = ({
 
             {/* Read Only Notice */}
             {isReadOnly && (
-              <div style={{ backgroundColor: 'rgba(255,149,0,0.12)', border: '0.5px solid rgba(255,149,0,0.3)', color: '#ffb94f', padding: '10px 14px', borderRadius: '10px', fontSize: '0.74rem', marginBottom: '14px', lineHeight: '1.4' }}>
+              <div style={{ backgroundColor: 'rgba(255,149,0,0.12)', border: '0.5px solid rgba(255,149,0,0.3)', color: '#ffb94f', padding: '10px 14px', borderRadius: '10px', fontSize: '0.74rem', marginBottom: '10px', lineHeight: '1.4', flexShrink: 0 }}>
                 🔒 這是您伴侶的個人私有帳戶。您目前僅能預覽其金額，無權對其進行修改或刪除。
               </div>
             )}
 
-            {/* Form Fields */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '8px' }}>
+            {/* Scrollable Form Fields to prevent cutoff on mobile */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '52vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '10px', flexGrow: 1 }}>
               
               {/* Owner */}
               <div>
@@ -973,6 +1068,22 @@ const AccountsManager = ({
                   value={accNickname}
                   onChange={(e) => setAccNickname(e.target.value)}
                   placeholder="例如：薪轉帳戶、主力信用卡、皮夾"
+                  className="glass-input"
+                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
+                />
+              </div>
+
+              {/* Custom Icon Field */}
+              <div>
+                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>
+                  帳戶圖示 (Emoji / 單個國字或英文字)
+                </label>
+                <input
+                  disabled={isReadOnly}
+                  type="text"
+                  value={accIcon}
+                  onChange={(e) => setAccIcon(cleanIconInput(e.target.value))}
+                  placeholder="例如：🏦、💵、💳、📱、A"
                   className="glass-input"
                   style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
                 />
@@ -1077,8 +1188,8 @@ const AccountsManager = ({
 
             </div>
 
-            {/* Actions Footer */}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+            {/* Fixed Actions Footer */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexShrink: 0 }}>
               {!isReadOnly && editingAccount && (
                 <button
                   onClick={handleDeleteAccount}
@@ -1102,6 +1213,50 @@ const AccountsManager = ({
                 style={{ flex: 2, padding: '12px 0', borderRadius: '10px', fontWeight: '800' }}
               >
                 {isReadOnly ? '確定返回' : (editingAccount ? '儲存帳戶修改' : '確定建立帳戶')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ACCOUNT DELETION SAFEGUARD MODAL */}
+      {showDeleteSafeguard && editingAccount && (
+        <div className="liquid-modal-overlay" style={{ zIndex: 11000 }} onClick={() => setShowDeleteSafeguard(false)}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '92%' }}>
+            <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#ff9500', marginBottom: '8px' }}>
+              ⚠️ 帳戶餘額防消失保護
+            </div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.4', margin: '0 0 16px 0' }}>
+              您正準備註銷帳戶【<strong>{editingAccount.nickname}</strong>】。<br />
+              由於該帳戶內仍有餘額 <strong style={{ color: '#fff' }}>${editingAccount.balance.toLocaleString()} {editingAccount.currency}</strong>，請選擇要將此筆餘額<b>自動轉移劃撥</b>至哪一個帳戶：
+            </p>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '6px' }}>劃撥接收帳戶 ({editingAccount.currency})</label>
+              <select
+                value={safeguardTargetId}
+                onChange={(e) => setSafeguardTargetId(e.target.value)}
+                className="glass-input"
+                style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
+              >
+                <option value="">-- 選擇接收帳戶 --</option>
+                {accounts
+                  .filter(a => a.currency === editingAccount.currency && a.id !== editingAccount.id)
+                  .map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.nickname} (${a.balance.toLocaleString()} {a.currency})
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowDeleteSafeguard(false)} className="glass-btn" style={{ flex: 1, padding: '10px 0', borderRadius: '8px' }}>
+                取消
+              </button>
+              <button onClick={handleExecuteSafeguardDelete} className="glass-btn primary-gradient-btn" style={{ flex: 2, padding: '10px 0', borderRadius: '8px', fontWeight: '800', background: 'linear-gradient(135deg, #ff9500, #ff5e00)' }}>
+                確定轉移並註銷
               </button>
             </div>
           </div>

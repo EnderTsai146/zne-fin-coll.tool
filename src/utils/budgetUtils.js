@@ -46,50 +46,79 @@ export const getRecordMainCategory = (r) => {
   return '其他';
 };
 
-export const computeDynamicNecessities = (records, assets) => {
-  const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
+export const getDailyBudgetLimit = (assets, monthStr, category) => {
+  if (!assets?.budgets) return 0;
+  const budgets = getBudgetForMonth(assets, monthStr);
+  const budgetVal = budgets[category] || 0;
+  if (budgetVal <= 0) return 0;
   
+  const [year, month] = monthStr.split('-').map(Number);
+  // Get days in month correctly
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return budgetVal / daysInMonth;
+};
+
+export const computeDynamicNecessities = (records, assets) => {
   // Sort history chronologically to compute running sum correctly
   const sorted = [...records]
     .map((r, idx) => ({ ...r, originalIndex: idx }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
     
-  const months = {};
-  const results = {}; // Map of record originalIndex to 'need' | 'want'
+  const dailySpentNeed = {}; // key: "YYYY-MM-DD:Category", val: spent need amount today
+  const results = {}; // Map of record originalIndex to { needAmount, wantAmount }
   
   sorted.forEach(r => {
     if (r.isDeleted) {
-      results[r.originalIndex] = 'need';
+      results[r.originalIndex] = { needAmount: 0, wantAmount: 0 };
       return;
     }
     if (r.type !== 'expense' && r.type !== 'spend') {
-      results[r.originalIndex] = 'need';
+      results[r.originalIndex] = { needAmount: 0, wantAmount: 0 };
       return;
     }
     
     const m = r.month || r.date.slice(0, 7);
-    if (!months[m]) {
-      months[m] = {};
-      dynamicCategories.forEach(cat => {
-        months[m][cat] = { budget: 0, spent: 0 };
-      });
-      if (!months[m]["其他"]) months[m]["開銷"] = { budget: 0, spent: 0 }; // fallback
-      
-      const budgets = getBudgetForMonth(assets, m);
-      Object.keys(budgets).forEach(cat => {
-        if (months[m][cat]) months[m][cat].budget = budgets[cat];
-      });
-    }
+    const dateStr = r.date;
     
-    const cat = getRecordMainCategory(r);
-    const catData = months[m][cat] || months[m]["其他"] || { budget: 0, spent: 0 };
+    let itemNeedTotal = 0;
+    let itemWantTotal = 0;
     
-    if (catData.spent < catData.budget) {
-      results[r.originalIndex] = 'need';
+    const details = r.details || {};
+    const catAmounts = [];
+    
+    if (details.food || details.shopping || details.entertainment || details.other) {
+      if (details.food) catAmounts.push({ category: '餐費', amount: Number(details.food) });
+      if (details.shopping) catAmounts.push({ category: '購物', amount: Number(details.shopping) });
+      if (details.entertainment) catAmounts.push({ category: '娛樂', amount: Number(details.entertainment) });
+      if (details.other) catAmounts.push({ category: '其他', amount: Number(details.other) });
     } else {
-      results[r.originalIndex] = 'want';
+      const cat = getRecordMainCategory(r);
+      catAmounts.push({ category: cat, amount: r.total });
     }
-    catData.spent += r.total;
+    
+    catAmounts.forEach(({ category, amount }) => {
+      const dailyLimit = getDailyBudgetLimit(assets, m, category);
+      const key = `${dateStr}:${category}`;
+      const spentNeedToday = dailySpentNeed[key] || 0;
+      
+      if (dailyLimit <= 0) {
+        itemWantTotal += amount;
+      } else {
+        const allowedNeed = Math.max(0, dailyLimit - spentNeedToday);
+        const needAmt = Math.min(amount, allowedNeed);
+        const wantAmt = amount - needAmt;
+        
+        itemNeedTotal += needAmt;
+        itemWantTotal += wantAmt;
+        
+        dailySpentNeed[key] = spentNeedToday + needAmt;
+      }
+    });
+    
+    results[r.originalIndex] = {
+      needAmount: itemNeedTotal,
+      wantAmount: itemWantTotal
+    };
   });
   
   return results;

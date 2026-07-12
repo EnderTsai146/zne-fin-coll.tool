@@ -986,11 +986,12 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                     <button onClick={() => handleToggleHistory('userB')} className={activeHistory === 'userB' ? 'glass-btn glass-btn-cta' : 'glass-btn'} style={{ width: '100%', padding: '6px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{activeHistory === 'userB' ? '收起' : '🔍 紀錄'}</button>
                 </div>
             </div>
-            {activeHistory && (
-                <div className="glass-card card-animate" style={{ marginBottom: '18px', borderLeft: `4px solid ${activeHistory === 'userA' ? 'var(--accent-pink)' : activeHistory === 'userB' ? 'var(--accent-green)' : 'var(--accent-orange)'}` }}>
-                    <div style={{ fontWeight: '700', color: 'var(--text-primary)', marginBottom: '10px', fontSize: '1rem' }}>
-                        📝 {activeHistory === 'userA' ? '大狗狗🐕' : activeHistory === 'userB' ? '阿陞🐶' : '共同'} 變動明細
-                    </div>
+            <div className={`smooth-expand-container ${activeHistory ? 'expanded' : ''}`}>
+                {activeHistory && (
+                    <div className="glass-card card-animate" style={{ borderLeft: `4px solid ${activeHistory === 'userA' ? 'var(--accent-pink)' : activeHistory === 'userB' ? 'var(--accent-green)' : 'var(--accent-orange)'}` }}>
+                        <div style={{ fontWeight: '700', color: 'var(--text-primary)', marginBottom: '10px', fontSize: '1rem' }}>
+                            📝 {activeHistory === 'userA' ? '大狗狗🐕' : activeHistory === 'userB' ? '阿陞🐶' : '共同'} 變動明細
+                        </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '15px' }}>
                         <input type="date" value={historyDateRange.start} onChange={(e) => setHistoryDateRange(prev => ({ ...prev, start: e.target.value }))} className="glass-input" style={{ margin: 0, padding: '6px 10px', flex: 1, minWidth: '110px', fontSize: '0.84rem' }} />
@@ -1136,8 +1137,9 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                             })
                         ) : (<div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '20px' }}>此區間尚無變動紀錄</div>)}
                     </div>
-                </div>
-            )}
+                    </div>
+                )}
+            </div>
 
             {/* 🏦 帳戶資產概況 (Apple HIG Widget Card) */}
             <div className="glass-card card-animate" style={{ marginBottom: '18px', padding: '16px 18px' }}>
@@ -1173,7 +1175,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{typeIcon}</span>
+                          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{acc.icon || typeIcon}</span>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontWeight: '700', fontSize: '0.82rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {acc.nickname}
