@@ -1195,9 +1195,16 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                             </div>
                           </div>
                         </div>
-                        <span style={{ fontWeight: '800', fontSize: '0.86rem', color: balanceColor, flexShrink: 0, marginLeft: '8px' }}>
-                          ${acc.balance.toLocaleString()}
-                        </span>
+                        <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '8px' }}>
+                          <span style={{ display: 'block', fontWeight: '800', fontSize: '0.86rem', color: balanceColor }}>
+                            ${acc.balance.toLocaleString()} <span style={{ fontSize: '0.64rem', opacity: 0.8 }}>{acc.currency}</span>
+                          </span>
+                          {acc.currency === 'USD' && (
+                            <span style={{ display: 'block', fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px', fontWeight: '600' }}>
+                              ≈ ${Math.round(acc.balance * (currentFxRate || 31.5)).toLocaleString()} TWD
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
