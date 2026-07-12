@@ -25,8 +25,16 @@ const parseMoney = (valStr) => {
 
 const cleanIconInput = (val) => {
   if (!val) return '';
-  const chars = Array.from(val.trim());
-  return chars.length > 0 ? chars[0] : '';
+  const trimmed = val.trim();
+  if (trimmed.length === 0) return '';
+  try {
+    const segmenter = new Intl.Segmenter();
+    const segments = [...segmenter.segment(trimmed)];
+    return segments.length > 0 ? segments[0].segment : '';
+  } catch (e) {
+    const chars = Array.from(trimmed);
+    return chars.length > 0 ? chars[0] : '';
+  }
 };
 
 const AccountsManager = ({
