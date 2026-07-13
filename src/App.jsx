@@ -2385,7 +2385,7 @@ function App() {
       <BottomNav currentPage={currentPage} onPageChange={handlePageChange} assets={assets} lastActiveCenterTab={lastActiveCenterTab} />
       <CustomModal modalConfig={modalConfig} onConfirm={handleConfirmModal} onCancel={handleCancelModal} />
       {showTimeoutWarning && (
-        <div className="liquid-modal-overlay" style={{ zIndex: 9999 }}>
+        <div className="liquid-modal-overlay" style={{ zIndex: 12000 }}>
           <div className="liquid-modal-card" style={{ maxWidth: '380px', padding: '24px 20px', textAlign: 'center', background: 'rgba(28,28,30,0.95)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🛡️</div>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: '700', color: '#ffffff' }}>會話安全提示</h3>
@@ -2625,7 +2625,7 @@ const CustomModal = ({ modalConfig, onConfirm, onCancel }) => {
   const isDanger = modalConfig.message?.includes('作廢') || modalConfig.message?.includes('刪除') || modalConfig.message?.includes('警告') || modalConfig.message?.includes('覆蓋') || modalConfig.message?.includes('登出');
 
   return (
-    <div className="liquid-modal-overlay" onClick={onCancel} onTouchMove={e => e.preventDefault()}>
+    <div className="liquid-modal-overlay" style={{ zIndex: 15000 }} onClick={onCancel} onTouchMove={e => e.preventDefault()}>
       <div className="liquid-modal-card" style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }} onClick={e => e.stopPropagation()} onTouchMove={e => e.stopPropagation()}>
         <h3 className="liquid-modal-title">{modalConfig.title}</h3>
         <p className="liquid-modal-message">{modalConfig.message}</p>
