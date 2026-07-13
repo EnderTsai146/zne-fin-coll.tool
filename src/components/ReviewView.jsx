@@ -127,6 +127,31 @@ const getCategoryIconSVG = (catName, color = 'currentColor') => {
   );
 };
 
+const isMonthCompleted = (monthStr) => {
+  if (!monthStr || !monthStr.includes('-')) return false;
+  const [y, m] = monthStr.split('-').map(Number);
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = now.getMonth() + 1;
+  
+  if (y < curY) return true;
+  if (y > curY) return false;
+  if (m < curM) return true;
+  if (m === curM) {
+    const lastDayOfCurMonth = new Date(curY, curM, 0).getDate();
+    const today = now.getDate();
+    return today >= lastDayOfCurMonth;
+  }
+  return false;
+};
+
+const getNextMonthStr = (monthStr) => {
+  if (!monthStr || !monthStr.includes('-')) return '';
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
 /* ══════════════════════════════════════════
    Main component
    ══════════════════════════════════════════ */
@@ -334,6 +359,10 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
     return { color: '#c8d6e5', gradient: 'linear-gradient(135deg, rgba(200,214,229,0.15), rgba(200,214,229,0.04))' };
   };
 
+  const isCompleted = isMonthCompleted(selectedMonth);
+  const nextMonthStr = getNextMonthStr(selectedMonth);
+  const isNextCompleted = isMonthCompleted(nextMonthStr);
+
   return (
     <div className="review-container">
       {/* ═══ Header & Month Selector ═══ */}
@@ -342,9 +371,34 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
         <div className="review-month-nav">
           <button className="glass-btn" style={{ padding: '8px 16px', fontSize: '1.1rem' }} onClick={() => changeMonth(-1)}>◀</button>
           <div className="review-month-label">{monthLabel}</div>
-          <button className="glass-btn" style={{ padding: '8px 16px', fontSize: '1.1rem' }} onClick={() => changeMonth(1)}>▶</button>
+          <button 
+            className="glass-btn" 
+            style={{ 
+              padding: '8px 16px', 
+              fontSize: '1.1rem', 
+              opacity: isNextCompleted ? 1 : 0.4, 
+              cursor: isNextCompleted ? 'pointer' : 'not-allowed' 
+            }} 
+            onClick={() => isNextCompleted && changeMonth(1)}
+            disabled={!isNextCompleted}
+          >
+            ▶
+          </button>
         </div>
       </Section>
+
+      {!isCompleted ? (
+        <Section delay={60}>
+          <div className="glass-card" style={{ padding: '40px 20px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', textAlign: 'center', marginTop: '16px' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⏳</div>
+            <h3 style={{ color: '#fff', fontSize: '1.1rem', fontWeight: '700', marginBottom: '8px' }}>本月份尚未結束</h3>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: '0.82rem', lineHeight: '1.6', margin: 0 }}>
+              每月的財務回顧與統計分析，需等到該月份最後一天（月底）或完全結束後，系統才能為您開啟並計算完整的財務報表。
+            </p>
+          </div>
+        </Section>
+      ) : (
+        <>
 
       {/* ═══ 1. Summary Hero ═══ */}
       <Section delay={60}>
@@ -586,6 +640,9 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
             <div style={{ color: 'var(--text-tertiary)', fontSize: '0.95rem' }}>本月尚無帳務紀錄。</div>
           </div>
         </Section>
+      )}
+
+        </>
       )}
 
       {/* Bottom spacer */}

@@ -1392,7 +1392,8 @@ function App() {
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
 
   const getBudgetProgressText = (newAssets = assets, nextSpendAmount = 0) => {
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    const now = new Date();
+    const currentMonth = now.toISOString().slice(0, 7);
     const budgets = getBudgetForMonth(newAssets, currentMonth);
     const budget = Object.values(budgets).reduce((sum, val) => sum + Number(val || 0), 0) || newAssets.monthlyBudget || 25000;
     const jointSpend = (newAssets.monthlyExpenses || [])
@@ -1400,9 +1401,38 @@ function App() {
       .reduce((sum, r) => sum + (Number(r.total) || 0), 0);
     const totalWithNext = jointSpend + nextSpendAmount;
     const percentage = Math.round((totalWithNext / budget) * 100);
+    const remaining = budget - totalWithNext;
+
+    const curYear = now.getFullYear();
+    const curMonthNum = now.getMonth() + 1;
+    const daysInMonth = new Date(curYear, curMonthNum, 0).getDate();
+    const today = now.getDate();
+
+    // Daily spend pace analytics
+    const dailyAvg = today > 0 ? Math.round(totalWithNext / today) : totalWithNext;
+    const dailyLimit = Math.round(budget / daysInMonth);
+
+    let text = "";
+    if (percentage < 50) {
+      const paceText = dailyAvg <= dailyLimit 
+        ? ` (日均 $${dailyAvg.toLocaleString()} 穩健低於上限 $${dailyLimit.toLocaleString()}！)` 
+        : ` (不過目前日均 $${dailyAvg.toLocaleString()} 略高於上限 $${dailyLimit.toLocaleString()}，中旬請稍微克制喔。)`;
+      text = `🟢 共同預算水位充足！本月已用 ${percentage}% (已用 $${totalWithNext.toLocaleString()}，剩餘 $${remaining.toLocaleString()})${paceText}`;
+    } else if (percentage < 80) {
+      const paceText = dailyAvg <= dailyLimit
+        ? ` (每日花費步調仍在安全範圍內。)`
+        : ` (日均花費 $${dailyAvg.toLocaleString()} 偏高，請減少週末非必要娛樂購物。)`;
+      text = `🟡 預算已消耗過半！目前累計達 ${percentage}% (剩餘 $${remaining.toLocaleString()})${paceText}`;
+    } else if (percentage < 100) {
+      text = `⚠️ 預算黃色警戒！本月已用 ${percentage}% (僅剩 $${remaining.toLocaleString()})，大狗狗與阿陞請開啟省錢節流模式！`;
+    } else {
+      const overdraft = totalWithNext - budget;
+      text = `🚨 預算超支警報！已用 ${percentage}% (已超支 $${overdraft.toLocaleString()})，請大狗狗與阿陞立即暫停非必要開銷！`;
+    }
+
     return {
       percentage,
-      text: `［通知］本月共同花費已達預算 ${percentage}%，請大狗狗與阿陞多加注意！`
+      text
     };
   };
 
