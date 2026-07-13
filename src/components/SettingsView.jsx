@@ -13,7 +13,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { db } from '../firebase';
-import { collection, query, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, startAfter, where } from 'firebase/firestore';
 import { getBudgetForMonth } from '../utils/budgetUtils';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -296,6 +296,8 @@ const SettingsView = ({
   const [logSearchText, setLogSearchText] = useState('');
   const [logFilterAction, setLogFilterAction] = useState('all');
   const [logFilterOperator, setLogFilterOperator] = useState('all');
+  const [logStartDate, setLogStartDate] = useState('');
+  const [logEndDate, setLogEndDate] = useState('');
 
   const filteredLogs = useMemo(() => {
     return dbLogs.filter(log => {
@@ -318,10 +320,21 @@ const SettingsView = ({
     try {
       const logsRef = collection(db, "finance", "data", "operationsLog");
       let q;
+
+      const queryConstraints = [orderBy("timestamp", "desc")];
+      if (logStartDate) {
+        queryConstraints.push(where("timestamp", ">=", logStartDate + "T00:00:00"));
+      }
+      if (logEndDate) {
+        queryConstraints.push(where("timestamp", "<=", logEndDate + "T23:59:59.999Z"));
+      }
+
       if (isInitial) {
-        q = query(logsRef, orderBy("timestamp", "desc"), limit(20));
+        queryConstraints.push(limit(20));
+        q = query(logsRef, ...queryConstraints);
       } else if (lastVisibleDoc) {
-        q = query(logsRef, orderBy("timestamp", "desc"), startAfter(lastVisibleDoc), limit(20));
+        queryConstraints.push(startAfter(lastVisibleDoc), limit(20));
+        q = query(logsRef, ...queryConstraints);
       } else {
         setLoadingLogs(false);
         return;
@@ -365,8 +378,10 @@ const SettingsView = ({
       setLogSearchText('');
       setLogFilterAction('all');
       setLogFilterOperator('all');
+      setLogStartDate('');
+      setLogEndDate('');
     }
-  }, [activeSubTab]);
+  }, [activeSubTab, logStartDate, logEndDate]);
 
   const formatTimestamp = (isoStr) => {
     if (!isoStr) return '';
@@ -711,6 +726,31 @@ const SettingsView = ({
                   <option value="login">🔑 登入異動</option>
                   <option value="calibrate">⚖️ 餘額校正</option>
                 </select>
+              </div>
+
+              {/* Date range pickers */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 起始日期</span>
+                  <input 
+                    type="date" 
+                    value={logStartDate} 
+                    onChange={(e) => setLogStartDate(e.target.value)} 
+                    className="glass-input" 
+                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem', height: '36px', borderRadius: '8px' }}
+                  />
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 結束日期</span>
+                  <input 
+                    type="date" 
+                    value={logEndDate} 
+                    onChange={(e) => setLogEndDate(e.target.value)} 
+                    className="glass-input" 
+                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem', height: '36px', borderRadius: '8px' }}
+                  />
+                </div>
               </div>
 
               <input 
