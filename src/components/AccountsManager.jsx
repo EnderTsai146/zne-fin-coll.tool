@@ -227,6 +227,15 @@ const AccountsManager = ({
     let txRecord = null;
     if (balanceDiff !== 0) {
       const isUs = accCurrency === 'USD';
+      const changeText = balanceDiff > 0 ? `增加 $${balanceDiff.toLocaleString()}` : `減少 $${Math.abs(balanceDiff).toLocaleString()}`;
+      
+      const confirmMessage = editingAccount
+        ? `⚠️ 偵測到帳戶餘額變更！\n【${accNickname}】的餘額將由 $${prevBalance.toLocaleString()} ${accCurrency} 變更為 $${val.toLocaleString()} ${accCurrency}（${changeText}）。\n\n系統將自動產生一筆「餘額校正」紀錄以留下審計軌跡，是否確定儲存？`
+        : `🆕 您為新帳戶【${accNickname}】設定了初始餘額 $${val.toLocaleString()} ${accCurrency}。\n\n系統將自動產生一筆「餘額校正」紀錄作為初始帳面軌跡，是否確定儲存？`;
+
+      const confirmSave = await customConfirm(confirmMessage, "儲存變更確認");
+      if (!confirmSave) return;
+
       const totalTwd = isUs ? Math.round(balanceDiff * (currentFxRate || 31.5)) : balanceDiff;
 
       txRecord = {
