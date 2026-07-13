@@ -917,10 +917,42 @@ const MonthlyView = ({
 
                         {/* Fixed Actions Footer */}
                         <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexShrink: 0 }}>
-                            {detailModalRecord.category !== '作廢退款' && (
+                            {detailModalRecord.isDeleted ? (
+                                <div style={{
+                                    flex: 1,
+                                    padding: '12px 0',
+                                    borderRadius: '10px',
+                                    textAlign: 'center',
+                                    fontSize: '0.86rem',
+                                    fontWeight: '600',
+                                    color: 'rgba(255,255,255,0.4)',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.08)'
+                                }}>
+                                    🗑️ 此交易已被作廢
+                                </div>
+                            ) : detailModalRecord.category === '作廢退款' ? (
+                                <div style={{
+                                    flex: 1,
+                                    padding: '12px 0',
+                                    borderRadius: '10px',
+                                    textAlign: 'center',
+                                    fontSize: '0.86rem',
+                                    fontWeight: '600',
+                                    color: 'rgba(255,255,255,0.4)',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.08)'
+                                }}>
+                                    🚫 作廢退款紀錄不可再次作廢
+                                </div>
+                            ) : (
                                 <button
                                     onClick={async () => {
                                         const rec = detailModalRecord;
+                                        if (rec.isSettled && rec.advancedBy) {
+                                            await customAlert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
+                                            return;
+                                        }
                                         if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
                                             onDelete(rec._context);
                                             setDetailModalRecord(null);

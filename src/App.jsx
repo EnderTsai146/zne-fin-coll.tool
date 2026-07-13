@@ -2067,6 +2067,16 @@ function App() {
       newAssets.jointCash_usd = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
     }
 
+    // Check if any individual account balance drops below 0 (for non-credit-card accounts)
+    if (newAssets.accounts) {
+      for (const a of newAssets.accounts) {
+        if (a.type !== 'credit' && a.balance < 0) {
+          await customAlert(`❌ 帳戶【${a.nickname}】餘額不足以進行此項作廢（作廢後餘額將變為負值 $${a.balance.toLocaleString()} ${a.currency}），操作已取消。`);
+          return;
+        }
+      }
+    }
+
     // Check if any balance went below 0
     if (newAssets.jointCash < 0) {
       await customAlert(`❌ 共同現金餘額不足以扣除此項目 (需額外 $${Math.abs(newAssets.jointCash).toLocaleString()})，無法作廢！`);
