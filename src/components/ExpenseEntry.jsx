@@ -168,13 +168,10 @@ const ExpenseEntry = ({
     });
   };
 
-  const [showMorePers, setShowMorePers] = useState(false);
-  const [showMoreJoint, setShowMoreJoint] = useState(false);
-  const [showMoreInc, setShowMoreInc] = useState(false);
-  const [showMoreBill, setShowMoreBill] = useState(false);
+  const [accountModalConfig, setAccountModalConfig] = useState(null);
 
   // Custom visual grid account picker
-  const renderAccountSelector = (selectedValue, onChange, filterFn = () => true, showMoreState, setShowMoreState, defaultAccField = 'isDefaultExpense') => {
+  const renderAccountSelector = (selectedValue, onChange, filterFn = () => true, defaultAccField = 'isDefaultExpense') => {
     const list = accounts.filter(filterFn);
     if (list.length === 0) {
       return <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '6px' }}>無相符帳戶</div>;
@@ -186,11 +183,14 @@ const ExpenseEntry = ({
     const ownAndJoint = sorted.filter(a => a.owner === userKey || a.owner === 'joint');
     const partnerAccs = sorted.filter(a => a.owner === partnerKey);
     
-    const visibleList = showMoreState ? [...ownAndJoint, ...partnerAccs] : ownAndJoint;
+    // If selected account belongs to partner, append it temporarily to the main list
+    const selectedAcc = accounts.find(a => a.id === selectedValue);
+    const isSelectedPartner = selectedAcc && selectedAcc.owner === partnerKey;
+    const mainList = isSelectedPartner ? [...ownAndJoint, selectedAcc] : ownAndJoint;
     
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
-        {visibleList.map(acc => {
+        {mainList.map(acc => {
           const isSelected = selectedValue === acc.id;
           const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === userKey ? '我 👤' : '伴侶 👥');
           const isCredit = acc.type === 'credit';
@@ -202,7 +202,6 @@ const ExpenseEntry = ({
           else if (acc.type === 'virtual') defaultIcon = '📱';
           
           const iconToRender = acc.icon || defaultIcon;
-          const isDefault = acc[defaultAccField] || false;
           
           return (
             <button
@@ -225,7 +224,7 @@ const ExpenseEntry = ({
                 transition: 'all 0.2s ease',
                 boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
                 minHeight: '52px',
-                gridColumn: isDefault ? 'span 2' : 'span 1'
+                gridColumn: 'span 1'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
@@ -243,10 +242,18 @@ const ExpenseEntry = ({
           );
         })}
         
-        {!showMoreState && partnerAccs.length > 0 && (
+        {partnerAccs.length > 0 && (
           <button
             type="button"
-            onClick={() => setShowMoreState(true)}
+            onClick={() => setAccountModalConfig({
+              title: '選擇伴侶的帳戶 (更多)',
+              list: partnerAccs,
+              selectedValue,
+              onChange: (val) => {
+                onChange(val);
+                setAccountModalConfig(null);
+              }
+            })}
             style={{
               padding: '8px 10px',
               borderRadius: '10px',
@@ -261,35 +268,10 @@ const ExpenseEntry = ({
               justifyContent: 'center',
               minHeight: '52px',
               gridColumn: 'span 2',
-              gap: '4px'
+              gap: '6px'
             }}
           >
-            👥 顯示伴侶的帳戶 (更多)
-          </button>
-        )}
-
-        {showMoreState && partnerAccs.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowMoreState(false)}
-            style={{
-              padding: '8px 10px',
-              borderRadius: '10px',
-              border: '1px dashed rgba(255,255,255,0.15)',
-              background: 'rgba(255,255,255,0.01)',
-              color: 'var(--text-tertiary)',
-              fontSize: '0.78rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: '52px',
-              gridColumn: 'span 2',
-              gap: '4px'
-            }}
-          >
-            收起伴侶帳戶
+            👥 選擇伴侶的帳戶 (更多)
           </button>
         )}
       </div>
@@ -361,28 +343,42 @@ const ExpenseEntry = ({
 
     let updatedAccounts = [...accounts];
 
-    // Correctly combine all cart items' details instead of just using the first item
-    const consolidatedDetails = { food: 0, shopping: 0, entertainment: 0, other: 0 };
-
+    // Deduct from account balances
     for (const item of finalItems) {
-      // Deduct from account balance
       updatedAccounts = updatedAccounts.map(a => {
         if (a.id === item.accountId) return { ...a, balance: a.balance - item.amount };
         return a;
       });
-
-      if (item.cat === '餐費') consolidatedDetails.food += item.amount;
-      else if (item.cat === '購物') consolidatedDetails.shopping += item.amount;
-      else if (item.cat === '娛樂') consolidatedDetails.entertainment += item.amount;
-      else consolidatedDetails.other += item.amount;
     }
 
-    // Call app handler with combined details map and total sum
-    const totalSum = finalItems.reduce((s, e) => s + e.amount, 0);
-    const combinedNotes = finalItems.map(i => i.note || i.cat).join('，');
-    
-    onAddExpense(txDate, consolidatedDetails, totalSum, userKey, combinedNotes, null, updatedAccounts);
-    
+    const payerName = userKey === 'userA' ? '大狗狗🐕' : '阿陞🐶';
+
+    // Generate separate history records
+    const historyRecords = finalItems.map((item, idx) => {
+      const details = { food: 0, shopping: 0, entertainment: 0, other: 0 };
+      if (item.cat === '餐費') details.food = item.amount;
+      else if (item.cat === '購物') details.shopping = item.amount;
+      else if (item.cat === '娛樂') details.entertainment = item.amount;
+      else details.other = item.amount;
+
+      return {
+        id: `exp_${Date.now()}_${idx}`,
+        date: txDate,
+        month: txDate.slice(0, 7),
+        type: 'expense',
+        category: '個人支出',
+        details,
+        total: item.amount,
+        payer: payerName,
+        accountId: item.accountId,
+        note: item.note || item.cat,
+        necessity: 'need'
+      };
+    });
+
+    const finalAssets = { ...assets, accounts: updatedAccounts };
+    onTransaction(finalAssets, historyRecords);
+
     setPersCart([]);
     setPersAmount('');
     setPersNote('');
@@ -452,29 +448,38 @@ const ExpenseEntry = ({
     }
 
     let updatedAccounts = [...accounts];
-    const consolidatedDetails = { food: 0, shopping: 0, entertainment: 0, other: 0 };
 
+    // Deduct from account balances
     for (const item of finalItems) {
       updatedAccounts = updatedAccounts.map(a => {
         if (a.id === item.accountId) return { ...a, balance: a.balance - item.amount };
         return a;
       });
-
-      if (item.cat === '餐費') consolidatedDetails.food += item.amount;
-      else if (item.cat === '購物') consolidatedDetails.shopping += item.amount;
-      else if (item.cat === '娛樂') consolidatedDetails.entertainment += item.amount;
-      else consolidatedDetails.other += item.amount;
     }
 
-    const totalSum = finalItems.reduce((s, e) => s + e.amount, 0);
-    const combinedNotes = finalItems.map(i => i.note || i.cat).join('，');
-    
-    // Joint submit (using joint helper callback)
-    // Note: advancedBy is evaluated based on whether the payee account belongs to joint/userA/userB
-    const sampleAcc = accounts.find(a => a.id === finalItems[0].accountId);
-    const advancedBy = sampleAcc.owner === 'joint' ? null : sampleAcc.owner;
+    const historyRecords = finalItems.map((item, idx) => {
+      const sampleAcc = accounts.find(a => a.id === item.accountId);
+      const advancedBy = sampleAcc.owner === 'joint' ? null : sampleAcc.owner;
 
-    onAddJointExpense(txDate, consolidatedDetails, totalSum, advancedBy, combinedNotes, null, updatedAccounts);
+      return {
+        id: `spend_${Date.now()}_${idx}`,
+        date: txDate,
+        month: txDate.slice(0, 7),
+        type: 'spend',
+        category: '共同支出',
+        total: item.amount,
+        payer: '共同帳戶',
+        accountId: item.accountId,
+        note: item.note ? `${item.cat} - ${item.note}` : item.cat,
+        advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
+        isSettled: false,
+        necessity: 'need',
+        subCategory: item.cat
+      };
+    });
+
+    const finalAssets = { ...assets, accounts: updatedAccounts };
+    onTransaction(finalAssets, historyRecords);
     
     setJointCart([]);
     setJointAmount('');
@@ -563,19 +568,14 @@ const ExpenseEntry = ({
 
     const finalAssets = {
       ...assets,
-      accounts: updatedAccounts,
-      monthlyExpenses: [
-        ...(assets.monthlyExpenses || []),
-        ...newIncomes
-      ]
+      accounts: updatedAccounts
     };
 
-    onTransaction(finalAssets, newIncomes[0]); // Save to cloud
+    onTransaction(finalAssets, newIncomes);
     
     setIncomeCart([]);
     setIncAmount('');
     setIncNote('');
-    await customAlert(`✅ 成功入帳 $${totalSum.toLocaleString()} 元！`);
   };
 
   const handleExecuteBillPay = async () => {
@@ -702,7 +702,7 @@ const ExpenseEntry = ({
                 {/* Account (Visual Grid Picker with default double size and Hide-Partner filter) */}
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 支付帳戶</span>
-                  {renderAccountSelector(persAccountId, setPersAccountId, () => true, showMorePers, setShowMorePers, 'isDefaultExpense')}
+                  {renderAccountSelector(persAccountId, setPersAccountId, () => true, 'isDefaultExpense')}
                 </div>
 
                 {/* Amount */}
@@ -772,9 +772,9 @@ const ExpenseEntry = ({
                 </div>
 
                 {/* Account Selector */}
-                <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 支付帳戶</span>
-                  {renderAccountSelector(jointAccountId, setJointAccountId, () => true, showMoreJoint, setShowMoreJoint, 'isDefaultExpense')}
+                  {renderAccountSelector(jointAccountId, setJointAccountId, () => true, 'isDefaultExpense')}
                 </div>
 
                 {/* Amount */}
@@ -900,7 +900,7 @@ const ExpenseEntry = ({
               {/* Account Selector */}
               <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                 <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 存入帳戶</span>
-                {renderAccountSelector(incAccountId, setIncAccountId, a => a.type !== 'credit', showMoreInc, setShowMoreInc, 'isDefaultIncome')}
+                {renderAccountSelector(incAccountId, setIncAccountId, a => a.type !== 'credit', 'isDefaultIncome')}
               </div>
 
               {/* Amount */}
