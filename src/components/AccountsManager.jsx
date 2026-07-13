@@ -244,6 +244,7 @@ const AccountsManager = ({
         type: 'calibrate',
         category: '餘額校正',
         total: totalTwd,
+        usdAmount: isUs ? balanceDiff : 0,
         accountId: nextId,
         payer: accOwner === 'joint' ? '共同帳戶' : (accOwner === 'userA' ? '大狗狗🐕' : '阿陞🐶'),
         note: editingAccount
@@ -533,12 +534,16 @@ const AccountsManager = ({
       return a;
     });
 
+    const isUs = acc.currency === 'USD';
+    const totalTwd = isUs ? Math.round(diff * (currentFxRate || 31.5)) : diff;
+
     const txRecord = {
       date: calDate,
       month: calDate.slice(0, 7),
       type: 'calibrate',
       category: '餘額校正',
-      total: diff,
+      total: totalTwd,
+      usdAmount: isUs ? diff : 0,
       payer: operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶',
       accountId: calAcc,
       note: calNote.trim() || `餘額手動校正: ${acc.nickname}`,

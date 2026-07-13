@@ -1966,7 +1966,15 @@ function App() {
         break;
       case 'calibrate':
         if (record.accountId) {
-          modifyAccountBalance(record.accountId, -record.total);
+          const acc = updatedAccounts ? updatedAccounts.find(a => a.id === record.accountId) : null;
+          if (acc) {
+            const rollbackAmt = acc.currency === 'USD'
+              ? (record.usdAmount !== undefined ? record.usdAmount : record.total)
+              : record.total;
+            modifyAccountBalance(record.accountId, -rollbackAmt);
+          } else {
+            modifyAccountBalance(record.accountId, -record.total);
+          }
         } else if (record.accountKey) {
           if (record.twdDiff !== undefined) newAssets[record.accountKey] -= record.twdDiff;
           if (record.usdDiff !== undefined) newAssets[`${record.accountKey}_usd`] -= record.usdDiff;
