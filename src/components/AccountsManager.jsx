@@ -791,15 +791,14 @@ const AccountsManager = ({
             color: netWorth >= 0 ? '#34c759' : '#ff453a',
             margin: '0 0 14px 0',
             letterSpacing: '-0.02em',
-            position: 'relative',
-            display: 'inline-block'
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'center',
+            gap: '6px',
+            whiteSpace: 'nowrap'
           }}>
-            ${Math.round(netWorth).toLocaleString()}
+            <span>${Math.round(netWorth).toLocaleString()}</span>
             <span style={{ 
-              position: 'absolute', 
-              left: '100%', 
-              bottom: '4px', 
-              marginLeft: '6px', 
               fontSize: '0.78rem', 
               fontWeight: '600', 
               opacity: 0.6,

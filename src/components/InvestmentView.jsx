@@ -594,15 +594,33 @@ const InvestmentView = ({
 
         {/* Total Investment Asset Valuation */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginTop: '16px' }}>
-          <div className="networth-sub-card">
-            <span className="networth-sub-label">投資總淨值 (TWD)</span>
-            <span className="networth-sub-val" style={{ color: '#8effa2', fontSize: '1.15rem' }}>
+          <div className="networth-sub-card" style={{
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: '12px',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            overflow: 'hidden'
+          }}>
+            <span className="networth-sub-label" style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>投資總淨值 (TWD)</span>
+            <span className="networth-sub-val" style={{ color: '#8effa2', fontSize: '1.12rem', fontWeight: '800', whiteSpace: 'nowrap' }}>
               ${Math.round(totalInvestAssetVal).toLocaleString()}
             </span>
           </div>
-          <div className="networth-sub-card">
-            <span className="networth-sub-label">股票持倉市值 (TWD)</span>
-            <span className="networth-sub-val" style={{ color: '#5ec2ff', fontSize: '1.15rem' }}>
+          <div className="networth-sub-card" style={{
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: '12px',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            overflow: 'hidden'
+          }}>
+            <span className="networth-sub-label" style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>股票持倉市值 (TWD)</span>
+            <span className="networth-sub-val" style={{ color: '#5ec2ff', fontSize: '1.12rem', fontWeight: '800', whiteSpace: 'nowrap' }}>
               ${Math.round(stockNetWorth).toLocaleString()}
             </span>
           </div>
