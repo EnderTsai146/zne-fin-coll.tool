@@ -220,6 +220,29 @@ const AccountsManager = ({
       });
     }
 
+    const nextId = editingAccount ? editingAccount.id : ('acc_' + Date.now());
+    const prevBalance = editingAccount ? editingAccount.balance : 0;
+    const balanceDiff = val - prevBalance;
+
+    let txRecord = null;
+    if (balanceDiff !== 0) {
+      const isUs = accCurrency === 'USD';
+      const totalTwd = isUs ? Math.round(balanceDiff * (currentFxRate || 31.5)) : balanceDiff;
+
+      txRecord = {
+        date: new Date().toISOString().split('T')[0],
+        month: new Date().toISOString().slice(0, 7),
+        type: 'calibrate',
+        category: '餘額校正',
+        total: totalTwd,
+        accountId: nextId,
+        payer: accOwner === 'joint' ? '共同帳戶' : (accOwner === 'userA' ? '大狗狗🐕' : '阿陞🐶'),
+        note: editingAccount
+          ? `📝 編輯帳戶餘額自動調整: ${accNickname} (${prevBalance.toLocaleString()} ➔ ${val.toLocaleString()} ${accCurrency})`
+          : `🆕 新增帳戶設定初始餘額: ${accNickname} (初始餘額: ${val.toLocaleString()} ${accCurrency})`
+      };
+    }
+
     if (editingAccount) {
       // Edit mode
       updatedAccounts = updatedAccounts.map(a => {
@@ -248,7 +271,7 @@ const AccountsManager = ({
     } else {
       // Add mode
       const newAcc = {
-        id: 'acc_' + Date.now(),
+        id: nextId,
         owner: accOwner,
         type: accType,
         name: accName.trim(),
@@ -269,7 +292,12 @@ const AccountsManager = ({
       await customAlert("🎉 帳戶新增成功！", "新增帳戶");
     }
 
-    setAssets({ ...assets, accounts: updatedAccounts });
+    const finalAssets = { ...assets, accounts: updatedAccounts };
+    if (txRecord) {
+      onTransaction(finalAssets, txRecord);
+    } else {
+      setAssets(finalAssets);
+    }
     setShowModal(false);
   };
 
