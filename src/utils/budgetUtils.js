@@ -47,15 +47,18 @@ export const getRecordMainCategory = (r) => {
 };
 
 export const getDailyBudgetLimit = (assets, monthStr, category) => {
-  if (!assets?.budgets) return 0;
+  if (!assets?.budgets || !monthStr || typeof monthStr !== 'string' || !monthStr.includes('-')) return 0;
   const budgets = getBudgetForMonth(assets, monthStr);
   const budgetVal = budgets[category] || 0;
   if (budgetVal <= 0) return 0;
   
-  const [year, month] = monthStr.split('-').map(Number);
-  // Get days in month correctly
+  const parts = monthStr.split('-');
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) return 0;
+  
   const daysInMonth = new Date(year, month, 0).getDate();
-  return budgetVal / daysInMonth;
+  return isNaN(daysInMonth) || daysInMonth <= 0 ? 0 : (budgetVal / daysInMonth);
 };
 
 export const computeDynamicNecessities = (records, assets) => {
