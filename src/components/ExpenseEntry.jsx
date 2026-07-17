@@ -1005,6 +1005,78 @@ const ExpenseEntry = ({
         </div>,
         document.body
       )}
+
+      {/* PARTNER ACCOUNTS POPUP MODAL */}
+      {accountModalConfig && createPortal(
+        <div className="liquid-modal-overlay" onClick={() => setAccountModalConfig(null)}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }}>👥 {accountModalConfig.title || '選擇伴侶的帳戶'}</div>
+              <button onClick={() => setAccountModalConfig(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '16px' }}>
+              {accountModalConfig.list.map(acc => {
+                const isSelected = accountModalConfig.selectedValue === acc.id;
+                const isCredit = acc.type === 'credit';
+                const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+                
+                let defaultIcon = '🏦';
+                if (acc.type === 'cash') defaultIcon = '💵';
+                else if (acc.type === 'credit') defaultIcon = '💳';
+                else if (acc.type === 'virtual') defaultIcon = '📱';
+                
+                const iconToRender = acc.icon || defaultIcon;
+                const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+
+                return (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => {
+                      accountModalConfig.onChange(acc.id);
+                    }}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '10px',
+                      border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                      background: isSelected ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.02)',
+                      color: isSelected ? '#fff' : 'var(--text-secondary)',
+                      fontSize: '0.78rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      transition: 'all 0.2s ease',
+                      boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
+                      minHeight: '52px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {iconToRender} {acc.nickname}
+                      </span>
+                      <span style={{ fontSize: '0.58rem', opacity: 0.7, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                        {ownerLabel}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
+                      ${acc.balance.toLocaleString()} {acc.currency}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button onClick={() => setAccountModalConfig(null)} className="glass-btn" style={{ width: '100%', padding: '10px 0', borderRadius: '8px' }}>
+              關閉
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
