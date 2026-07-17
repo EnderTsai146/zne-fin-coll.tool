@@ -1445,21 +1445,41 @@ function App() {
     }
   };
 
-  const getSnapshot = (currentAssets) => ({
-    userA: currentAssets.userA,
-    userB: currentAssets.userB,
-    userA_usd: currentAssets.userA_usd || 0,
-    userB_usd: currentAssets.userB_usd || 0,
-    jointCash: currentAssets.jointCash,
-    jointCash_usd: currentAssets.jointCash_usd || 0,
-    jointInvestments: { ...(currentAssets.jointInvestments || {}) },
-    userInvestments: currentAssets.userInvestments
-      ? JSON.parse(JSON.stringify(currentAssets.userInvestments))
-      : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } },
-    accounts: currentAssets.accounts
-      ? JSON.parse(JSON.stringify(currentAssets.accounts))
-      : []
-  });
+  const getSnapshot = (currentAssets) => {
+    const accounts = currentAssets.accounts || [];
+    const userA = accounts.length > 0
+      ? accounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0)
+      : (currentAssets.userA || 0);
+    const userB = accounts.length > 0
+      ? accounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0)
+      : (currentAssets.userB || 0);
+    const jointCash = accounts.length > 0
+      ? accounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0)
+      : (currentAssets.jointCash || 0);
+    const userA_usd = accounts.length > 0
+      ? accounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0)
+      : (currentAssets.userA_usd || 0);
+    const userB_usd = accounts.length > 0
+      ? accounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0)
+      : (currentAssets.userB_usd || 0);
+    const jointCash_usd = accounts.length > 0
+      ? accounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0)
+      : (currentAssets.jointCash_usd || 0);
+
+    return {
+      userA,
+      userB,
+      userA_usd,
+      userB_usd,
+      jointCash,
+      jointCash_usd,
+      jointInvestments: { ...(currentAssets.jointInvestments || {}) },
+      userInvestments: currentAssets.userInvestments
+        ? JSON.parse(JSON.stringify(currentAssets.userInvestments))
+        : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } },
+      accounts: JSON.parse(JSON.stringify(accounts))
+    };
+  };
 
   const logOperation = (newAssets, actionType, detail) => {
     const timestamp = new Date().toISOString();
@@ -1599,15 +1619,27 @@ function App() {
     const timestamp = new Date().toISOString();
     const records = Array.isArray(historyRecordsInput) ? historyRecordsInput : [historyRecordsInput];
 
-    const finalAssets = {
+    // Recalculate legacy properties for state consistency
+    const accounts = newAssets.accounts || [];
+    const syncedNewAssets = {
       ...newAssets,
+      userA: accounts.length > 0 ? accounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0) : (newAssets.userA || 0),
+      userB: accounts.length > 0 ? accounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0) : (newAssets.userB || 0),
+      jointCash: accounts.length > 0 ? accounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0) : (newAssets.jointCash || 0),
+      userA_usd: accounts.length > 0 ? accounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0) : (newAssets.userA_usd || 0),
+      userB_usd: accounts.length > 0 ? accounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0) : (newAssets.userB_usd || 0),
+      jointCash_usd: accounts.length > 0 ? accounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0) : (newAssets.jointCash_usd || 0)
+    };
+
+    const finalAssets = {
+      ...syncedNewAssets,
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
         ...records.map(r => ({
           ...r,
           operator: operatorName,
           timestamp: timestamp,
-          auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) }
+          auditTrail: { before: getSnapshot(assets), after: getSnapshot(syncedNewAssets) }
         }))
       ]
     };

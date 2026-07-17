@@ -589,6 +589,56 @@ const MonthlyView = ({
                                                 <div style={{ fontWeight: '700', fontSize: '0.88rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     {record.note || record.category}
                                                 </div>
+
+                                                {/* Line 3: Account info change */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                                    {(() => {
+                                                        const sourceAcc = assets.accounts?.find(a => a.id === record.accountId);
+                                                        const targetAcc = assets.accounts?.find(a => a.id === record.targetAccountId);
+                                                        
+                                                        if (record.type === 'transfer') {
+                                                            const srcName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '未指定帳戶';
+                                                            const tgtName = targetAcc ? `${targetAcc.icon || '🏦'} ${targetAcc.nickname}` : '未指定帳戶';
+                                                            return (
+                                                                <span>
+                                                                    🔁 資金劃撥：<strong style={{ color: '#0a84ff' }}>{srcName}</strong> ➡️ <strong style={{ color: '#0a84ff' }}>{tgtName}</strong>
+                                                                </span>
+                                                            );
+                                                        } else if (record.type === 'exchange') {
+                                                            const srcName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '未指定帳戶';
+                                                            const tgtName = targetAcc ? `${targetAcc.icon || '🏦'} ${targetAcc.nickname}` : '未指定帳戶';
+                                                            return (
+                                                                <span>
+                                                                    💱 外幣換匯：<strong style={{ color: '#ff9500' }}>{srcName}</strong> ➡️ <strong style={{ color: '#ff9500' }}>{tgtName}</strong>
+                                                                </span>
+                                                            );
+                                                        } else {
+                                                            const accName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '';
+                                                            if (accName) {
+                                                                const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
+                                                                return (
+                                                                    <span>
+                                                                        💳 交易帳戶：<strong style={{ color: '#8effa2' }}>{accName}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
+                                                                    </span>
+                                                                );
+                                                            } else {
+                                                                const getLegacyPayerName = (p) => {
+                                                                    if (!p) return '未指定';
+                                                                    if (p.includes('大狗狗') || p === 'userA') return '大狗狗個人';
+                                                                    if (p.includes('阿陞') || p === 'userB') return '阿陞個人';
+                                                                    if (p.includes('共同') || p === 'jointCash' || p === 'joint') return '共同帳戶';
+                                                                    return p;
+                                                                };
+                                                                const legacyPayer = getLegacyPayerName(record.payer);
+                                                                return (
+                                                                    <span>
+                                                                        💳 交易帳戶：<strong style={{ color: 'var(--text-tertiary)' }}>{legacyPayer} (舊資料)</strong>
+                                                                    </span>
+                                                                );
+                                                            }
+                                                        }
+                                                    })()}
+                                                </div>
                                             </div>
 
                                             {/* Right Column: Amount & Member */}

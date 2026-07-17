@@ -1,5 +1,5 @@
 // src/components/ExpenseEntry.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import SegmentedControl from './SegmentedControl';
 
@@ -59,17 +59,22 @@ const ExpenseEntry = ({
   const [persAccountId, setPersAccountId] = useState('');
   const [persCart, setPersCart] = useState([]);
 
+  const lastUserKeyRef = useRef(userKey);
+
   // Auto pre-select default account for personal expense prioritising own account
   useEffect(() => {
+    const isUserChanged = lastUserKeyRef.current !== userKey;
+    lastUserKeyRef.current = userKey;
+
     const myDefault = accounts.find(a => a.owner === userKey && a.isDefaultExpense) || 
                       accounts.find(a => a.owner === 'joint' && a.isDefaultExpense) || 
                       accounts.find(a => a.owner === userKey) || 
                       accounts.find(a => a.owner === 'joint') || 
                       accounts[0];
-    if (myDefault && !persAccountId) {
+    if (myDefault && (!persAccountId || isUserChanged)) {
       setPersAccountId(myDefault.id);
     }
-  }, [accounts, userKey]);
+  }, [accounts, userKey, persAccountId]);
 
   // ==========================================
   // 2. Joint Expense States
@@ -97,17 +102,22 @@ const ExpenseEntry = ({
   const [incAccountId, setIncAccountId] = useState('');
   const [incomeCart, setIncomeCart] = useState([]);
 
+  const lastUserKeyIncRef = useRef(userKey);
+
   // Auto pre-select default account for income
   useEffect(() => {
+    const isUserChanged = lastUserKeyIncRef.current !== userKey;
+    lastUserKeyIncRef.current = userKey;
+
     const defaultInc = accounts.find(a => a.owner === userKey && a.isDefaultIncome) || 
                        accounts.find(a => a.owner === 'joint' && a.isDefaultIncome) || 
                        accounts.find(a => a.owner === userKey) || 
                        accounts.find(a => a.owner === 'joint') || 
                        accounts[0];
-    if (defaultInc && !incAccountId) {
+    if (defaultInc && (!incAccountId || isUserChanged)) {
       setIncAccountId(defaultInc.id);
     }
-  }, [accounts, userKey]);
+  }, [accounts, userKey, incAccountId]);
 
   // ==========================================
   // 4. Bills States
@@ -116,16 +126,21 @@ const ExpenseEntry = ({
   const [selectedBill, setSelectedBill] = useState(null);
   const [billPayAccountId, setBillPayAccountId] = useState('');
 
+  const lastUserKeyBillRef = useRef(userKey);
+
   // Pre-select default bill payment account
   useEffect(() => {
+    const isUserChanged = lastUserKeyBillRef.current !== userKey;
+    lastUserKeyBillRef.current = userKey;
+
     const defaultBillPay = accounts.find(a => a.owner === userKey && a.isDefaultExpense) || 
                            accounts.find(a => a.owner === 'joint' && a.isDefaultExpense) || 
                            accounts.find(a => a.owner === 'joint') || 
                            accounts[0];
-    if (defaultBillPay && !billPayAccountId) {
+    if (defaultBillPay && (!billPayAccountId || isUserChanged)) {
       setBillPayAccountId(defaultBillPay.id);
     }
-  }, [accounts, userKey]);
+  }, [accounts, userKey, billPayAccountId]);
 
   // Helper check for bills approaching
   const isApproaching = (dueDateStr) => {
@@ -192,7 +207,7 @@ const ExpenseEntry = ({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
         {mainList.map(acc => {
           const isSelected = selectedValue === acc.id;
-          const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === userKey ? '我 👤' : '伴侶 👥');
+          const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
           const isCredit = acc.type === 'credit';
           const balanceColor = isCredit ? '#ff9500' : '#8effa2';
           
@@ -581,7 +596,7 @@ const ExpenseEntry = ({
   const handleExecuteBillPay = async () => {
     if (!billPayAccountId || !selectedBill) return;
     const acc = accounts.find(a => a.id === billPayAccountId);
-    const amount = selectedBill.amount;
+    const amount = selectedBill.amount || 0;
 
     if (acc.type !== 'credit' && acc.balance < amount) {
       await customAlert(`❌ 帳戶【${acc.nickname}】餘額不足以支付此筆帳單！`);
@@ -593,10 +608,24 @@ const ExpenseEntry = ({
       return a;
     });
 
+    // Increment nextDate by 1 month
+    const updatedBills = (assets.bills || []).map(b => {
+      if (b.id === selectedBill.id) {
+        const oldDate = new Date(b.nextDate);
+        oldDate.setMonth(oldDate.getMonth() + 1);
+        const yyyy = oldDate.getFullYear();
+        const mm = String(oldDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(oldDate.getDate()).padStart(2, '0');
+        return { ...b, nextDate: `${yyyy}-${mm}-${dd}` };
+      }
+      return b;
+    });
+
     const targetTimestamp = new Date().toISOString();
     const finalAssets = {
       ...assets,
       accounts: updatedAccounts,
+      bills: updatedBills,
       monthlyExpenses: [
         ...(assets.monthlyExpenses || []),
         {
@@ -605,7 +634,7 @@ const ExpenseEntry = ({
           type: 'spend',
           category: '共同支出',
           total: amount,
-          note: `[帳單繳款] ${selectedBill.note || selectedBill.category}`,
+          note: `[帳單繳款] ${selectedBill.note || selectedBill.category || selectedBill.name}`,
           operator: loggedInUserName,
           payer: '共同帳戶',
           accountId: billPayAccountId,
@@ -613,7 +642,7 @@ const ExpenseEntry = ({
           isSettled: false,
           timestamp: targetTimestamp,
           necessity: 'need',
-          subCategory: selectedBill.category
+          subCategory: selectedBill.category || selectedBill.name || '常態帳單'
         }
       ]
     };
@@ -621,7 +650,7 @@ const ExpenseEntry = ({
     setAssets(finalAssets);
     onTransaction(finalAssets, []); // Trigger cloud save
     setShowBillPayModal(false);
-    await customAlert(`✅ 帳單【${selectedBill.note || selectedBill.category}】繳費成功！\n由帳戶【${acc.nickname}】支付 $${amount.toLocaleString()}`);
+    await customAlert(`✅ 帳單【${selectedBill.note || selectedBill.category || selectedBill.name}】繳費成功！\n由帳戶【${acc.nickname}】支付 $${amount.toLocaleString()}`);
   };
 
   const safeBills = assets.bills || [];
@@ -853,11 +882,11 @@ const ExpenseEntry = ({
                         }}
                       >
                         <span className="inset-group-label" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: '750', fontSize: '0.84rem', color: '#fff' }}>{bill.note || bill.category}</span>
-                          <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>繳費日: 每月 {bill.date} 號 | 下次: {bill.nextDate}</span>
+                          <span style={{ fontWeight: '750', fontSize: '0.84rem', color: '#fff' }}>{bill.note || bill.category || bill.name}</span>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>繳費日: 每月 {bill.date || (bill.nextDate ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate}</span>
                         </span>
                         <span className="inset-group-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                          <strong style={{ color: '#fff', fontSize: '0.88rem' }}>${bill.amount.toLocaleString()} TWD</strong>
+                          <strong style={{ color: '#fff', fontSize: '0.88rem' }}>${(bill.amount || 0).toLocaleString()} TWD</strong>
                           {isNear && <span style={{ fontSize: '0.58rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>即將到期</span>}
                         </span>
                       </div>
@@ -965,7 +994,7 @@ const ExpenseEntry = ({
 
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '6px' }}>請選擇扣款支付帳戶</label>
-              {renderAccountSelector(billPayAccountId, setBillPayAccountId, () => true, showMoreBill, setShowMoreBill, 'isDefaultExpense')}
+              {renderAccountSelector(billPayAccountId, setBillPayAccountId, () => true, 'isDefaultExpense')}
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>

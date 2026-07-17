@@ -575,6 +575,8 @@ const AccountsManager = ({
           
           const iconToRender = acc.icon || defaultIcon;
           
+          const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+          
           return (
             <button
               key={acc.id}
@@ -598,9 +600,12 @@ const AccountsManager = ({
                 minHeight: '52px'
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {iconToRender} {acc.nickname}
+                </span>
+                <span style={{ fontSize: '0.58rem', opacity: 0.7, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                  {ownerLabel}
                 </span>
               </div>
               <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
@@ -788,14 +793,14 @@ const AccountsManager = ({
           <h1 style={{
             fontSize: '1.8rem',
             fontWeight: '850',
-            color: netWorth >= 0 ? '#34c759' : '#ff453a',
-            margin: '0 0 14px 0',
+            margin: '0 auto 14px auto',
             letterSpacing: '-0.02em',
             display: 'flex',
             alignItems: 'baseline',
             justifyContent: 'center',
             gap: '6px',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            width: 'fit-content'
           }}>
             <span>${Math.round(netWorth).toLocaleString()}</span>
             <span style={{ 
@@ -1141,20 +1146,67 @@ const AccountsManager = ({
                 />
               </div>
 
-              {/* Custom Icon Field */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>
-                  帳戶圖示 (Emoji / 單個國字或英文字)
+              {/* Custom Icon Field Redesigned */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '14px 0 10px 0' }}>
+                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>
+                  帳戶圖示 (點擊 Emoji 圖案變更)
                 </label>
-                <input
-                  disabled={isReadOnly}
-                  type="text"
-                  value={accIcon}
-                  onChange={(e) => setAccIcon(cleanIconInput(e.target.value))}
-                  placeholder="例如：🏦、💵、💳、📱、A"
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                />
+                <div style={{ position: 'relative', width: '56px', height: '56px' }}>
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1.5px dashed rgba(255, 255, 255, 0.25)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    fontSize: '1.8rem',
+                    pointerEvents: 'none',
+                    transition: 'all 0.2s ease-in-out'
+                  }}>
+                    {accIcon || '🏦'}
+                  </div>
+                  <input
+                    disabled={isReadOnly}
+                    type="text"
+                    value={accIcon}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (!val) {
+                        setAccIcon('');
+                        return;
+                      }
+                      try {
+                        const segmenter = new Intl.Segmenter();
+                        const segments = [...segmenter.segment(val)].map(s => s.segment);
+                        if (segments.length > 0) {
+                          setAccIcon(segments[segments.length - 1]);
+                        } else {
+                          setAccIcon('');
+                        }
+                      } catch (err) {
+                        const chars = Array.from(val);
+                        if (chars.length > 0) {
+                          setAccIcon(chars[chars.length - 1]);
+                        } else {
+                          setAccIcon('');
+                        }
+                      }
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: isReadOnly ? 'default' : 'pointer',
+                      border: 'none',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Account Number */}
