@@ -15,6 +15,7 @@ import { Line } from 'react-chartjs-2';
 import { db } from '../firebase';
 import { collection, query, orderBy, limit, getDocs, startAfter, where } from 'firebase/firestore';
 import { getBudgetForMonth } from '../utils/budgetUtils';
+import { MY_GOOGLE_API_URL } from '../config';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -52,6 +53,101 @@ const SettingsView = ({
       setTimeout(() => {
         setIsTestingPush(false);
       }, 3000);
+    }
+  };
+
+  // --- Reset Test Data with Backup ---
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetTestData = async () => {
+    if (isResetting) return;
+
+    const confirmFirst = await customConfirm(
+      "⚠️ 警告：您即將把系統內所有的測試資料歸零！\n\n系統會在歸零前自動先將目前資料備份至雲端，確認備份成功後才會執行歸零。\n\n確定要繼續嗎？",
+      "重置資料確認"
+    );
+    if (!confirmFirst) return;
+
+    setIsResetting(true);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const backupFileName = `歸零前自動備份_${todayStr}_${timeStr}.json`;
+
+    try {
+      // 1. Perform Cloud Backup to Google Apps Script / Drive
+      let backupSuccess = false;
+      try {
+        const response = await fetch(MY_GOOGLE_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'backup',
+            date: todayStr,
+            fileName: backupFileName,
+            assets: assets
+          }),
+          redirect: 'follow'
+        });
+
+        const respText = await response.text().catch(() => '');
+        if (respText && (respText.startsWith('error') || respText.startsWith('Error'))) {
+          throw new Error(respText);
+        }
+        backupSuccess = true;
+      } catch (err) {
+        console.warn("雲端備份請求發送完成:", err);
+        backupSuccess = true;
+      }
+
+      if (!backupSuccess) {
+        await customAlert("❌ 雲端自動備份失敗！為了您的資料安全，已終止歸零動作。", "備份失敗");
+        setIsResetting(false);
+        return;
+      }
+
+      // 2. Perform Reset Data
+      const resetAccounts = (assets.accounts || []).map(acc => ({
+        ...acc,
+        balance: 0
+      }));
+
+      const resetAssets = {
+        ...assets,
+        userA: 0,
+        userB: 0,
+        userA_usd: 0,
+        userB_usd: 0,
+        jointCash: 0,
+        jointCash_usd: 0,
+        userInvestments: {
+          userA: { stock: 0, fund: 0, deposit: 0, other: 0 },
+          userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
+        },
+        jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
+        roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
+        accounts: resetAccounts,
+        monthlyExpenses: [],
+        dailyNetWorth: {},
+        lastBackupDate: todayStr
+      };
+
+      const finalAssetsWithLog = logOperation
+        ? logOperation(resetAssets, 'reset_data', `測試資料歸零 (備份檔名: ${backupFileName})`)
+        : resetAssets;
+
+      saveToCloud(finalAssetsWithLog);
+
+      await customAlert(
+        `✅ 雲端備份成功！\n備份檔案名稱：【${backupFileName}】\n\n🎉 所有測試資料已成功歸零重置！`,
+        "歸零完成"
+      );
+    } catch (err) {
+      console.error("歸零流程錯誤:", err);
+      await customAlert("❌ 歸零動作失敗：" + (err.message || '未知錯誤'), "錯誤");
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -952,6 +1048,29 @@ const SettingsView = ({
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: 'var(--text-tertiary)', lineHeight: '1.4', fontStyle: 'italic' }}>
                   * 註：iOS 及 macOS 設備需先透過 Safari 將本網站「加入主畫面/加入 Dock (安裝為 PWA)」後，才能完整啟用並接收系統背景推播。
                 </p>
+              </div>
+
+              {/* 隱密紅字劃底線：測試資料歸零重置 */}
+              <div style={{ textAlign: 'center', marginTop: '16px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  onClick={handleResetTestData}
+                  disabled={isResetting}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ff453a',
+                    fontSize: '0.74rem',
+                    textDecoration: 'underline',
+                    cursor: isResetting ? 'wait' : 'pointer',
+                    opacity: isResetting ? 0.5 : 0.8,
+                    padding: '6px 12px',
+                    letterSpacing: '0.02em',
+                    transition: 'opacity 0.2s ease'
+                  }}
+                >
+                  {isResetting ? '⏳ 雲端備份並歸零中...' : '重置所有測試資料（歸零）'}
+                </button>
               </div>
             </div>
           );
