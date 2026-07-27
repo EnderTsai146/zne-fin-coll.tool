@@ -26,6 +26,7 @@ const SettingsView = ({
   operatorName,
   customAlert,
   customConfirm,
+  customPrompt,
   activeSubTab,
   setActiveSubTab,
   logOperation,
@@ -62,11 +63,30 @@ const SettingsView = ({
   const handleResetTestData = async () => {
     if (isResetting) return;
 
+    // 第一層驗證：確認詢問框
     const confirmFirst = await customConfirm(
       "⚠️ 警告：您即將把系統內所有的測試資料歸零！\n\n系統會在歸零前自動先將目前資料備份至雲端，確認備份成功後才會執行歸零。\n\n確定要繼續嗎？",
       "重置資料確認"
     );
     if (!confirmFirst) return;
+
+    // 第二層驗證：要求輸入完整「DELETE」字串
+    let inputVal = '';
+    if (customPrompt) {
+      inputVal = await customPrompt(
+        "🛡️ 二次安全驗證：\n為防範誤觸歸零，請在下方輸入框中輸入「DELETE」（全大寫）：",
+        "",
+        "確認歸零驗證"
+      );
+    } else {
+      inputVal = window.prompt("🛡️ 二次安全驗證：\n為防範誤觸歸零，請在下方輸入框中輸入「DELETE」（全大寫）：");
+    }
+
+    if (inputVal === null || inputVal === undefined) return; // 用戶點擊取消
+    if (inputVal.trim() !== "DELETE") {
+      await customAlert("❌ 驗證失敗：您輸入的文字不符合「DELETE」，已取消歸零操作。", "驗證未通過");
+      return;
+    }
 
     setIsResetting(true);
 

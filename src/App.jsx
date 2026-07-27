@@ -2444,6 +2444,7 @@ function App() {
             operatorName={operatorName}
             customAlert={customAlert}
             customConfirm={customConfirm}
+            customPrompt={customPrompt}
             activeSubTab={settingsSubTab}
             setActiveSubTab={setSettingsSubTab}
             logOperation={logOperation}
