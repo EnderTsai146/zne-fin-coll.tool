@@ -136,7 +136,7 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
   };
 
   return (
-    <div className="bottom-nav" ref={navRef}>
+    <div className="bottom-nav bottom-nav-mobile" ref={navRef}>
       {/* Liquid glass sliding pill */}
       <div className="nav-pill" style={pillStyle} />
       {NAV_ITEMS.map((item, idx) => {
@@ -2379,80 +2379,144 @@ function App() {
         </div>
       )}
 
-      <div key={currentPage} className="page-transition-enter" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+      <div className="app-layout-desktop">
+        <aside className="desktop-sidebar">
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '28px', paddingLeft: '6px' }}>
+              <span style={{ fontSize: '1.8rem' }}>🥔</span>
+              <div>
+                <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', letterSpacing: '-0.02em' }}>馬鈴薯管家</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>Apple Liquid Glass Edition</div>
+              </div>
+            </div>
 
-        {currentPage === 'overview' && (
-          <TotalOverview
-            key="overview"
-            assets={assets}
-            combinedHistory={combinedHistory}
-            loadArchiveMonth={loadArchiveMonth}
-            isFetchingArchive={isFetchingArchive}
-            setAssets={handleAssetsUpdate}
-            currentFxRate={currentFxRate}
-            setCurrentFxRate={setCurrentFxRate}
-            hasNewUpdate={hasNewUpdate}
-            onOpenChangelog={handleOpenChangelog}
-          />
-        )}
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: '10px', paddingLeft: '8px', fontWeight: '700' }}>
+              主功能選單
+            </div>
 
-        {currentPage === 'monthly' && (
-          <ReviewAndDatabaseView
-            assets={assets}
-            combinedHistory={combinedHistory}
-            loadArchiveMonth={loadArchiveMonth}
-            isFetchingArchive={isFetchingArchive}
-            setAssets={handleAssetsUpdate}
-            currentFxRate={currentFxRate}
-            onTransaction={handleTransaction}
-            customAlert={customAlert}
-            customConfirm={customConfirm}
-            customPrompt={customPrompt}
-            newlyAddedRecordTimestamp={newlyAddedRecordTimestamp}
-            subTab={monthlyViewSubTab}
-            onChangeSubTab={setMonthlyViewSubTab}
-            onDelete={handleDeleteTransaction}
-            onEdit={handleEditTransaction}
-            currentUser={operatorName}
-            logOperation={logOperation}
-          />
-        )}
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {[
+                { id: 'overview', label: '總覽', icon: '🏠' },
+                { id: 'expense', label: '記帳', icon: '✍️' },
+                { id: 'monthly', label: '財務資料庫', icon: '📊' },
+                { id: 'invest', label: '投資', icon: '📈' },
+                { id: 'accounts', label: '帳戶管理', icon: '🏦' },
+                { id: 'settings', label: '設定', icon: '⚙️' },
+              ].map(item => {
+                const isActive = currentPage === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handlePageChange(item.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '14px',
+                      border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid transparent',
+                      background: isActive ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
+                      color: isActive ? '#ffffff' : 'var(--text-secondary)',
+                      fontSize: '0.9rem',
+                      fontWeight: isActive ? '750' : '500',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                      boxShadow: isActive ? '0 4px 20px rgba(0, 0, 0, 0.2)' : 'none'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.1rem' }}>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
 
-        {currentPage === 'invest' && (
-          <InvestmentView
-            key="invest"
-            assets={assets}
-            setAssets={handleAssetsUpdate}
-            isFetchingArchive={isFetchingArchive}
-            newlyAddedInvestSymbol={newlyAddedInvestSymbol}
-            newlyAddedInvestPayer={newlyAddedInvestPayer}
-            operatorName={operatorName}
-            customAlert={customAlert}
-            customConfirm={customConfirm}
-            customPrompt={customPrompt}
-            currentFxRate={currentFxRate}
-            onTransaction={handleTransaction}
-          />
-        )}
-        {currentPage === 'accounts' && <AccountsManager key="accounts" assets={assets} setAssets={handleAssetsUpdate} currentUser={currentUser} operatorName={operatorName} customAlert={customAlert} customConfirm={customConfirm} currentFxRate={currentFxRate} onTransaction={handleTransaction} />}
-        {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={operatorName} />}
-        {currentPage === 'settings' && (
-          <SettingsView
-            assets={assets}
-            saveToCloud={handleAssetsUpdate}
-            currentUser={currentUser}
-            operatorName={operatorName}
-            customAlert={customAlert}
-            customConfirm={customConfirm}
-            customPrompt={customPrompt}
-            activeSubTab={settingsSubTab}
-            setActiveSubTab={setSettingsSubTab}
-            logOperation={logOperation}
-            onRequestNotificationPermission={handleRegisterNotification}
-            fcmDiagnostic={fcmDiagnostic}
-            onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`, true)}
-          />
-        )}
+          <div style={{ padding: '14px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>當前使用者</div>
+            <div style={{ fontSize: '0.9rem', fontWeight: '750', color: '#fff', marginTop: '2px' }}>
+              {operatorName || '系統成員'}
+            </div>
+          </div>
+        </aside>
+
+        <div className="desktop-main-canvas">
+          <div key={currentPage} className="page-transition-enter">
+            {currentPage === 'overview' && (
+              <TotalOverview
+                key="overview"
+                assets={assets}
+                combinedHistory={combinedHistory}
+                loadArchiveMonth={loadArchiveMonth}
+                isFetchingArchive={isFetchingArchive}
+                setAssets={handleAssetsUpdate}
+                currentFxRate={currentFxRate}
+                setCurrentFxRate={setCurrentFxRate}
+                hasNewUpdate={hasNewUpdate}
+                onOpenChangelog={handleOpenChangelog}
+              />
+            )}
+
+            {currentPage === 'monthly' && (
+              <ReviewAndDatabaseView
+                assets={assets}
+                combinedHistory={combinedHistory}
+                loadArchiveMonth={loadArchiveMonth}
+                isFetchingArchive={isFetchingArchive}
+                setAssets={handleAssetsUpdate}
+                currentFxRate={currentFxRate}
+                onTransaction={handleTransaction}
+                customAlert={customAlert}
+                customConfirm={customConfirm}
+                customPrompt={customPrompt}
+                newlyAddedRecordTimestamp={newlyAddedRecordTimestamp}
+                subTab={monthlyViewSubTab}
+                onChangeSubTab={setMonthlyViewSubTab}
+                onDelete={handleDeleteTransaction}
+                onEdit={handleEditTransaction}
+                currentUser={operatorName}
+                logOperation={logOperation}
+              />
+            )}
+
+            {currentPage === 'invest' && (
+              <InvestmentView
+                key="invest"
+                assets={assets}
+                setAssets={handleAssetsUpdate}
+                isFetchingArchive={isFetchingArchive}
+                newlyAddedInvestSymbol={newlyAddedInvestSymbol}
+                newlyAddedInvestPayer={newlyAddedInvestPayer}
+                operatorName={operatorName}
+                customAlert={customAlert}
+                customConfirm={customConfirm}
+                customPrompt={customPrompt}
+                currentFxRate={currentFxRate}
+                onTransaction={handleTransaction}
+              />
+            )}
+            {currentPage === 'accounts' && <AccountsManager key="accounts" assets={assets} setAssets={handleAssetsUpdate} currentUser={currentUser} operatorName={operatorName} customAlert={customAlert} customConfirm={customConfirm} currentFxRate={currentFxRate} onTransaction={handleTransaction} />}
+            {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={operatorName} />}
+            {currentPage === 'settings' && (
+              <SettingsView
+                assets={assets}
+                saveToCloud={handleAssetsUpdate}
+                currentUser={currentUser}
+                operatorName={operatorName}
+                customAlert={customAlert}
+                customConfirm={customConfirm}
+                customPrompt={customPrompt}
+                activeSubTab={settingsSubTab}
+                setActiveSubTab={setSettingsSubTab}
+                logOperation={logOperation}
+                onRequestNotificationPermission={handleRegisterNotification}
+                fcmDiagnostic={fcmDiagnostic}
+                onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`, true)}
+              />
+            )}
+          </div>
+        </div>
       </div>
 
       <BottomNav currentPage={currentPage} onPageChange={handlePageChange} assets={assets} lastActiveCenterTab={lastActiveCenterTab} />

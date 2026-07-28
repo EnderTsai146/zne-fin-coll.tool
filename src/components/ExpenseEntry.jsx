@@ -735,11 +735,55 @@ const ExpenseEntry = ({
                 </div>
 
                 {/* Amount */}
-                <div className="inset-group-row">
-                  <span className="inset-group-label">💵 金額</span>
-                  <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                    <input type="text" inputMode="numeric" className="inset-group-input" value={persAmount} onChange={(e) => setPersAmount(formatInputMoney(e.target.value))} placeholder="$0" />
-                  </span>
+                <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="inset-group-label">💵 金額</span>
+                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                      <input type="text" inputMode="numeric" className="inset-group-input tabular-nums" value={persAmount} onChange={(e) => setPersAmount(formatInputMoney(e.target.value))} placeholder="$0" style={{ fontSize: '1.2rem', fontWeight: '800' }} />
+                    </span>
+                  </div>
+
+                  {/* Quick Increment Buttons */}
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                    {[100, 500, 1000].map(amt => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => {
+                          const current = parseMoney(persAmount);
+                          setPersAmount(formatInputMoney(current + amt));
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: 'rgba(255,255,255,0.05)',
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.72rem',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        +{amt}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setPersAmount('')}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255,69,58,0.2)',
+                        background: 'rgba(255,69,58,0.08)',
+                        color: 'var(--accent-red)',
+                        fontSize: '0.72rem',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      清空
+                    </button>
+                  </div>
                 </div>
 
                 {/* Note */}
