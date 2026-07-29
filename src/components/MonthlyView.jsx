@@ -97,9 +97,9 @@ const MonthlyView = ({
             if (filterType !== 'all') {
                 if (filterType === 'expense' && record.type !== 'expense' && record.type !== 'spend') return false;
                 if (filterType === 'income' && record.type !== 'income') return false;
-                if (filterType === 'transfer' && record.type !== 'transfer') return false;
-                if (filterType === 'exchange' && record.type !== 'exchange') return false;
-                if (filterType === 'calibrate' && record.type !== 'calibrate') return false;
+                if (filterType === 'transfer' && record.type !== 'transfer' && record.category !== '資產劃撥') return false;
+                if (filterType === 'exchange' && record.type !== 'exchange' && record.category !== '貨幣換匯') return false;
+                if (filterType === 'calibrate' && record.type !== 'calibrate' && record.category !== '餘額校正' && !record.note?.includes('校正')) return false;
             }
             
             // User filter

@@ -13,7 +13,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { db } from '../firebase';
-import { collection, query, orderBy, limit, getDocs, startAfter, where } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, startAfter, where, deleteDoc } from 'firebase/firestore';
 import { getBudgetForMonth } from '../utils/budgetUtils';
 import { MY_GOOGLE_API_URL } from '../config';
 
@@ -154,6 +154,17 @@ const SettingsView = ({
         lastBackupDate: todayStr
       };
 
+      // 3. Clear Firestore operationsLog collection (審計軌跡歷史紀錄全面抹除歸零)
+      try {
+        const logsRef = collection(db, "finance", "data", "operationsLog");
+        const snapshot = await getDocs(logsRef);
+        const deletePromises = snapshot.docs.map(docSnap => deleteDoc(docSnap.ref));
+        await Promise.all(deletePromises);
+        setDbLogs([]);
+      } catch (logWipeErr) {
+        console.warn("Wiping operationsLog failed:", logWipeErr);
+      }
+
       const finalAssetsWithLog = logOperation
         ? logOperation(resetAssets, 'reset_data', `測試資料歸零 (備份檔名: ${backupFileName})`)
         : resetAssets;
@@ -161,7 +172,7 @@ const SettingsView = ({
       saveToCloud(finalAssetsWithLog);
 
       await customAlert(
-        `✅ 雲端備份成功！\n備份檔案名稱：【${backupFileName}】\n\n🎉 所有測試資料已成功歸零重置！`,
+        `✅ 雲端備份成功！\n備份檔案名稱：【${backupFileName}】\n\n🎉 所有測試資料與審計軌跡紀錄已成功完全歸零抹除，回復初始狀態！`,
         "歸零完成"
       );
     } catch (err) {
@@ -421,7 +432,19 @@ const SettingsView = ({
       const matchesSearch = logSearchText 
         ? (log.detail?.toLowerCase().includes(logSearchText.toLowerCase()) || log.operator?.toLowerCase().includes(logSearchText.toLowerCase())) 
         : true;
-      const matchesAction = logFilterAction === 'all' ? true : log.action === logFilterAction;
+      const matchesAction = logFilterAction === 'all' ? true : (
+        logFilterAction === 'calibrate'
+          ? (log.action === 'calibrate' || log.detail?.includes('校正') || log.detail?.includes('餘額校正'))
+          : logFilterAction === 'transaction'
+          ? (log.action === 'transaction' || log.action === 'expense_add' || log.detail?.includes('記帳') || log.detail?.includes('支出') || log.detail?.includes('收入') || log.detail?.includes('劃撥'))
+          : logFilterAction === 'delete'
+          ? (log.action === 'delete' || log.action === 'budget_delete' || log.detail?.includes('作廢') || log.detail?.includes('刪除') || log.detail?.includes('註銷'))
+          : logFilterAction === 'expense_add'
+          ? (log.action === 'expense_add' || log.detail?.includes('新增支出'))
+          : logFilterAction === 'login'
+          ? (log.action === 'login' || log.detail?.includes('登入'))
+          : log.action === logFilterAction
+      );
       const matchesOperator = logFilterOperator === 'all' ? true : (
         logFilterOperator === 'userA' ? (log.operator?.includes('大狗狗') || log.operator === 'userA') :
         logFilterOperator === 'userB' ? (log.operator?.includes('阿陞') || log.operator === 'userB') :
