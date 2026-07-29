@@ -1083,10 +1083,10 @@ const AccountsManager = ({
             )}
 
             {/* Scrollable Form Fields with Clear Hierarchical Sections */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '58vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '10px', flexGrow: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', paddingRight: '4px', paddingBottom: '10px', flex: 1, minHeight: 0 }}>
               
               {/* SECTION 1: HEADER HERO CARD (核心辨識與資產狀態) */}
-              <div className="glass-card" style={{ padding: '16px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
                 
                 {/* Top Avatar Icon + Nickname Row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1180,12 +1180,12 @@ const AccountsManager = ({
               </div>
 
               {/* SECTION 2: BASIC METADATA (基本機構屬性與歸屬) */}
-              <div className="inset-group-card" style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(255,255,255,0.06)' }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', fontWeight: '800', marginBottom: '10px', letterSpacing: '0.5px' }}>
+              <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', fontWeight: '800', marginBottom: '2px', letterSpacing: '0.5px' }}>
                   🏛️ 帳戶屬性與持有人
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   {/* Owner */}
                   <div>
                     <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>👤 持有人</label>
@@ -1253,7 +1253,7 @@ const AccountsManager = ({
 
               {/* SECTION 3: CREDIT CARD SPECIAL CONFIG */}
               {accType === 'credit' && (
-                <div style={{ border: '1px solid rgba(255,149,0,0.25)', padding: '12px 14px', borderRadius: '14px', backgroundColor: 'rgba(255,149,0,0.05)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ border: '1px solid rgba(255,149,0,0.25)', padding: '14px', borderRadius: '14px', backgroundColor: 'rgba(255,149,0,0.05)', display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
                   <div style={{ fontSize: '0.72rem', color: '#ffb94f', fontWeight: '800' }}>
                     💳 信用卡扣款與出帳連動
                   </div>
@@ -1297,7 +1297,7 @@ const AccountsManager = ({
               )}
 
               {/* SECTION 4: DEFAULT PRESETS SWITCHES */}
-              <div className="inset-group-card" style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
                 <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', fontWeight: '800', marginBottom: '2px' }}>
                   ⚙️ 記帳系統預設行為
                 </div>
