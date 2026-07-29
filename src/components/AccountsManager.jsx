@@ -1082,228 +1082,229 @@ const AccountsManager = ({
               </div>
             )}
 
-            {/* Scrollable Form Fields to prevent cutoff on mobile */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '52vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '10px', flexGrow: 1 }}>
+            {/* Scrollable Form Fields with Clear Hierarchical Sections */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '58vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '10px', flexGrow: 1 }}>
               
-              {/* Owner */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>持有人</label>
-                <select
-                  disabled={isReadOnly || editingAccount}
-                  value={accOwner}
-                  onChange={(e) => setAccOwner(e.target.value)}
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                >
-                  <option value="userA">大狗狗 🐕 (個人私有)</option>
-                  <option value="userB">阿陞 🐶 (個人私有)</option>
-                  <option value="joint">🏫 共同 (雙方可編輯)</option>
-                </select>
-              </div>
-
-              {/* Account Type */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>帳戶類型</label>
-                <select
-                  disabled={isReadOnly}
-                  value={accType}
-                  onChange={(e) => setAccType(e.target.value)}
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                >
-                  <option value="bank">🏦 銀行活期存款 (活儲)</option>
-                  <option value="cash">💵 現金錢包 (Cash)</option>
-                  <option value="credit">💳 信用卡 (負債類)</option>
-                  <option value="virtual">📱 電子票證 / 虛擬帳戶</option>
-                </select>
-              </div>
-
-              {/* Institution Name */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>金融機構/類別名稱</label>
-                <input
-                  disabled={isReadOnly}
-                  type="text"
-                  value={accName}
-                  onChange={(e) => setAccName(e.target.value)}
-                  placeholder="例如：國泰世華、現金、悠遊卡"
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                />
-              </div>
-
-              {/* Nickname */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>帳戶暱稱</label>
-                <input
-                  disabled={isReadOnly}
-                  type="text"
-                  value={accNickname}
-                  onChange={(e) => setAccNickname(e.target.value)}
-                  placeholder="例如：薪轉帳戶、主力信用卡、皮夾"
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                />
-              </div>
-
-              {/* Custom Icon Field Redesigned */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '14px 0 10px 0' }}>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>
-                  帳戶圖示 (點擊 Emoji 圖案變更)
-                </label>
-                <div style={{ position: 'relative', width: '56px', height: '56px' }}>
-                  <div style={{
-                    width: '100%',
-                    height: '100%',
-                    borderRadius: '50%',
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1.5px dashed rgba(255, 255, 255, 0.25)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    fontSize: '1.8rem',
-                    pointerEvents: 'none',
-                    transition: 'all 0.2s ease-in-out'
-                  }}>
-                    {accIcon || '🏦'}
-                  </div>
-                  <input
-                    disabled={isReadOnly}
-                    type="text"
-                    value={accIcon}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (!val) {
-                        setAccIcon('');
-                        return;
-                      }
-                      try {
-                        const segmenter = new Intl.Segmenter();
-                        const segments = [...segmenter.segment(val)].map(s => s.segment);
-                        if (segments.length > 0) {
-                          setAccIcon(segments[segments.length - 1]);
-                        } else {
-                          setAccIcon('');
-                        }
-                      } catch (err) {
-                        const chars = Array.from(val);
-                        if (chars.length > 0) {
-                          setAccIcon(chars[chars.length - 1]);
-                        } else {
-                          setAccIcon('');
-                        }
-                      }
-                    }}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
+              {/* SECTION 1: HEADER HERO CARD (核心辨識與資產狀態) */}
+              <div className="glass-card" style={{ padding: '16px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                
+                {/* Top Avatar Icon + Nickname Row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {/* Custom Emoji Picker Button */}
+                  <div style={{ position: 'relative', width: '52px', height: '52px', flexShrink: 0 }}>
+                    <div style={{
                       width: '100%',
                       height: '100%',
-                      opacity: 0,
-                      cursor: isReadOnly ? 'default' : 'pointer',
-                      border: 'none',
-                      outline: 'none'
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Account Number */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>帳戶號碼 (選填)</label>
-                <input
-                  disabled={isReadOnly}
-                  type="text"
-                  value={isReadOnly ? maskNumber(accNumber, accOwner) : accNumber}
-                  onChange={(e) => setAccNumber(e.target.value)}
-                  placeholder={isReadOnly ? '••••••••' : '輸入帳號或卡號'}
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                />
-              </div>
-
-              {/* Balance */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>
-                  {accType === 'credit' ? '目前未繳帳單金額' : '目前帳戶餘額'}
-                </label>
-                <input
-                  disabled={isReadOnly}
-                  type="text"
-                  value={formatInputMoney(accBalance)}
-                  onChange={(e) => setAccBalance(e.target.value)}
-                  placeholder="$0"
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                />
-              </div>
-
-              {/* Currency */}
-              <div>
-                <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '5px' }}>幣別</label>
-                <select
-                  disabled={isReadOnly}
-                  value={accCurrency}
-                  onChange={(e) => setAccCurrency(e.target.value)}
-                  className="glass-input"
-                  style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
-                >
-                  <option value="TWD">TWD (新台幣)</option>
-                  <option value="USD">USD (美金)</option>
-                </select>
-              </div>
-
-              {/* CREDIT CARD FIELDS */}
-              {accType === 'credit' && (
-                <div style={{ border: '0.5px solid rgba(255,255,255,0.08)', padding: '12px 10px', borderRadius: '12px', backgroundColor: 'rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  
-                  {/* Linked Bank Account */}
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>綁定扣款活儲帳戶</label>
-                    <select
-                      disabled={isReadOnly}
-                      value={linkedBankId}
-                      onChange={(e) => setLinkedBankId(e.target.value)}
-                      className="glass-input"
-                      style={{ width: '100%', height: '40px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 8px' }}
-                    >
-                      <option value="">-- 選擇扣款帳戶 --</option>
-                      {bankAndCashAccounts.map(b => (
-                        <option key={b.id} value={b.id}>{b.nickname} ({b.currency})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Billing Payment Day */}
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>每月扣款結清日 (1 ~ 28 號)</label>
+                      borderRadius: '16px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1.5px dashed rgba(255, 255, 255, 0.3)',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      fontSize: '1.8rem',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                    }}>
+                      {accIcon || '🏦'}
+                    </div>
                     <input
                       disabled={isReadOnly}
-                      type="number"
-                      min="1"
-                      max="28"
-                      value={billingDay}
-                      onChange={(e) => setBillingDay(e.target.value)}
-                      className="glass-input"
-                      style={{ width: '100%', height: '40px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 12px' }}
+                      type="text"
+                      value={accIcon}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) { setAccIcon(''); return; }
+                        try {
+                          const segmenter = new Intl.Segmenter();
+                          const segments = [...segmenter.segment(val)].map(s => s.segment);
+                          setAccIcon(segments.length > 0 ? segments[segments.length - 1] : '');
+                        } catch (err) {
+                          const chars = Array.from(val);
+                          setAccIcon(chars.length > 0 ? chars[chars.length - 1] : '');
+                        }
+                      }}
+                      style={{
+                        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                        opacity: 0, cursor: isReadOnly ? 'default' : 'pointer'
+                      }}
+                      title="點擊變更 Emoji 圖示"
                     />
                   </div>
 
-                  {/* Auto Pay toggle switch */}
+                  {/* Account Nickname (Primary Label) */}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px', fontWeight: '700' }}>✏️ 帳戶暱稱 (主要顯示標籤)</label>
+                    <input
+                      disabled={isReadOnly}
+                      type="text"
+                      value={accNickname}
+                      onChange={(e) => setAccNickname(e.target.value)}
+                      placeholder="例如：薪轉帳戶、主力信用卡、皮夾"
+                      className="glass-input"
+                      style={{ width: '100%', height: '38px', borderRadius: '10px', padding: '0 10px', fontSize: '0.92rem', fontWeight: '800' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Hero Balance Input Row */}
+                <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '3px', fontWeight: '700' }}>
+                      {accType === 'credit' ? '💳 目前未繳帳單金額' : '💵 目前帳戶餘額'}
+                    </label>
+                    <input
+                      disabled={isReadOnly}
+                      type="text"
+                      value={formatInputMoney(accBalance)}
+                      onChange={(e) => setAccBalance(e.target.value)}
+                      placeholder="$0"
+                      className="glass-input tabular-nums"
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', padding: '0 12px', fontSize: '1.25rem', fontWeight: '850', color: accType === 'credit' ? '#ff9500' : '#8effa2' }}
+                    />
+                  </div>
+
+                  <div style={{ width: '100px' }}>
+                    <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '3px', fontWeight: '700' }}>💱 幣別</label>
+                    <select
+                      disabled={isReadOnly}
+                      value={accCurrency}
+                      onChange={(e) => setAccCurrency(e.target.value)}
+                      className="glass-input"
+                      style={{ width: '100%', height: '42px', borderRadius: '10px', padding: '0 8px', fontSize: '0.86rem', fontWeight: '700' }}
+                    >
+                      <option value="TWD">TWD ($)</option>
+                      <option value="USD">USD ($)</option>
+                    </select>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* SECTION 2: BASIC METADATA (基本機構屬性與歸屬) */}
+              <div className="inset-group-card" style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', fontWeight: '800', marginBottom: '10px', letterSpacing: '0.5px' }}>
+                  🏛️ 帳戶屬性與持有人
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                  {/* Owner */}
+                  <div>
+                    <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>👤 持有人</label>
+                    <select
+                      disabled={isReadOnly || editingAccount}
+                      value={accOwner}
+                      onChange={(e) => setAccOwner(e.target.value)}
+                      className="glass-input"
+                      style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px', fontSize: '0.8rem' }}
+                    >
+                      <option value="userA">大狗狗 🐕</option>
+                      <option value="userB">阿陞 🐶</option>
+                      <option value="joint">🏫 共同</option>
+                    </select>
+                  </div>
+
+                  {/* Account Type */}
+                  <div>
+                    <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>🏦 帳戶類型</label>
+                    <select
+                      disabled={isReadOnly}
+                      value={accType}
+                      onChange={(e) => setAccType(e.target.value)}
+                      className="glass-input"
+                      style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px', fontSize: '0.8rem' }}
+                    >
+                      <option value="bank">🏦 銀行活儲</option>
+                      <option value="cash">💵 現金錢包</option>
+                      <option value="credit">💳 信用卡</option>
+                      <option value="virtual">📱 電子票證/虛擬</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {/* Institution Name */}
+                  <div>
+                    <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>🏢 金融機構名稱</label>
+                    <input
+                      disabled={isReadOnly}
+                      type="text"
+                      value={accName}
+                      onChange={(e) => setAccName(e.target.value)}
+                      placeholder="如：國泰世華"
+                      className="glass-input"
+                      style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px', fontSize: '0.8rem' }}
+                    />
+                  </div>
+
+                  {/* Account Number */}
+                  <div>
+                    <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>🔢 帳號/卡號末碼</label>
+                    <input
+                      disabled={isReadOnly}
+                      type="text"
+                      value={isReadOnly ? maskNumber(accNumber, accOwner) : accNumber}
+                      onChange={(e) => setAccNumber(e.target.value)}
+                      placeholder={isReadOnly ? '••••••••' : '末4碼或全號'}
+                      className="glass-input"
+                      style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3: CREDIT CARD SPECIAL CONFIG */}
+              {accType === 'credit' && (
+                <div style={{ border: '1px solid rgba(255,149,0,0.25)', padding: '12px 14px', borderRadius: '14px', backgroundColor: 'rgba(255,149,0,0.05)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#ffb94f', fontWeight: '800' }}>
+                    💳 信用卡扣款與出帳連動
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {/* Linked Bank Account */}
+                    <div>
+                      <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>綁定扣款活儲</label>
+                      <select
+                        disabled={isReadOnly}
+                        value={linkedBankId}
+                        onChange={(e) => setLinkedBankId(e.target.value)}
+                        className="glass-input"
+                        style={{ width: '100%', height: '36px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 6px' }}
+                      >
+                        <option value="">-- 選擇扣款帳戶 --</option>
+                        {bankAndCashAccounts.map(b => (
+                          <option key={b.id} value={b.id}>{b.nickname} ({b.currency})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Billing Payment Day */}
+                    <div>
+                      <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>每月扣款日 (1~28)</label>
+                      <input
+                        disabled={isReadOnly}
+                        type="number"
+                        min="1"
+                        max="28"
+                        value={billingDay}
+                        onChange={(e) => setBillingDay(e.target.value)}
+                        className="glass-input"
+                        style={{ width: '100%', height: '36px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 8px' }}
+                      />
+                    </div>
+                  </div>
+
                   {renderToggleRow("自動執行扣款結清 (Auto-Pay)", autoPay, setAutoPay, isReadOnly)}
                 </div>
               )}
 
-              {/* Default presets settings */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
-                <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>預設帳戶設定：</div>
+              {/* SECTION 4: DEFAULT PRESETS SWITCHES */}
+              <div className="inset-group-card" style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', fontWeight: '800', marginBottom: '2px' }}>
+                  ⚙️ 記帳系統預設行為
+                </div>
                 
                 {renderToggleRow("設為【支出時】的預設出帳帳戶", isDefaultExpense, setIsDefaultExpense, isReadOnly)}
-                
                 {renderToggleRow("設為【收入時】的預設存入帳戶", isDefaultIncome, setIsDefaultIncome, isReadOnly)}
-
-                {accType !== 'credit' && renderToggleRow("設為【伴侶代墊結算】的預設劃撥帳戶", isDefaultSettle, setIsDefaultSettle, isReadOnly)}
+                {accType !== 'credit' && renderToggleRow("設為【代墊結算】的預設劃撥帳戶", isDefaultSettle, setIsDefaultSettle, isReadOnly)}
               </div>
 
             </div>
