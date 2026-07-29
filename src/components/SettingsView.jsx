@@ -127,7 +127,7 @@ const SettingsView = ({
         return;
       }
 
-      // 2. Perform Reset Data
+      // 2. Perform Reset Data (Zero out all account balances, clear bills, expenses, and net worth history)
       const resetAccounts = (assets.accounts || []).map(acc => ({
         ...acc,
         balance: 0
@@ -148,6 +148,7 @@ const SettingsView = ({
         jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
         roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
         accounts: resetAccounts,
+        bills: [],
         monthlyExpenses: [],
         dailyNetWorth: {},
         lastBackupDate: todayStr

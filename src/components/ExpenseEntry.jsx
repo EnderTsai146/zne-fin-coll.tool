@@ -120,11 +120,96 @@ const ExpenseEntry = ({
   }, [accounts, userKey, incAccountId]);
 
   // ==========================================
-  // 4. Bills States
+  // 4. Bills States & Handlers
   // ==========================================
   const [showBillPayModal, setShowBillPayModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState(null);
   const [billPayAccountId, setBillPayAccountId] = useState('');
+
+  const [showEditBillModal, setShowEditBillModal] = useState(false);
+  const [editingBill, setEditingBill] = useState(null);
+  const [billNote, setBillNote] = useState('');
+  const [billAmount, setBillAmount] = useState('');
+  const [billNextDate, setBillNextDate] = useState('');
+  const [billCategory, setBillCategory] = useState('固定支出');
+
+  const handleOpenAddBill = () => {
+    setEditingBill(null);
+    setBillNote('');
+    setBillAmount('');
+    setBillNextDate(new Date().toISOString().split('T')[0]);
+    setBillCategory('固定支出');
+    setShowEditBillModal(true);
+  };
+
+  const handleOpenEditBill = (b) => {
+    setEditingBill(b);
+    setBillNote(b.note || b.category || b.name || '');
+    setBillAmount(b.amount ? formatInputMoney(b.amount) : '');
+    setBillNextDate(b.nextDate || new Date().toISOString().split('T')[0]);
+    setBillCategory(b.category || '固定支出');
+    setShowEditBillModal(true);
+  };
+
+  const handleSaveBill = async () => {
+    if (!billNote.trim()) {
+      await customAlert("請輸入帳單名稱！");
+      return;
+    }
+    const amt = parseMoney(billAmount);
+    const dateDay = billNextDate ? new Date(billNextDate).getDate() : 1;
+    const nextDateVal = billNextDate || new Date().toISOString().split('T')[0];
+
+    let updatedBills = [];
+    if (editingBill) {
+      updatedBills = safeBills.map(b => {
+        if (b.id === editingBill.id) {
+          return {
+            ...b,
+            note: billNote.trim(),
+            name: billNote.trim(),
+            amount: amt,
+            nextDate: nextDateVal,
+            date: dateDay,
+            category: billCategory || '固定支出'
+          };
+        }
+        return b;
+      });
+    } else {
+      const newBill = {
+        id: `bill_${Date.now()}`,
+        note: billNote.trim(),
+        name: billNote.trim(),
+        amount: amt,
+        nextDate: nextDateVal,
+        date: dateDay,
+        category: billCategory || '固定支出'
+      };
+      updatedBills = [...safeBills, newBill];
+    }
+
+    const finalAssets = { ...assets, bills: updatedBills };
+    setAssets(finalAssets);
+    onTransaction(finalAssets, []);
+    setShowEditBillModal(false);
+    setShowBillPayModal(false);
+    setEditingBill(null);
+    await customAlert(editingBill ? "✅ 帳單修改成功！" : "✅ 新增常態帳單成功！");
+  };
+
+  const handleDeleteBill = async (billToDelete) => {
+    if (!billToDelete) return;
+    if (!await customConfirm(`⚠️ 確定要刪除常態帳單【${billToDelete.note || billToDelete.category || billToDelete.name}】嗎？`)) return;
+    const updatedBills = safeBills.filter(b => b.id !== billToDelete.id);
+    const finalAssets = { ...assets, bills: updatedBills };
+    setAssets(finalAssets);
+    onTransaction(finalAssets, []);
+    setShowBillPayModal(false);
+    setShowEditBillModal(false);
+    setSelectedBill(null);
+    await customAlert("✅ 帳單已成功刪除！");
+  };
 
   const lastUserKeyBillRef = useRef(userKey);
 
@@ -899,14 +984,36 @@ const ExpenseEntry = ({
           {/* Sub Tab: Bills */}
           {activeTab === 'bills' && (
             <div className="glass-card" style={{ padding: '20px 18px' }}>
-              <h3 style={{ margin: '0 0 16px 0', fontWeight: '800' }}>📅 常態帳項繳款</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontWeight: '800' }}>📅 常態帳項管理與繳款</h3>
+                <button
+                  type="button"
+                  onClick={handleOpenAddBill}
+                  className="glass-btn primary-gradient-btn"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', fontWeight: '700', borderRadius: '10px' }}
+                >
+                  ➕ 新增帳單
+                </button>
+              </div>
+
               <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 16px 0', lineHeight: '1.4' }}>
-                點擊下方即將到期或已出帳的常態帳單項目，即可使用特定帳戶進行快速繳費結清。
+                點擊下方即將到期或已出帳的常態帳單項目，即可進行快速繳費、編輯內容或刪除帳單。
               </p>
 
               <div className="inset-group-card">
                 {safeBills.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>目前尚無設定任何常態帳單</div>
+                  <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+                    目前尚無設定任何常態帳單
+                    <br />
+                    <button
+                      type="button"
+                      onClick={handleOpenAddBill}
+                      className="glass-btn"
+                      style={{ marginTop: '12px', padding: '6px 16px', fontSize: '0.8rem' }}
+                    >
+                      ➕ 立即新增第一筆帳單
+                    </button>
+                  </div>
                 ) : (
                   safeBills.map(bill => {
                     const isNear = isApproaching(bill.nextDate);
@@ -1040,6 +1147,29 @@ const ExpenseEntry = ({
               您正準備繳納帳單【<strong>{selectedBill.note || selectedBill.category || selectedBill.name || '常態帳單'}</strong>】，應繳金額為 <strong style={{ color: '#fff' }}>${(selectedBill.amount || 0).toLocaleString()} TWD</strong>。
             </div>
 
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const b = selectedBill;
+                  setShowBillPayModal(false);
+                  handleOpenEditBill(b);
+                }}
+                className="glass-btn"
+                style={{ flex: 1, padding: '6px 0', fontSize: '0.78rem' }}
+              >
+                ✏️ 編輯帳單
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteBill(selectedBill)}
+                className="glass-btn glass-btn-danger"
+                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+              >
+                🗑️ 刪除
+              </button>
+            </div>
+
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '6px' }}>請選擇扣款支付帳戶</label>
               {renderAccountSelector(billPayAccountId, setBillPayAccountId, () => true, 'isDefaultExpense')}
@@ -1121,6 +1251,86 @@ const ExpenseEntry = ({
             <button onClick={() => setAccountModalConfig(null)} className="glass-btn" style={{ width: '100%', padding: '10px 0', borderRadius: '8px' }}>
               關閉
             </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* EDIT / ADD BILL MODAL */}
+      {showEditBillModal && createPortal(
+        <div className="liquid-modal-overlay" onClick={() => setShowEditBillModal(false)}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }}>
+                {editingBill ? '✏️ 編輯常態帳單' : '➕ 新增常態帳單'}
+              </div>
+              <button onClick={() => setShowEditBillModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div className="inset-group-card" style={{ marginBottom: '20px' }}>
+              {/* Bill Name/Note */}
+              <div className="inset-group-row">
+                <span className="inset-group-label">📝 帳單名稱</span>
+                <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
+                  <input
+                    type="text"
+                    className="inset-group-input"
+                    value={billNote}
+                    onChange={(e) => setBillNote(e.target.value)}
+                    placeholder="例如：電費、房租、Netflix"
+                  />
+                </span>
+              </div>
+
+              {/* Bill Amount */}
+              <div className="inset-group-row">
+                <span className="inset-group-label">💵 預估金額</span>
+                <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="inset-group-input tabular-nums"
+                    value={billAmount}
+                    onChange={(e) => setBillAmount(formatInputMoney(e.target.value))}
+                    placeholder="$0"
+                  />
+                </span>
+              </div>
+
+              {/* Bill Next Date */}
+              <div className="inset-group-row">
+                <span className="inset-group-label">📅 下次繳費日</span>
+                <span className="inset-group-value">
+                  <input
+                    type="date"
+                    style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none' }}
+                    value={billNextDate}
+                    onChange={(e) => setBillNextDate(e.target.value)}
+                  />
+                </span>
+              </div>
+
+              {/* Bill Category */}
+              <div className="inset-group-row">
+                <span className="inset-group-label">🏷️ 分類</span>
+                <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
+                  <input
+                    type="text"
+                    className="inset-group-input"
+                    value={billCategory}
+                    onChange={(e) => setBillCategory(e.target.value)}
+                    placeholder="例如：固定支出、水電瓦斯"
+                  />
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowEditBillModal(false)} className="glass-btn" style={{ flex: 1, padding: '10px 0', borderRadius: '8px' }}>取消</button>
+              <button onClick={handleSaveBill} className="glass-btn primary-gradient-btn" style={{ flex: 2, padding: '10px 0', borderRadius: '8px', fontWeight: '800' }}>
+                {editingBill ? '更新帳單' : '確定新增'}
+              </button>
+            </div>
           </div>
         </div>,
         document.body
