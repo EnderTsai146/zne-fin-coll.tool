@@ -38,7 +38,8 @@ const parseMoney = (valStr) => {
 
 const USER_MAPPING = {
   "ender.tsai@gmail.com": "大狗狗🐕",
-  "r5213467254@icloud.com": "阿陞🐶"
+  "r5213467254@icloud.com": "阿陞🐶",
+  "0F4MxqPq1oRNBJkRxiAeYOEOF572": "阿陞🐶"
 };
 
 // ★ Module‑level — stable reference so React doesn't remount
@@ -943,7 +944,7 @@ function App() {
         setLoading(true);
 
         setCurrentUser(user);
-        setOperatorName(USER_MAPPING[user.email] || user.email.split('@')[0]);
+        setOperatorName(USER_MAPPING[user.uid] || USER_MAPPING[user.email] || (user.email ? user.email.split('@')[0] : '阿陞🐶'));
         setAutoLogoutReason('');
         // ★ 不要在此設 loading=false，等 Firestore 資料到位後再解鎖
 
