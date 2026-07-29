@@ -251,7 +251,7 @@ const ExpenseEntry = ({
                 </span>
               </div>
               <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
-                ${acc.balance.toLocaleString()} {acc.currency}
+                ${(acc.balance || 0).toLocaleString()} {acc.currency || 'TWD'}
               </span>
             </button>
           );
@@ -915,6 +915,10 @@ const ExpenseEntry = ({
                         key={bill.id}
                         onClick={() => {
                           setSelectedBill(bill);
+                          if (!billPayAccountId && accounts.length > 0) {
+                            const defaultAcc = accounts.find(a => a.owner === userKey && a.isDefaultExpense) || accounts[0];
+                            if (defaultAcc) setBillPayAccountId(defaultAcc.id);
+                          }
                           setShowBillPayModal(true);
                         }}
                         className="inset-group-row"
@@ -1033,7 +1037,7 @@ const ExpenseEntry = ({
             </div>
 
             <div style={{ marginBottom: '16px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
-              您正準備繳納帳單【<strong>{selectedBill.note || selectedBill.category}</strong>】，應繳金額為 <strong style={{ color: '#fff' }}>${selectedBill.amount.toLocaleString()} TWD</strong>。
+              您正準備繳納帳單【<strong>{selectedBill.note || selectedBill.category || selectedBill.name || '常態帳單'}</strong>】，應繳金額為 <strong style={{ color: '#fff' }}>${(selectedBill.amount || 0).toLocaleString()} TWD</strong>。
             </div>
 
             <div style={{ marginBottom: '20px' }}>
@@ -1107,7 +1111,7 @@ const ExpenseEntry = ({
                       </span>
                     </div>
                     <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
-                      ${acc.balance.toLocaleString()} {acc.currency}
+                      ${(acc.balance || 0).toLocaleString()} {acc.currency || 'TWD'}
                     </span>
                   </button>
                 );
