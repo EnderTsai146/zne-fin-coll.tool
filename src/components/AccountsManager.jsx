@@ -179,6 +179,10 @@ const AccountsManager = ({
       await customAlert("請輸入帳戶名稱與暱稱！");
       return;
     }
+    if (accType === 'credit' && autoPay && !linkedBankId) {
+      await customAlert("⚠️ 開啟信用卡「自動扣款」功能時，必須選擇綁定扣款活儲帳戶！");
+      return;
+    }
     
     let val = parseMoney(accBalance);
     if (accType === 'credit') {
@@ -1298,6 +1302,12 @@ const AccountsManager = ({
                   </div>
 
                   {renderToggleRow("自動執行扣款結清 (Auto-Pay)", autoPay, setAutoPay, isReadOnly)}
+
+                  <div style={{ fontSize: '0.68rem', color: autoPay ? '#8effa2' : '#ffb94f', lineHeight: '1.4', background: 'rgba(0,0,0,0.2)', padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {autoPay
+                      ? '🤖 已開啟自動扣款：到期日前 5 天自動提醒，到期日當天將自動自綁定活儲扣繳。'
+                      : '🖐️ 手動繳款模式：不強制綁定活儲。帳單會自動顯示在『帳單』中心，並在到期前提高提醒頻率供手動選擇帳戶繳費。'}
+                  </div>
                 </div>
               )}
 

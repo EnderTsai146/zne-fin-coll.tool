@@ -688,6 +688,39 @@ const ExpenseEntry = ({
       return;
     }
 
+    if (selectedBill.isCreditCard) {
+      const creditAccId = selectedBill.creditCardAccountId;
+      const creditAcc = accounts.find(a => a.id === creditAccId);
+      if (!creditAcc) return;
+
+      const updatedAccounts = accounts.map(a => {
+        if (a.id === billPayAccountId) return { ...a, balance: a.balance - amount };
+        if (a.id === creditAccId) return { ...a, balance: a.balance + amount };
+        return a;
+      });
+
+      const targetTimestamp = new Date().toISOString();
+      const txRecord = {
+        date: txDate,
+        month: txDate.slice(0, 7),
+        type: 'transfer',
+        category: '資產劃撥',
+        total: amount,
+        sourceAmount: amount,
+        targetAmount: amount,
+        payer: acc.owner === 'joint' ? '共同帳戶' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶'),
+        accountId: billPayAccountId,
+        targetAccountId: creditAccId,
+        note: `💳 信用卡帳單劃撥繳款: ${creditAcc.nickname} (自 ${acc.nickname} 撥款)`,
+        timestamp: targetTimestamp
+      };
+
+      setShowBillPayModal(false);
+      onTransaction({ ...assets, accounts: updatedAccounts }, txRecord);
+      await customAlert(`🎉 信用卡【${creditAcc.nickname}】已成功自【${acc.nickname}】劃撥繳納 $${amount.toLocaleString()} ${creditAcc.currency || 'TWD'}！`);
+      return;
+    }
+
     const updatedAccounts = accounts.map(a => {
       if (a.id === billPayAccountId) return { ...a, balance: a.balance - amount };
       return a;
@@ -736,6 +769,89 @@ const ExpenseEntry = ({
     onTransaction(finalAssets, []); // Trigger cloud save
     setShowBillPayModal(false);
     await customAlert(`✅ 帳單【${selectedBill.note || selectedBill.category || selectedBill.name}】繳費成功！\n由帳戶【${acc.nickname}】支付 $${amount.toLocaleString()}`);
+  };
+
+  const creditCardBills = useMemo(() => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    const currentDay = today.getDate();
+
+    return (assets.accounts || [])
+      .filter(a => a.type === 'credit')
+      .map(card => {
+        const bDay = card.billingDay ? Number(card.billingDay) : 10;
+        let dueYear = currentYear;
+        let dueMonth = currentMonth;
+        if (currentDay > bDay) {
+          dueMonth += 1;
+        }
+        const dueDateObj = new Date(dueYear, dueMonth, bDay);
+        const yyyy = dueDateObj.getFullYear();
+        const mm = String(dueDateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dueDateObj.getDate()).padStart(2, '0');
+        const nextDateStr = `${yyyy}-${mm}-${dd}`;
+
+        const diffDays = Math.ceil((dueDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const unpaidAmount = Math.abs(card.balance || 0);
+
+        const linkedBank = card.linkedBankAccountId 
+          ? (assets.accounts || []).find(a => a.id === card.linkedBankAccountId)
+          : null;
+        
+        let linkedBankName = linkedBank 
+          ? `${linkedBank.owner === 'joint' ? '共同' : (linkedBank.owner === 'userA' ? '大狗狗' : '阿陞')}${linkedBank.nickname}`
+          : '未綁定活儲';
+
+        return {
+          id: `cc_bill_${card.id}`,
+          isCreditCard: true,
+          creditCardAccountId: card.id,
+          name: `${card.nickname} (信用卡帳單)`,
+          note: `${card.nickname} 信用卡`,
+          amount: unpaidAmount,
+          category: '信用卡帳單',
+          nextDate: nextDateStr,
+          diffDays,
+          autoPay: !!card.autoPay,
+          linkedBankAccountId: card.linkedBankAccountId,
+          linkedBankName,
+          owner: card.owner,
+          currency: card.currency || 'TWD',
+          icon: card.icon || '💳',
+          rawAccount: card
+        };
+      });
+  }, [assets.accounts]);
+
+  const combinedBills = useMemo(() => {
+    const regularBills = (assets.bills || []).map(b => ({ ...b, isCreditCard: false }));
+    return [...regularBills, ...creditCardBills].sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+  }, [assets.bills, creditCardBills]);
+
+  const handleCardClick = async (bill) => {
+    if (bill.isCreditCard) {
+      if (bill.amount === 0) {
+        await customAlert(`🎉 信用卡【${bill.rawAccount.nickname}】本期帳單已完全結清 (未繳金額 $0)，無須手動扣繳。`, "帳單已結清");
+        return;
+      }
+
+      if (bill.autoPay) {
+        const confirmManual = await customConfirm(
+          `🤖 提醒：信用卡【${bill.rawAccount.nickname}】已設定於每月 ${bill.rawAccount.billingDay || 10} 日由【${bill.linkedBankName}】自動扣繳。\n\n確定要提前手動劃撥結清嗎？`,
+          "自動扣繳提示"
+        );
+        if (!confirmManual) return;
+      }
+    }
+
+    setSelectedBill(bill);
+    if (!billPayAccountId && accounts.length > 0) {
+      const linkedAcc = bill.linkedBankAccountId ? accounts.find(a => a.id === bill.linkedBankAccountId) : null;
+      const defaultAcc = linkedAcc || accounts.find(a => a.owner === userKey && a.isDefaultExpense) || accounts[0];
+      if (defaultAcc) setBillPayAccountId(defaultAcc.id);
+    }
+    setShowBillPayModal(true);
   };
 
   const safeBills = assets.bills || [];
@@ -985,25 +1101,25 @@ const ExpenseEntry = ({
           {activeTab === 'bills' && (
             <div className="glass-card" style={{ padding: '20px 18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h3 style={{ margin: 0, fontWeight: '800' }}>📅 常態帳項管理與繳款</h3>
+                <h3 style={{ margin: 0, fontWeight: '800' }}>📅 常態帳項與信用卡帳單管理</h3>
                 <button
                   type="button"
                   onClick={handleOpenAddBill}
                   className="glass-btn primary-gradient-btn"
                   style={{ padding: '6px 12px', fontSize: '0.78rem', fontWeight: '700', borderRadius: '10px' }}
                 >
-                  ➕ 新增帳單
+                  ➕ 新增常態帳單
                 </button>
               </div>
 
               <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 16px 0', lineHeight: '1.4' }}>
-                點擊下方即將到期或已出帳的常態帳單項目，即可進行快速繳費、編輯內容或刪除帳單。
+                統一管理常態訂閱帳單與信用卡待繳帳單。自動扣繳項目時間到達自動劃撥結清；手動帳單可自選活儲劃撥。
               </p>
 
               <div className="inset-group-card">
-                {safeBills.length === 0 ? (
+                {combinedBills.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
-                    目前尚無設定任何常態帳單
+                    目前尚無任何帳單或信用卡帳單
                     <br />
                     <button
                       type="button"
@@ -1011,38 +1127,97 @@ const ExpenseEntry = ({
                       className="glass-btn"
                       style={{ marginTop: '12px', padding: '6px 16px', fontSize: '0.8rem' }}
                     >
-                      ➕ 立即新增第一筆帳單
+                      ➕ 立即新增第一筆常態帳單
                     </button>
                   </div>
                 ) : (
-                  safeBills.map(bill => {
+                  combinedBills.map(bill => {
                     const isNear = isApproaching(bill.nextDate);
+                    const isCc = bill.isCreditCard;
+                    const diffDays = bill.diffDays !== undefined ? bill.diffDays : 99;
+
+                    let rowBorderLeft = 'none';
+                    let rowBg = 'none';
+
+                    if (isCc && !bill.autoPay) {
+                      if (diffDays <= 1) {
+                        rowBorderLeft = '4px solid #ff453a';
+                        rowBg = 'rgba(255,69,58,0.08)';
+                      } else if (diffDays <= 3) {
+                        rowBorderLeft = '4px solid #ff9500';
+                        rowBg = 'rgba(255,149,0,0.06)';
+                      } else if (diffDays <= 7) {
+                        rowBorderLeft = '3px solid #ffb94f';
+                        rowBg = 'rgba(255,185,79,0.04)';
+                      }
+                    } else if (isNear) {
+                      rowBorderLeft = '3px solid #ff9500';
+                      rowBg = 'rgba(255,149,0,0.05)';
+                    }
+
                     return (
                       <div
                         key={bill.id}
-                        onClick={() => {
-                          setSelectedBill(bill);
-                          if (!billPayAccountId && accounts.length > 0) {
-                            const defaultAcc = accounts.find(a => a.owner === userKey && a.isDefaultExpense) || accounts[0];
-                            if (defaultAcc) setBillPayAccountId(defaultAcc.id);
-                          }
-                          setShowBillPayModal(true);
-                        }}
+                        onClick={() => handleCardClick(bill)}
                         className="inset-group-row"
                         style={{
                           padding: '12px 14px',
                           cursor: 'pointer',
-                          background: isNear ? 'rgba(255,149,0,0.05)' : 'none',
-                          borderLeft: isNear ? '3px solid #ff9500' : 'none'
+                          background: rowBg,
+                          borderLeft: rowBorderLeft,
+                          transition: 'all 0.2s ease'
                         }}
                       >
-                        <span className="inset-group-label" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: '750', fontSize: '0.84rem', color: '#fff' }}>{bill.note || bill.category || bill.name}</span>
-                          <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>繳費日: 每月 {bill.date || (bill.nextDate ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate}</span>
+                        <span className="inset-group-label" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{bill.icon || (isCc ? '💳' : '📅')}</span>
+                            <span>{bill.note || bill.category || bill.name}</span>
+                          </span>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
+                            繳費日: 每月 {bill.date || (bill.nextDate ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate}
+                          </span>
                         </span>
-                        <span className="inset-group-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                          <strong style={{ color: '#fff', fontSize: '0.88rem' }}>${(bill.amount || 0).toLocaleString()} TWD</strong>
-                          {isNear && <span style={{ fontSize: '0.58rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>即將到期</span>}
+
+                        <span className="inset-group-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                          <strong style={{ color: isCc && bill.amount > 0 ? '#ffb94f' : '#fff', fontSize: '0.9rem' }}>
+                            ${(bill.amount || 0).toLocaleString()} {bill.currency || 'TWD'}
+                          </strong>
+
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            {isCc && (
+                              bill.autoPay ? (
+                                <span style={{ fontSize: '0.62rem', background: 'rgba(142,255,162,0.15)', color: '#8effa2', border: '0.5px solid rgba(142,255,162,0.3)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                  🤖 自動扣款 ({bill.linkedBankName})
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '0.62rem', background: 'rgba(255,185,79,0.15)', color: '#ffb94f', border: '0.5px solid rgba(255,185,79,0.3)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                  🖐️ 手動繳納
+                                </span>
+                              )
+                            )}
+
+                            {isCc && !bill.autoPay && diffDays <= 1 && (
+                              <span style={{ fontSize: '0.62rem', background: '#ff453a', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>
+                                🚨 今日/明日到期
+                              </span>
+                            )}
+                            {isCc && !bill.autoPay && diffDays > 1 && diffDays <= 3 && (
+                              <span style={{ fontSize: '0.62rem', background: '#ff9500', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>
+                                ⚠️ 3天內到期
+                              </span>
+                            )}
+                            {isCc && !bill.autoPay && diffDays > 3 && diffDays <= 7 && (
+                              <span style={{ fontSize: '0.62rem', background: 'rgba(255,149,0,0.25)', color: '#ffb94f', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                📅 7天內到期
+                              </span>
+                            )}
+
+                            {!isCc && isNear && (
+                              <span style={{ fontSize: '0.58rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                即將到期
+                              </span>
+                            )}
+                          </div>
                         </span>
                       </div>
                     );
