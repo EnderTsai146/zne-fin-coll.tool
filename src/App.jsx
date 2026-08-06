@@ -2333,7 +2333,7 @@ function App() {
   /* navItems & BottomNav moved to module level for stable pill animation */
 
   return (
-    <div style={{ paddingBottom: '110px' }}>
+    <div className="app-root-container">
       {/* ★ Topbar — 內嵌 JSX */}
       <nav className="glass-nav" style={{ borderRadius: '0 0 20px 20px', marginBottom: '16px' }}>
         <button
@@ -2434,11 +2434,20 @@ function App() {
             </nav>
           </div>
 
-          <div style={{ padding: '14px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>當前使用者</div>
-            <div style={{ fontSize: '0.9rem', fontWeight: '750', color: '#fff', marginTop: '2px' }}>
-              {operatorName || '系統成員'}
+          <div style={{ padding: '12px 14px', borderRadius: '16px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', fontWeight: '600' }}>當前使用者</div>
+              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#fff', marginTop: '2px' }}>
+                {operatorName || '系統成員'}
+              </div>
             </div>
+            <button 
+              onClick={handleLogout} 
+              className="glass-btn glass-btn-danger" 
+              style={{ padding: '6px 12px', fontSize: '0.78rem', borderRadius: '10px', cursor: 'pointer', flexShrink: 0 }}
+            >
+              登出
+            </button>
           </div>
         </aside>
 
