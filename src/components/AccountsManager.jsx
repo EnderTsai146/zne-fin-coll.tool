@@ -663,6 +663,137 @@ const AccountsManager = ({
     );
   };
 
+  // Separate Owner Section Renderer (Prioritizes Current User, Sub-grouped by 4 Account Types)
+  const renderOwnerSection = (ownerKey, ownerTitle, accentColor = '#0a84ff') => {
+    const ownerAccounts = accounts.filter(a => a.owner === ownerKey);
+    if (ownerAccounts.length === 0) return null;
+
+    const categories = [
+      { key: 'bank', title: '🏦 銀行活儲帳戶', list: ownerAccounts.filter(a => a.type === 'bank' || a.type === 'virtual') },
+      { key: 'cash', title: '💵 現金帳戶', list: ownerAccounts.filter(a => a.type === 'cash') },
+      { key: 'credit', title: '💳 信用卡帳戶', list: ownerAccounts.filter(a => a.type === 'credit') },
+      { key: 'investment', title: '📈 投資與交割帳戶', list: ownerAccounts.filter(a => a.type === 'investment') },
+    ].filter(cat => cat.list.length > 0);
+
+    return (
+      <div style={{
+        marginBottom: '22px',
+        background: 'rgba(255, 255, 255, 0.02)',
+        border: `1px solid ${accentColor}33`,
+        borderRadius: '20px',
+        padding: '16px 18px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+      }}>
+        {/* Owner Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '0.5px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
+          <div style={{ fontSize: '0.95rem', fontWeight: '850', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ display: 'inline-block', width: '4px', height: '16px', background: accentColor, borderRadius: '2px' }} />
+            {ownerTitle}
+          </div>
+          <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontWeight: '700', background: 'rgba(255,255,255,0.06)', padding: '3px 10px', borderRadius: '12px' }}>
+            共 {ownerAccounts.length} 個帳戶
+          </span>
+        </div>
+
+        {/* Categories inside this Owner */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {categories.map(cat => (
+            <div key={cat.key}>
+              <div style={{ fontSize: '0.72rem', fontWeight: '800', color: 'rgba(255,255,255,0.5)', marginBottom: '6px', paddingLeft: '4px' }}>
+                {cat.title} ({cat.list.length})
+              </div>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '14px',
+                overflow: 'hidden'
+              }}>
+                {cat.list.map((acc, index) => {
+                  const isCredit = acc.type === 'credit';
+                  const balanceColor = isCredit ? '#ff9500' : '#fff';
+                  
+                  let defaultIcon = '🏦';
+                  let typeName = '銀行活儲';
+                  if (acc.type === 'cash') { defaultIcon = '💵'; typeName = '現金'; }
+                  else if (acc.type === 'credit') { defaultIcon = '💳'; typeName = '信用卡'; }
+                  else if (acc.type === 'virtual') { defaultIcon = '📱'; typeName = '虛擬/票證'; }
+                  else if (acc.type === 'investment') { defaultIcon = '📈'; typeName = '投資帳戶'; }
+
+                  const iconToRender = acc.icon || defaultIcon;
+                  const isLast = index === cat.list.length - 1;
+                  const linkedBank = isCredit && acc.linkedBankAccountId 
+                    ? accounts.find(b => b.id === acc.linkedBankAccountId)
+                    : null;
+
+                  return (
+                    <div
+                      key={acc.id}
+                      onClick={() => handleOpenEdit(acc)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        cursor: 'pointer',
+                        borderBottom: isLast ? 'none' : '0.5px solid rgba(255,255,255,0.06)',
+                        transition: 'background 0.2s ease',
+                      }}
+                      className="apple-list-item"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                        <div style={{
+                          fontSize: '1.2rem',
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '10px',
+                          background: isCredit ? 'rgba(255,149,0,0.1)' : (acc.type === 'cash' ? 'rgba(52,199,89,0.1)' : 'rgba(10,132,255,0.1)'),
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          {iconToRender}
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: '750', fontSize: '0.88rem', color: '#fff' }}>{acc.nickname}</span>
+                            <div style={{ display: 'inline-flex', gap: '3px' }}>
+                              {acc.isDefaultExpense && <span style={{ fontSize: '0.56rem', background: 'rgba(255,45,85,0.15)', color: '#ff2d55', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>支</span>}
+                              {acc.isDefaultIncome && <span style={{ fontSize: '0.56rem', background: 'rgba(52,199,89,0.15)', color: '#30d158', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>收</span>}
+                              {acc.isDefaultSettle && <span style={{ fontSize: '0.56rem', background: 'rgba(10,132,255,0.15)', color: '#0a84ff', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>結</span>}
+                              {isCredit && acc.autoPay && (
+                                <span style={{ fontSize: '0.56rem', background: 'rgba(0,122,255,0.2)', color: '#64d2ff', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                  🤖自動扣款 ({linkedBank ? linkedBank.nickname : '活儲'})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {typeName} · {acc.name} {acc.accountNumber ? `(${maskNumber(acc.accountNumber, acc.owner)})` : ''}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '10px' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: '850', fontSize: '0.92rem', color: balanceColor }}>
+                            ${(acc.balance || 0).toLocaleString()}
+                          </div>
+                          <span style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)' }}>{acc.currency || 'TWD'}</span>
+                        </div>
+                        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '1.1rem', paddingLeft: '2px' }}>›</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // Custom iOS Styled Toggle Switch Row Helper
   const renderToggleRow = (label, value, onChange, disabled = false) => {
     return (
@@ -708,101 +839,6 @@ const AccountsManager = ({
     );
   };
 
-  // Apple settings-style list renderer (owner name omitted from group items)
-  const renderAccountListGroup = (title, list) => {
-    if (list.length === 0) return null;
-    return (
-      <div style={{ marginBottom: '22px' }}>
-        <div style={{ fontSize: '0.74rem', fontWeight: '700', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', paddingLeft: '4px' }}>
-          {title}
-        </div>
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
-          borderRadius: '14px',
-          overflow: 'hidden'
-        }}>
-          {list.map((acc, index) => {
-            const isCredit = acc.type === 'credit';
-            const balanceColor = isCredit ? '#ff9500' : '#fff';
-            
-            let defaultIcon = '🏦';
-            let typeName = '銀行活儲';
-            if (acc.type === 'cash') {
-              defaultIcon = '💵';
-              typeName = '現金';
-            } else if (acc.type === 'credit') {
-              defaultIcon = '💳';
-              typeName = '信用卡';
-            } else if (acc.type === 'virtual') {
-              defaultIcon = '📱';
-              typeName = '電子票證/虛擬帳戶';
-            }
-            
-            const iconToRender = acc.icon || defaultIcon;
-            const isLast = index === list.length - 1;
-            
-            return (
-              <div
-                key={acc.id}
-                onClick={() => handleOpenEdit(acc)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '14px 16px',
-                  cursor: 'pointer',
-                  borderBottom: isLast ? 'none' : '0.5px solid rgba(255,255,255,0.06)',
-                  transition: 'background 0.2s ease',
-                }}
-                className="apple-list-item"
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
-                  <div style={{
-                    fontSize: '1.25rem',
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '10px',
-                    background: isCredit ? 'rgba(255,149,0,0.08)' : (acc.type === 'cash' ? 'rgba(52,199,89,0.08)' : 'rgba(10,132,255,0.08)'),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    {iconToRender}
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: '700', fontSize: '0.88rem', color: '#fff' }}>{acc.nickname}</span>
-                      <div style={{ display: 'inline-flex', gap: '3px' }}>
-                        {acc.isDefaultExpense && <span style={{ fontSize: '0.58rem', background: 'rgba(255,45,85,0.15)', color: '#ff2d55', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>支</span>}
-                        {acc.isDefaultIncome && <span style={{ fontSize: '0.58rem', background: 'rgba(52,199,89,0.15)', color: '#30d158', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>收</span>}
-                        {acc.isDefaultSettle && <span style={{ fontSize: '0.58rem', background: 'rgba(10,132,255,0.15)', color: '#0a84ff', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>結</span>}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {typeName} · {acc.name} {acc.accountNumber ? `(${maskNumber(acc.accountNumber, acc.owner)})` : ''}
-                    </div>
-                  </div>
-                </div>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '12px' }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: '800', fontSize: '0.94rem', color: balanceColor }}>
-                      ${acc.balance.toLocaleString()}
-                    </div>
-                    <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>{acc.currency}</span>
-                  </div>
-                  <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '1.1rem', paddingLeft: '4px' }}>›</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   const selectedSrcAcc = accounts.find(a => a.id === tfSource);
   const selectedTgtAcc = accounts.find(a => a.id === tfTarget);
   const isTransferCrossCurrency = selectedSrcAcc && selectedTgtAcc && selectedSrcAcc.currency !== selectedTgtAcc.currency;
@@ -813,10 +849,7 @@ const AccountsManager = ({
       {/* Apple-style Net Worth Hero Card */}
       <div className="header-glass-banner" style={{ marginBottom: '20px', paddingBottom: '16px' }}>
         <div className="banner-glow-spot" />
-        <h2 style={{ fontSize: '1.4rem', fontWeight: '850', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          🏦 多帳戶總覽管理
-        </h2>
-        <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', margin: '4px 0 0 0' }}>
+        <p style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           安全、無感的多帳戶收支與債務劃撥核心
         </p>
 
@@ -889,7 +922,7 @@ const AccountsManager = ({
         />
       </div>
 
-      {/* SUB TAB 1: ACCOUNTS LIST (Grouped by 4 Category Types) */}
+      {/* SUB TAB 1: ACCOUNTS LIST (Owners Separated, Logged In User Prioritized at Top) */}
       {subTab === 'list' && (
         <div className="slide-in">
           {/* Create Button */}
@@ -899,17 +932,26 @@ const AccountsManager = ({
             </button>
           </div>
 
-          {/* Group 1: Bank Accounts */}
-          {renderAccountListGroup("🏦 銀行活儲帳戶", accounts.filter(a => a.type === 'bank' || a.type === 'virtual'), '#0a84ff')}
+          {/* Section 1: CURRENT LOGGED IN USER (當前登入者最優先出現在最上方) */}
+          {renderOwnerSection(
+            userKey,
+            userKey === 'userA' ? "🐕 大狗狗的個人帳戶 (主要帳戶)" : "🐶 阿陞的個人帳戶 (主要帳戶)",
+            '#0a84ff'
+          )}
 
-          {/* Group 2: Cash Accounts */}
-          {renderAccountListGroup("💵 現金帳戶", accounts.filter(a => a.type === 'cash'), '#30d158')}
+          {/* Section 2: JOINT ACCOUNTS (中間公費區) */}
+          {renderOwnerSection(
+            'joint',
+            "🏫 共同公費帳戶 (雙方可編輯)",
+            '#30d158'
+          )}
 
-          {/* Group 3: Credit Cards */}
-          {renderAccountListGroup("💳 信用卡帳戶", accounts.filter(a => a.type === 'credit'), '#ff9500')}
-
-          {/* Group 4: Investment Accounts */}
-          {renderAccountListGroup("📈 投資與交割帳戶", accounts.filter(a => a.type === 'investment'), '#af52de')}
+          {/* Section 3: PARTNER ACCOUNTS (下方預覽區) */}
+          {renderOwnerSection(
+            partnerKey,
+            partnerKey === 'userA' ? "🐕 大狗狗的個人帳戶 (伴侶唯讀)" : "🐶 阿陞的個人帳戶 (伴侶唯讀)",
+            'rgba(255, 255, 255, 0.4)'
+          )}
         </div>
       )}
 
