@@ -484,6 +484,17 @@ function App() {
   const [settingsSubTab, setSettingsSubTab] = useState('budget');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
 
+  const saveToCloud = (newAssets) => {
+    if (!currentUser) return;
+    setAssets(newAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
+    if (window.location.hostname === 'localhost') {
+      console.log("[DEV MOCK] saveToCloud:", newAssets);
+      return;
+    }
+    const docRef = doc(db, "finance", "data");
+    setDoc(docRef, newAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
+  };
+
   // --- Inactivity & Session Security Protection (Task 2 & 3) ---
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
   const [timeoutCountdown, setTimeoutCountdown] = useState(15);
@@ -1484,17 +1495,6 @@ function App() {
       setLastActiveCenterTab(pageId);
     }
     setCurrentPage(pageId);
-  };
-
-  const saveToCloud = (newAssets) => {
-    if (!currentUser) return;
-    setAssets(newAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
-    if (window.location.hostname === 'localhost') {
-      console.log("[DEV MOCK] saveToCloud:", newAssets);
-      return;
-    }
-    const docRef = doc(db, "finance", "data");
-    setDoc(docRef, newAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
   };
 
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
