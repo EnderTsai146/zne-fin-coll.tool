@@ -565,60 +565,101 @@ const AccountsManager = ({
     if (list.length === 0) {
       return <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '6px' }}>無相符帳戶</div>;
     }
+
+    const categories = [
+      { key: 'bank', name: '🏦 銀行活儲帳戶', list: list.filter(a => a.type === 'bank' || a.type === 'virtual') },
+      { key: 'cash', name: '💵 現金帳戶', list: list.filter(a => a.type === 'cash') },
+      { key: 'credit', name: '💳 信用卡帳戶', list: list.filter(a => a.type === 'credit') },
+      { key: 'investment', name: '📈 投資/交割戶', list: list.filter(a => a.type === 'investment') },
+    ].filter(cat => cat.list.length > 0);
+
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
-        {list.map(acc => {
-          const isSelected = selectedValue === acc.id;
-          const isCredit = acc.type === 'credit';
-          const balanceColor = isCredit ? '#ff9500' : '#8effa2';
-          
-          let defaultIcon = '🏦';
-          if (acc.type === 'cash') defaultIcon = '💵';
-          else if (acc.type === 'credit') defaultIcon = '💳';
-          else if (acc.type === 'virtual') defaultIcon = '📱';
-          
-          const iconToRender = acc.icon || defaultIcon;
-          
-          const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
-          
-          return (
-            <button
-              key={acc.id}
-              type="button"
-              onClick={() => onChange(acc.id)}
-              style={{
-                padding: '8px 10px',
-                borderRadius: '10px',
-                border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
-                background: isSelected ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.02)',
-                color: isSelected ? '#fff' : 'var(--text-secondary)',
-                fontSize: '0.78rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                textAlign: 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-                transition: 'all 0.2s ease',
-                boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
-                minHeight: '52px'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: '4px' }}>
-                <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {iconToRender} {acc.nickname}
-                </span>
-                <span style={{ fontSize: '0.58rem', opacity: 0.7, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                  {ownerLabel}
-                </span>
-              </div>
-              <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
-                ${acc.balance.toLocaleString()} {acc.currency}
-              </span>
-            </button>
-          );
-        })}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+        {categories.map(cat => (
+          <div key={cat.key}>
+            <div style={{ fontSize: '0.68rem', fontWeight: '800', color: 'rgba(255,255,255,0.5)', marginBottom: '4px', paddingLeft: '2px' }}>
+              {cat.name}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+              {cat.list.map(acc => {
+                const isSelected = selectedValue === acc.id;
+                const isCredit = acc.type === 'credit';
+                const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+                const defaultIcon = acc.type === 'cash' ? '💵' : (acc.type === 'credit' ? '💳' : (acc.type === 'investment' ? '📈' : '🏦'));
+                const iconToRender = acc.icon || defaultIcon;
+                const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
+
+                return (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => onChange(acc.id)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '10px',
+                      border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                      background: isSelected ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.02)',
+                      color: isSelected ? '#fff' : 'var(--text-secondary)',
+                      fontSize: '0.78rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      transition: 'all 0.2s ease',
+                      boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
+                      minHeight: '52px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {iconToRender} {acc.nickname}
+                      </span>
+                      <span style={{ fontSize: '0.58rem', opacity: 0.7, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                        {ownerLabel}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
+                      ${(acc.balance || 0).toLocaleString()} {acc.currency || 'TWD'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
+    );
+  };
+
+  const renderGroupedSelectOptions = (accountList, placeholder = '-- 請選擇帳戶 --') => {
+    const bankAccs = accountList.filter(a => a.type === 'bank' || a.type === 'virtual');
+    const cashAccs = accountList.filter(a => a.type === 'cash');
+    const creditAccs = accountList.filter(a => a.type === 'credit');
+    const investAccs = accountList.filter(a => a.type === 'investment');
+    const otherAccs = accountList.filter(a => a.type !== 'bank' && a.type !== 'virtual' && a.type !== 'cash' && a.type !== 'credit' && a.type !== 'investment');
+
+    const renderItem = (a) => {
+      const ownerTag = a.owner === 'userA' ? '大狗狗🐕' : (a.owner === 'userB' ? '阿陞🐶' : '共同🏫');
+      const defaultIcon = a.type === 'cash' ? '💵' : (a.type === 'credit' ? '💳' : (a.type === 'investment' ? '📈' : '🏦'));
+      const icon = a.icon || defaultIcon;
+      return (
+        <option key={a.id} value={a.id}>
+          【{ownerTag}】{icon} {a.nickname} (${(a.balance || 0).toLocaleString()} {a.currency || 'TWD'})
+        </option>
+      );
+    };
+
+    return (
+      <>
+        {placeholder && <option value="">{placeholder}</option>}
+        {bankAccs.length > 0 && <optgroup label="🏦 銀行活儲帳戶">{bankAccs.map(renderItem)}</optgroup>}
+        {cashAccs.length > 0 && <optgroup label="💵 現金帳戶">{cashAccs.map(renderItem)}</optgroup>}
+        {creditAccs.length > 0 && <optgroup label="💳 信用卡帳戶">{creditAccs.map(renderItem)}</optgroup>}
+        {investAccs.length > 0 && <optgroup label="📈 投資/交割戶">{investAccs.map(renderItem)}</optgroup>}
+        {otherAccs.length > 0 && <optgroup label="📱 其他帳戶">{otherAccs.map(renderItem)}</optgroup>}
+      </>
     );
   };
 
@@ -848,24 +889,27 @@ const AccountsManager = ({
         />
       </div>
 
-      {/* SUB TAB 1: ACCOUNTS LIST */}
+      {/* SUB TAB 1: ACCOUNTS LIST (Grouped by 4 Category Types) */}
       {subTab === 'list' && (
         <div className="slide-in">
           {/* Create Button */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', paddingRight: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px', paddingRight: '4px' }}>
             <button className="glass-btn primary-gradient-btn" onClick={handleOpenAdd} style={{ padding: '8px 16px', borderRadius: '10px', fontSize: '0.8rem', fontWeight: '700' }}>
               ➕ 建立新帳戶
             </button>
           </div>
 
-          {/* Group 1: Joint Accounts */}
-          {renderAccountListGroup("🏫 共同帳戶 (雙方可編輯)", accounts.filter(a => a.owner === 'joint'))}
+          {/* Group 1: Bank Accounts */}
+          {renderAccountListGroup("🏦 銀行活儲帳戶", accounts.filter(a => a.type === 'bank' || a.type === 'virtual'), '#0a84ff')}
 
-          {/* Group 2: User A Private Accounts */}
-          {renderAccountListGroup(`🐕 大狗狗🐕的個人帳戶 (${userKey === 'userA' ? '可建立編輯' : '唯讀預覽'})`, accounts.filter(a => a.owner === 'userA'))}
+          {/* Group 2: Cash Accounts */}
+          {renderAccountListGroup("💵 現金帳戶", accounts.filter(a => a.type === 'cash'), '#30d158')}
 
-          {/* Group 3: User B Private Accounts */}
-          {renderAccountListGroup(`🐶 阿陞🐶的個人帳戶 (${userKey === 'userB' ? '可建立編輯' : '唯讀預覽'})`, accounts.filter(a => a.owner === 'userB'))}
+          {/* Group 3: Credit Cards */}
+          {renderAccountListGroup("💳 信用卡帳戶", accounts.filter(a => a.type === 'credit'), '#ff9500')}
+
+          {/* Group 4: Investment Accounts */}
+          {renderAccountListGroup("📈 投資與交割帳戶", accounts.filter(a => a.type === 'investment'), '#af52de')}
         </div>
       )}
 
@@ -1273,15 +1317,7 @@ const AccountsManager = ({
                         className="glass-input"
                         style={{ width: '100%', height: '36px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 6px' }}
                       >
-                        <option value="">-- 選擇扣款帳戶 --</option>
-                        {bankAndCashAccounts.map(b => {
-                          const ownerTag = b.owner === 'userA' ? '大狗狗🐕' : (b.owner === 'userB' ? '阿陞🐶' : '共同🏫');
-                          return (
-                            <option key={b.id} value={b.id}>
-                              【{ownerTag}】{b.icon || '🏦'} {b.nickname} ({b.currency})
-                            </option>
-                          );
-                        })}
+                        {renderGroupedSelectOptions(bankAndCashAccounts, '-- 選擇扣款帳戶 --')}
                       </select>
                     </div>
 
@@ -1376,18 +1412,10 @@ const AccountsManager = ({
                 className="glass-input"
                 style={{ width: '100%', height: '44px', borderRadius: '8px', padding: '0 12px' }}
               >
-                <option value="">-- 選擇接收帳戶 --</option>
-                {accounts
-                  .filter(a => a.currency === editingAccount.currency && a.id !== editingAccount.id)
-                  .map(a => {
-                    const ownerTag = a.owner === 'userA' ? '大狗狗🐕' : (a.owner === 'userB' ? '阿陞🐶' : '共同🏫');
-                    return (
-                      <option key={a.id} value={a.id}>
-                        【{ownerTag}】{a.icon || '🏦'} {a.nickname} (${a.balance.toLocaleString()} {a.currency})
-                      </option>
-                    );
-                  })
-                }
+                {renderGroupedSelectOptions(
+                  accounts.filter(a => a.currency === editingAccount.currency && a.id !== editingAccount.id),
+                  '-- 選擇接收帳戶 --'
+                )}
               </select>
             </div>
 
