@@ -425,12 +425,24 @@ function App() {
     status: 'checking' // 'checking', 'unsupported', 'permission_denied', 'ready', 'failed'
   });
 
+  const sanitizeMessage = (msg) => {
+    if (!msg) return '';
+    const str = String(msg);
+    if (str.includes('<!DOCTYPE html>') || str.includes('<html') || str.includes('<script')) {
+      return '⚠️ 收到非預期的 HTML 網頁回應 (可能是 Google Apps Script 權限問題或網址無效)。\n\n(原始 HTML 內容已自動隱藏，請檢查 Apps Script 部署與權限)。';
+    }
+    if (str.length > 500) {
+      return str.substring(0, 500) + '\n...\n(訊息過長已自動裁切)';
+    }
+    return str;
+  };
+
   const customAlert = (message, title = '提示') => {
     return new Promise((resolve) => {
       setModalConfig({
         type: 'alert',
         title,
-        message,
+        message: sanitizeMessage(message),
         resolve
       });
     });
@@ -441,7 +453,7 @@ function App() {
       setModalConfig({
         type: 'confirm',
         title,
-        message,
+        message: sanitizeMessage(message),
         resolve
       });
     });
@@ -1602,7 +1614,11 @@ function App() {
               }
             } catch (e) {
               console.warn("[Push] Parse response failed:", text);
-              customAlert(`⚠️ 接收到非預期回應（可能是 GAS 程式碼錯誤）：\n${text}`, "推播錯誤");
+              const isHtml = text.trim().startsWith('<') || text.includes('<!DOCTYPE html>');
+              const errSnippet = isHtml 
+                ? '⚠️ 接收到 Google Apps Script 回傳之 HTML 網頁 (請確認 GAS 執行身份設為「Me」且存取權限設為「Anyone」)。'
+                : `⚠️ 接收到非預期回應（可能是 GAS 程式碼錯誤）：\n${text.substring(0, 150)}`;
+              customAlert(errSnippet, "推播錯誤");
             }
           })
           .catch(err => {
