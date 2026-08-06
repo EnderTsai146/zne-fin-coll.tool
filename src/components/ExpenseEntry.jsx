@@ -777,8 +777,8 @@ const ExpenseEntry = ({
     const currentMonth = today.getMonth();
     const currentDay = today.getDate();
 
-    return (assets.accounts || [])
-      .filter(a => a.type === 'credit')
+    return (assets?.accounts || [])
+      .filter(a => a && a.type === 'credit')
       .map(card => {
         const bDay = card.billingDay ? Number(card.billingDay) : 10;
         let dueYear = currentYear;
@@ -796,7 +796,7 @@ const ExpenseEntry = ({
         const unpaidAmount = Math.abs(card.balance || 0);
 
         const linkedBank = card.linkedBankAccountId 
-          ? (assets.accounts || []).find(a => a.id === card.linkedBankAccountId)
+          ? (assets?.accounts || []).find(a => a && a.id === card.linkedBankAccountId)
           : null;
         
         let linkedBankName = linkedBank 
@@ -822,12 +822,12 @@ const ExpenseEntry = ({
           rawAccount: card
         };
       });
-  }, [assets.accounts]);
+  }, [assets?.accounts]);
 
   const combinedBills = useMemo(() => {
-    const regularBills = (assets.bills || []).map(b => ({ ...b, isCreditCard: false }));
+    const regularBills = (assets?.bills || []).map(b => ({ ...b, isCreditCard: false }));
     return [...regularBills, ...creditCardBills].sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
-  }, [assets.bills, creditCardBills]);
+  }, [assets?.bills, creditCardBills]);
 
   const handleCardClick = async (bill) => {
     if (bill.isCreditCard) {

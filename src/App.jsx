@@ -668,7 +668,7 @@ function App() {
 
   // ★ Auto-Pay Engine & 5-Day Prior Notification Check
   useEffect(() => {
-    if (!dataReady || !assets || !assets.accounts) return;
+    if (!dataReady || !assets || !Array.isArray(assets?.accounts)) return;
 
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
@@ -676,14 +676,14 @@ function App() {
     const currentMonth = today.getMonth();
     const currentDay = today.getDate();
 
-    const creditCards = (assets.accounts || []).filter(a => a.type === 'credit');
+    const creditCards = (assets?.accounts || []).filter(a => a && a.type === 'credit');
     if (creditCards.length === 0) return;
 
     const lastCheckedDate = localStorage.getItem('autoPayLastCheckedDate');
     if (lastCheckedDate === todayStr) return;
 
     let accountsUpdated = false;
-    let newAccounts = [...assets.accounts];
+    let newAccounts = [...(assets?.accounts || [])];
     const newTxRecords = [];
 
     creditCards.forEach(card => {
@@ -764,7 +764,7 @@ function App() {
         ...assets,
         accounts: newAccounts,
         monthlyExpenses: [
-          ...(assets.monthlyExpenses || []),
+          ...(assets?.monthlyExpenses || []),
           ...newTxRecords
         ]
       };
