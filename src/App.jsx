@@ -637,6 +637,9 @@ function App() {
     // Listen for foreground push notifications
     onFcmMessage((payload) => {
       console.log("Foreground push notification received:", payload);
+      const title = payload.notification?.title || payload.data?.title || "🎉 收到推播通知";
+      const body = payload.notification?.body || payload.data?.body || "";
+      customAlert(`🔔 【${title}】\n${body}`, "即時推播通知");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, dataReady, operatorName]);
