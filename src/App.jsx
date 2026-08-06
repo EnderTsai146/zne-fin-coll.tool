@@ -1647,10 +1647,23 @@ function App() {
             } catch (e) {
               console.warn("[Push] Parse response failed:", text);
               const isHtml = text.trim().startsWith('<') || text.includes('<!DOCTYPE html>');
-              const errSnippet = isHtml 
-                ? '⚠️ 接收到 Google Apps Script 回傳之 HTML 網頁 (請確認 GAS 執行身份設為「Me」且存取權限設為「Anyone」)。'
-                : `⚠️ 接收到非預期回應（可能是 GAS 程式碼錯誤）：\n${text.substring(0, 150)}`;
-              customAlert(errSnippet, "推播錯誤");
+              
+              let errDetail = text.substring(0, 150);
+              if (isHtml) {
+                const titleMatch = text.match(/<title>(.*?)<\/title>/i);
+                const titleText = titleMatch ? titleMatch[1] : '';
+                
+                if (text.includes("Authorization Required") || titleText.includes("Authorization")) {
+                  errDetail = "💡 Google Apps Script 尚未通過第一次「審查權限 (Review Permissions)」授權！\n請在 GAS 編輯器中隨便選擇一個函式點擊一次『執行』，並在彈出的 Google 視窗中點選『允許授權』。";
+                } else if (text.includes("Google Accounts") || titleText.includes("Sign in")) {
+                  errDetail = "💡 請確認 Apps Script 部署時「存取權限 (Who has access)」是否選擇了「Anyone (所有人)」。";
+                } else {
+                  const cleanText = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                  errDetail = `💡 GAS 程式碼執行出錯：\n【${titleText || '伺服器異常'}】\n${cleanText.slice(0, 120)}`;
+                }
+              }
+              
+              customAlert(`⚠️ 推播發送回應異常：\n${errDetail}`, "GAS 診斷提示");
             }
           })
           .catch(err => {
