@@ -1270,9 +1270,14 @@ const AccountsManager = ({
                         style={{ width: '100%', height: '36px', borderRadius: '8px', fontSize: '0.76rem', padding: '0 6px' }}
                       >
                         <option value="">-- 選擇扣款帳戶 --</option>
-                        {bankAndCashAccounts.map(b => (
-                          <option key={b.id} value={b.id}>{b.nickname} ({b.currency})</option>
-                        ))}
+                        {bankAndCashAccounts.map(b => {
+                          const ownerTag = b.owner === 'userA' ? '大狗狗🐕' : (b.owner === 'userB' ? '阿陞🐶' : '共同🏫');
+                          return (
+                            <option key={b.id} value={b.id}>
+                              【{ownerTag}】{b.icon || '🏦'} {b.nickname} ({b.currency})
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
 
@@ -1364,11 +1369,14 @@ const AccountsManager = ({
                 <option value="">-- 選擇接收帳戶 --</option>
                 {accounts
                   .filter(a => a.currency === editingAccount.currency && a.id !== editingAccount.id)
-                  .map(a => (
-                    <option key={a.id} value={a.id}>
-                      {a.nickname} (${a.balance.toLocaleString()} {a.currency})
-                    </option>
-                  ))
+                  .map(a => {
+                    const ownerTag = a.owner === 'userA' ? '大狗狗🐕' : (a.owner === 'userB' ? '阿陞🐶' : '共同🏫');
+                    return (
+                      <option key={a.id} value={a.id}>
+                        【{ownerTag}】{a.icon || '🏦'} {a.nickname} (${a.balance.toLocaleString()} {a.currency})
+                      </option>
+                    );
+                  })
                 }
               </select>
             </div>
