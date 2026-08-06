@@ -1060,6 +1060,7 @@ function App() {
         setOperatorName('');
         setDataReady(false);
         setLoading(false); // 未登入時直接解鎖，讓 Login 頁面顯示
+        setSplashPhase('done'); // 確保立刻關閉 Splash Screen 直接呈現 Login
       }
     });
     return () => unsubscribeAuth();
