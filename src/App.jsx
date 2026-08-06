@@ -495,6 +495,7 @@ function App() {
   const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('database');
   const [settingsSubTab, setSettingsSubTab] = useState('budget');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
+  const [guidedHint, setGuidedHint] = useState(null);
 
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
@@ -1403,6 +1404,28 @@ function App() {
       setLastActiveCenterTab(pageId);
     }
     setCurrentPage(pageId);
+  };
+
+  const handleNavigateWithGuide = ({ page, tab, mode, hint }) => {
+    if (page) {
+      if (page === 'overview' || page === 'expense') {
+        setLastActiveCenterTab(page);
+      }
+      setCurrentPage(page);
+    }
+
+    if (page === 'monthly' && tab) {
+      setMonthlyViewSubTab(tab);
+    } else if (page === 'settings' && tab) {
+      setSettingsSubTab(tab);
+    }
+
+    if (hint) {
+      setGuidedHint(hint);
+      setTimeout(() => {
+        setGuidedHint(null);
+      }, 5000);
+    }
   };
 
   // (舊的 22 點晚間自動批次發送邏輯已被移除，改用手動開關觸發收集與發送)
@@ -2471,6 +2494,33 @@ function App() {
         </aside>
 
         <div className="desktop-main-canvas">
+          {guidedHint && (
+            <div style={{
+              position: 'sticky',
+              top: '12px',
+              zIndex: 9999,
+              marginBottom: '16px',
+              background: 'linear-gradient(135deg, rgba(255, 149, 0, 0.95), rgba(255, 215, 0, 0.95))',
+              color: '#000',
+              padding: '12px 18px',
+              borderRadius: '14px',
+              fontWeight: '800',
+              fontSize: '0.86rem',
+              boxShadow: '0 8px 25px rgba(255, 149, 0, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              animation: 'liquid-pop-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}>
+              <span>💡 {guidedHint}</span>
+              <button
+                onClick={() => setGuidedHint(null)}
+                style={{ background: 'rgba(0,0,0,0.15)', border: 'none', color: '#000', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', fontWeight: '900' }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <div key={currentPage} className="page-transition-enter">
             {currentPage === 'overview' && (
               <TotalOverview
@@ -2542,6 +2592,7 @@ function App() {
                 onRequestNotificationPermission={handleRegisterNotification}
                 fcmDiagnostic={fcmDiagnostic}
                 onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`, true)}
+                onNavigateWithGuide={handleNavigateWithGuide}
               />
             )}
           </div>

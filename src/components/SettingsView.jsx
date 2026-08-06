@@ -16,6 +16,7 @@ import { db } from '../firebase';
 import { collection, query, orderBy, limit, getDocs, startAfter, where, deleteDoc } from 'firebase/firestore';
 import { getBudgetForMonth } from '../utils/budgetUtils';
 import { MY_GOOGLE_API_URL } from '../config';
+import HelpWizard from './HelpWizard';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -32,7 +33,8 @@ const SettingsView = ({
   logOperation,
   onRequestNotificationPermission,
   fcmDiagnostic = { status: 'checking', token: null, error: null },
-  onSendTestPush
+  onSendTestPush,
+  onNavigateWithGuide
 }) => {
   
   // --- Push Notification Permission States & Handlers ---
@@ -550,8 +552,7 @@ const SettingsView = ({
       {/* Settings Navigation Sub-Tabs */}
       <div className="settings-tabs" style={{ marginBottom: '20px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
         <button className={`settings-tab-btn ${activeSubTab === 'budget' ? 'active' : ''}`} onClick={() => setActiveSubTab('budget')}>預算設定</button>
-        <button className={`settings-tab-btn ${activeSubTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveSubTab('guide')}>操作指南</button>
-        <button className={`settings-tab-btn ${activeSubTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveSubTab('faq')}>常見問題</button>
+        <button className={`settings-tab-btn ${activeSubTab === 'guide' || activeSubTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveSubTab('guide')}>🧭 智慧引導助手</button>
         <button className={`settings-tab-btn ${activeSubTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveSubTab('logs')}>歷史軌跡</button>
         <button className={`settings-tab-btn ${activeSubTab === 'info' ? 'active' : ''}`} onClick={() => setActiveSubTab('info')}>系統資訊</button>
       </div>
@@ -766,72 +767,9 @@ const SettingsView = ({
 
 
 
-        {/* === 3. 操作指南 === */}
-        {activeSubTab === 'guide' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '600' }}>
-                個人記帳與共同代墊之分流
-              </h4>
-              <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                登錄交易時，須於「付款方式」欄位選定帳戶。若屬個人私帳，請選擇個人帳戶，該筆金額將直接自個人帳戶扣除。若為共同支出且由個人（大狗狗或阿陞）代墊，系統在暫存或送出時會先啟動「前端餘額阻斷校驗」，檢查代墊人帳戶之可用餘額是否足夠；確認足夠後，系統會自該代墊人的個人帳戶執行扣減，並將代墊款項記入共同待結帳目中。
-              </p>
-            </div>
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '600' }}>
-                代墊款項結清與審計追蹤
-              </h4>
-              <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                前往「回顧與資料庫」的「財務資料庫」子分頁可查閱全時間未結清之代墊明細。點選「結清」後，系統會自動自「共同現金」帳戶撥款並加回原代墊人的個人帳戶中。此操作會在背景寫入該時間點的資產分佈快照（Audit Trail），為後續對帳與帳務變更提供完整的審計歷史紀錄。
-              </p>
-            </div>
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.9rem', fontWeight: '600' }}>
-                投資庫存與先進先出 (FIFO) 估算
-              </h4>
-              <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                於投資交易介面中，利用股票代號自動完成欄位輸入標的，即可暫存並批次提交交易紀錄。當執行「賣出」時，系統會自動預填歷史取得之台幣或美金成本，藉此推算庫存損益與歷史持有均價。
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* === 4. 常見問題 === */}
-        {activeSubTab === 'faq' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
-                Q：為什麼系統禁止我直接修改歷史紀錄的「金額」或「帳戶」？
-              </h4>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                A：為確保會計帳務之安全性與資料一致性，系統設有防護機制，禁止直接修改已寫入的歷史交易金額或關聯帳戶。直接修改歷史資料會破壞前後期帳務審計，並產生無法對帳的「幽靈帳」。維持原始數據（Raw Data）的不可變性是確保資產追蹤平順之核心基礎。
-              </p>
-            </div>
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
-                Q：如果記錯金額或扣錯帳戶，我該如何修正？
-              </h4>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                A：請使用「作廢退款」之二階段修正機制：點選該筆紀錄右側的垃圾桶圖示，並填寫作廢原因。系統將自動產生一筆方向相反的沖銷分錄，將資金全數退回原始錢包；沖銷完成後，請重新登錄正確的交易帳目。
-              </p>
-            </div>
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
-                Q：為什麼美股部位的未實現損益，跟券商 App 顯示的有一點點落差？
-              </h4>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                A：本系統是以實際歷史批次交易紀錄進行先進先出 (FIFO) 之精準成本估算，且市值已自動扣除預估的複委託手續費。若與券商 App 存在微幅落差，屬合理計算景深，您亦可利用資產操作面板中的「校正回歸」功能進行微調。
-              </p>
-            </div>
-            <div className="glass-card" style={{ padding: '16px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', lineHeight: '1.4' }}>
-                Q：什麼是「餘額校正」，它會影響我本月的收支預算進度嗎？
-              </h4>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.6' }}>
-                A：「餘額校正」（校正回歸）僅用於修正零星匯差、非預期手續費等帳面誤差。此操作在會計科目上歸類為獨立修正屬性，不會計入當月的日常支出預算或現金流統計。
-              </p>
-            </div>
-          </div>
+        {/* === 2. 智慧引導助手 (替代原操作指南與常見問題) === */}
+        {(activeSubTab === 'guide' || activeSubTab === 'faq') && (
+          <HelpWizard onNavigateWithGuide={onNavigateWithGuide} />
         )}
 
         {/* === 5. 歷史軌跡 === */}

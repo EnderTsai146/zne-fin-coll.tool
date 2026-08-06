@@ -2903,11 +2903,37 @@ div {
   }
 }
 
-/* Mobile Layout Fine-tuning (iPhone 17 Pro / < 1024px) */
 @media (max-width: 1023px) {
   .desktop-sidebar {
     display: none !important;
   }
+}
+
+/* Guided Learning Focus Pulse Glow */
+@keyframes guided-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7), 0 0 20px rgba(255, 149, 0, 0.5);
+    border-color: #ffd700;
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(255, 215, 0, 0), 0 0 28px rgba(255, 149, 0, 0.8);
+    border-color: #ff9500;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0), 0 0 15px rgba(255, 149, 0, 0.3);
+  }
+}
+
+.guided-pulse-highlight {
+  animation: guided-pulse 1.2s infinite ease-in-out !important;
+  border: 2px solid #ffd700 !important;
+  border-radius: 12px;
+  position: relative;
+  z-index: 100;
+}
+
+/* Mobile Layout Fine-tuning (iPhone 17 Pro / < 1024px) */
+@media (max-width: 1023px) {
   .desktop-main-canvas {
     padding: 0;
     width: 100%;
