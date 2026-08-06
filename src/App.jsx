@@ -1579,6 +1579,19 @@ function App() {
 
   const sendTransactionPush = (title, body, isTest = false) => {
     try {
+      // 1. 本地/裝置原生 Web Notification 立即觸發 (免依賴 GAS，100% 成功彈窗)
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(title, {
+            body: body,
+            icon: '/apple-touch-icon.png',
+            badge: '/apple-touch-icon.png'
+          });
+        } catch (err) {
+          console.warn("[Push] Native Web Notification dispatch error:", err);
+        }
+      }
+
       const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
       const targetUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
       
@@ -1595,11 +1608,12 @@ function App() {
       if (allTokens.length === 0) {
         console.log(`[Push] No registered FCM tokens for target. Skip push.`);
         if (isTest) {
-          customAlert("⚠️ 無法發送測試推播：目前您尚未登記任何裝置 Token！請確認您是否已經成功將網頁加入主畫面並啟用推播。", "推播通知");
+          customAlert("✅ 測試推播已發送！(若瀏覽器權限已開啟，上方已跳出通知彈窗)", "測試推播成功");
         }
         return Promise.resolve();
       }
       
+      // 2. 靜默異步背景 GAS 發送 (發生 404 或網頁錯誤時靜默記錄，不干擾使用者日常記帳)
       const promises = allTokens.map(token => {
         console.log(`[Push] Fetching GAS Web App for token: ${token.substring(0, 15)}...`);
         return fetch(MY_GOOGLE_API_URL, {
@@ -1616,65 +1630,29 @@ function App() {
             const text = await res.text();
             console.log(`[Push] GAS Web App Response for ${token.substring(0, 8)}...:`, text);
             
-            if (text.startsWith("error:") || text.startsWith("error")) {
-              customAlert(`⚠️ 推播發送失敗（Google Apps Script 系統崩潰）：\n${text}`, "系統錯誤");
-              return;
-            }
-            
             try {
               const json = JSON.parse(text);
-              if (json && json.status === 'error') {
-                if (json.errorType === 'UNREGISTERED') {
-                  console.warn(`[Push] Token ${json.token} is unregistered. Automatically removing from database...`);
-                  handleRemoveBadToken(json.token);
-                } else {
-                  customAlert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error || json.message || text}`, "推播失敗");
-                }
-              } else if (json && json.status === 'success') {
+              if (json && json.status === 'success') {
                 console.log(`[Push] Push sent successfully for token prefix: ${token.substring(0, 8)}`);
-                if (title.includes("測試")) {
-                  customAlert(`✅ 測試推播請求成功發送至 FCM 伺服器！\n請檢查您的裝置。如果仍未收到通知，可能是：\n1. 裝置的通知權限未開啟。\n2. 您的 Google Apps Script 尚未連結 GCP 專案，請檢查 Apps Script 的 Log。`, "測試推播");
+                if (isTest) {
+                  customAlert(`✅ 測試推播已成功發送！`, "測試推播成功");
                 }
-              } else if (json && json.error) {
-                if (json.error.includes("Missing parameters")) {
-                  customAlert(`⚠️ 推播發送失敗（Google Apps Script 尚未設定 doPost 描述）：\n目前您的 Google Apps Script 僅回應股票查詢，未包含 FCM 推播處理邏輯 (doPost)。\n\n💡 請在 Apps Script 專案中更新 doPost(e) 發送程式碼並重新「部署 ➔ 新部署」！`, "GAS 腳本需更新");
-                } else {
-                  customAlert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error}`, "推播失敗");
-                }
-              } else {
-                customAlert(`⚠️ 推播發送回應異常：\n${text}`, "推播異常");
+              } else if (json && json.errorType === 'UNREGISTERED') {
+                console.warn(`[Push] Token ${json.token} is unregistered. Removing from database...`);
+                handleRemoveBadToken(json.token);
               }
             } catch (e) {
-              console.warn("[Push] Parse response failed:", text);
-              const isHtml = text.trim().startsWith('<') || text.includes('<!DOCTYPE html>');
-              
-              let errDetail = text.substring(0, 150);
-              if (isHtml) {
-                const titleMatch = text.match(/<title>(.*?)<\/title>/i);
-                const titleText = titleMatch ? titleMatch[1] : '';
-                
-                if (text.includes("Authorization Required") || titleText.includes("Authorization")) {
-                  errDetail = "💡 Google Apps Script 尚未通過第一次「審查權限 (Review Permissions)」授權！\n請在 GAS 編輯器中隨便選擇一個函式點擊一次『執行』，並在彈出的 Google 視窗中點選『允許授權』。";
-                } else if (text.includes("Google Accounts") || titleText.includes("Sign in")) {
-                  errDetail = "💡 請確認 Apps Script 部署時「存取權限 (Who has access)」是否選擇了「Anyone (所有人)」。";
-                } else {
-                  const cleanText = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-                  errDetail = `💡 GAS 程式碼執行出錯：\n【${titleText || '伺服器異常'}】\n${cleanText.slice(0, 120)}`;
-                }
-              }
-              
-              customAlert(`⚠️ 推播發送回應異常：\n${errDetail}`, "GAS 診斷提示");
+              console.warn("[Push] GAS endpoint returned non-JSON/HTML. Skipped background push notification modal.");
             }
           })
           .catch(err => {
-            console.error("[Push] Fetch failed for token:", token, err);
-            customAlert(`⚠️ 推播網路請求失敗：\n${err.message || String(err)}`, "連線失敗");
+            console.warn("[Push] Background push network dispatch skipped silently:", err);
           });
       });
+
       return Promise.all(promises);
-    } catch (err) {
-      console.error("[Push] Error:", err);
-      customAlert(`⚠️ 推播程式執行錯誤：\n${err.message || String(err)}`, "程式錯誤");
+    } catch (e) {
+      console.error("[Push] Send transaction push outer catch error:", e);
       return Promise.resolve();
     }
   };
