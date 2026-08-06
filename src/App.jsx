@@ -1632,6 +1632,12 @@ function App() {
                 if (title.includes("測試")) {
                   customAlert(`✅ 測試推播請求成功發送至 FCM 伺服器！\n請檢查您的裝置。如果仍未收到通知，可能是：\n1. 裝置的通知權限未開啟。\n2. 您的 Google Apps Script 尚未連結 GCP 專案，請檢查 Apps Script 的 Log。`, "測試推播");
                 }
+              } else if (json && json.error) {
+                if (json.error.includes("Missing parameters")) {
+                  customAlert(`⚠️ 推播發送失敗（Google Apps Script 尚未設定 doPost 描述）：\n目前您的 Google Apps Script 僅回應股票查詢，未包含 FCM 推播處理邏輯 (doPost)。\n\n💡 請在 Apps Script 專案中更新 doPost(e) 發送程式碼並重新「部署 ➔ 新部署」！`, "GAS 腳本需更新");
+                } else {
+                  customAlert(`⚠️ 推播發送失敗（Google Apps Script 錯誤）：\n${json.error}`, "推播失敗");
+                }
               } else {
                 customAlert(`⚠️ 推播發送回應異常：\n${text}`, "推播異常");
               }
