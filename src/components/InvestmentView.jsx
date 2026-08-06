@@ -832,13 +832,41 @@ const InvestmentView = ({
                   style={{ width: '100%', height: '36px', borderRadius: '8px' }}
                 >
                   <option value="">-- 選擇支付/交割帳戶 --</option>
-                  {filteredAccounts
-                    .filter(a => settleCurrency === 'USD' && stockMarket === 'US' ? a.currency === 'USD' : a.currency === 'TWD')
-                    .map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.nickname} (${a.balance.toLocaleString()} {a.currency})
-                      </option>
-                    ))}
+                  {(() => {
+                    const candidateAccs = filteredAccounts.filter(a => settleCurrency === 'USD' && stockMarket === 'US' ? a.currency === 'USD' : a.currency === 'TWD');
+                    const partnerKey = userKey === 'userA' ? 'userB' : 'userA';
+                    const userName = userKey === 'userA' ? '大狗狗🐕' : '阿陞🐶';
+                    const partnerName = partnerKey === 'userA' ? '大狗狗🐕' : '阿陞🐶';
+
+                    const myAccs = candidateAccs.filter(a => a.owner === userKey);
+                    const jointAccs = candidateAccs.filter(a => a.owner === 'joint');
+                    const partnerAccs = candidateAccs.filter(a => a.owner === partnerKey);
+
+                    const renderItems = (list) => {
+                      const categories = [
+                        { key: 'bank', name: '🏦 銀行活儲', items: list.filter(a => a.type === 'bank' || a.type === 'virtual') },
+                        { key: 'cash', name: '💵 現金帳戶', items: list.filter(a => a.type === 'cash') },
+                        { key: 'credit', name: '💳 信用卡', items: list.filter(a => a.type === 'credit') },
+                        { key: 'investment', name: '📈 投資/交割戶', items: list.filter(a => a.type === 'investment') },
+                      ].filter(c => c.items.length > 0);
+
+                      return categories.map(cat => (
+                        cat.items.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.icon || '🏦'} {a.nickname} ({cat.name.replace(/[^\u4e00-\u9fa5]/g, '')} · ${(a.balance || 0).toLocaleString()} {a.currency || 'TWD'})
+                          </option>
+                        ))
+                      ));
+                    };
+
+                    return (
+                      <>
+                        {myAccs.length > 0 && <optgroup label={`👤 我的帳戶 (${userName})`}>{renderItems(myAccs)}</optgroup>}
+                        {jointAccs.length > 0 && <optgroup label="🏫 共同公費帳戶">{renderItems(jointAccs)}</optgroup>}
+                        {partnerAccs.length > 0 && <optgroup label={`👥 伴侶帳戶 (${partnerName})`}>{renderItems(partnerAccs)}</optgroup>}
+                      </>
+                    );
+                  })()}
                 </select>
               </div>
 

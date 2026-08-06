@@ -270,7 +270,7 @@ const ExpenseEntry = ({
 
   const [accountModalConfig, setAccountModalConfig] = useState(null);
 
-  // Custom visual grid account picker
+  // Custom visual grid account picker (Grouped by Owner & 4 Account Types)
   const renderAccountSelector = (selectedValue, onChange, filterFn = () => true, defaultAccField = 'isDefaultExpense') => {
     const list = accounts.filter(filterFn);
     if (list.length === 0) {
@@ -278,75 +278,112 @@ const ExpenseEntry = ({
     }
     
     const sorted = sortAccountsForUser(list, userKey);
-    
-    // Separate user's own + joint, and partner's
     const ownAndJoint = sorted.filter(a => a.owner === userKey || a.owner === 'joint');
     const partnerAccs = sorted.filter(a => a.owner === partnerKey);
-    
-    // If selected account belongs to partner, append it temporarily to the main list
+
     const selectedAcc = accounts.find(a => a.id === selectedValue);
     const isSelectedPartner = selectedAcc && selectedAcc.owner === partnerKey;
-    const mainList = isSelectedPartner ? [...ownAndJoint, selectedAcc] : ownAndJoint;
-    
+    const activeList = isSelectedPartner ? [...ownAndJoint, selectedAcc] : ownAndJoint;
+
+    const owners = [
+      { key: userKey, title: userKey === 'userA' ? '🐕 我的個人帳戶 (大狗狗)' : '🐶 我的個人帳戶 (阿陞)', accentColor: '#0a84ff' },
+      { key: 'joint', title: '🏫 共同公費帳戶', accentColor: '#30d158' },
+    ];
+
+    if (isSelectedPartner) {
+      owners.push({
+        key: partnerKey,
+        title: partnerKey === 'userA' ? '🐕 伴侶帳戶 (大狗狗)' : '🐶 伴侶帳戶 (阿陞)',
+        accentColor: 'rgba(255,255,255,0.4)'
+      });
+    }
+
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
-        {mainList.map(acc => {
-          const isSelected = selectedValue === acc.id;
-          const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
-          const isCredit = acc.type === 'credit';
-          const balanceColor = isCredit ? '#ff9500' : '#8effa2';
-          
-          let defaultIcon = '🏦';
-          if (acc.type === 'cash') defaultIcon = '💵';
-          else if (acc.type === 'credit') defaultIcon = '💳';
-          else if (acc.type === 'virtual') defaultIcon = '📱';
-          
-          const iconToRender = acc.icon || defaultIcon;
-          
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '6px' }}>
+        {owners.map(owner => {
+          const ownerAccs = activeList.filter(a => a.owner === owner.key);
+          if (ownerAccs.length === 0) return null;
+
+          const categories = [
+            { key: 'bank', name: '🏦 銀行活儲', list: ownerAccs.filter(a => a.type === 'bank' || a.type === 'virtual') },
+            { key: 'cash', name: '💵 現金帳戶', list: ownerAccs.filter(a => a.type === 'cash') },
+            { key: 'credit', name: '💳 信用卡', list: ownerAccs.filter(a => a.type === 'credit') },
+            { key: 'investment', name: '📈 投資/交割戶', list: ownerAccs.filter(a => a.type === 'investment') },
+          ].filter(c => c.list.length > 0);
+
           return (
-            <button
-              key={acc.id}
-              type="button"
-              onClick={() => onChange(acc.id)}
-              style={{
-                padding: '8px 10px',
-                borderRadius: '10px',
-                border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
-                background: isSelected ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.02)',
-                color: isSelected ? '#fff' : 'var(--text-secondary)',
-                fontSize: '0.78rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                textAlign: 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-                transition: 'all 0.2s ease',
-                boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
-                minHeight: '52px',
-                gridColumn: 'span 1'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {iconToRender} {acc.nickname}
-                </span>
-                <span style={{ fontSize: '0.58rem', opacity: 0.6, background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: '4px' }}>
-                  {ownerLabel}
-                </span>
+            <div key={owner.key} style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: `1px solid ${owner.accentColor}33`,
+              borderRadius: '12px',
+              padding: '8px 10px'
+            }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#fff', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '3px', height: '10px', background: owner.accentColor, borderRadius: '2px' }} />
+                {owner.title}
               </div>
-              <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
-                ${(acc.balance || 0).toLocaleString()} {acc.currency || 'TWD'}
-              </span>
-            </button>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {categories.map(cat => (
+                  <div key={cat.key}>
+                    <div style={{ fontSize: '0.64rem', fontWeight: '700', color: 'rgba(255,255,255,0.45)', marginBottom: '3px', paddingLeft: '2px' }}>
+                      {cat.name}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                      {cat.list.map(acc => {
+                        const isSelected = selectedValue === acc.id;
+                        const isCredit = acc.type === 'credit';
+                        const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+                        const defaultIcon = acc.type === 'cash' ? '💵' : (acc.type === 'credit' ? '💳' : (acc.type === 'investment' ? '📈' : '🏦'));
+                        const iconToRender = acc.icon || defaultIcon;
+
+                        return (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            onClick={() => onChange(acc.id)}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '10px',
+                              border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
+                              background: isSelected ? 'rgba(0,122,255,0.18)' : 'rgba(255,255,255,0.02)',
+                              color: isSelected ? '#fff' : 'var(--text-secondary)',
+                              fontSize: '0.78rem',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
+                              transition: 'all 0.2s ease',
+                              boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.25)' : 'none',
+                              minHeight: '48px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {iconToRender} {acc.nickname}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
+                              ${(acc.balance || 0).toLocaleString()} {acc.currency || 'TWD'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           );
         })}
-        
-        {partnerAccs.length > 0 && (
+
+        {partnerAccs.length > 0 && !isSelectedPartner && (
           <button
             type="button"
             onClick={() => setAccountModalConfig({
-              title: '選擇伴侶的帳戶 (更多)',
+              title: `選擇伴侶的帳戶 (${partnerKey === 'userA' ? '大狗狗' : '阿陞'})`,
               list: partnerAccs,
               selectedValue,
               onChange: (val) => {
@@ -358,17 +395,15 @@ const ExpenseEntry = ({
               padding: '8px 10px',
               borderRadius: '10px',
               border: '1px dashed rgba(255,255,255,0.15)',
-              background: 'rgba(255,255,255,0.01)',
+              background: 'rgba(255,255,255,0.02)',
               color: 'var(--text-tertiary)',
-              fontSize: '0.78rem',
+              fontSize: '0.74rem',
               fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              minHeight: '52px',
-              gridColumn: 'span 2',
-              gap: '6px'
+              gap: '4px'
             }}
           >
             👥 選擇伴侶的帳戶 (更多)
