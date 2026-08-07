@@ -67,7 +67,7 @@ export const computeDynamicNecessities = (records, assets) => {
     .map((r, idx) => ({ ...r, originalIndex: idx }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
     
-  const dailySpentNeed = {}; // key: "YYYY-MM-DD:Category", val: spent need amount today
+  const monthlySpentNeed = {}; // key: "YYYY-MM:Category", val: cumulative spent need amount in month
   const results = {}; // Map of record originalIndex to { needAmount, wantAmount }
   
   sorted.forEach(r => {
@@ -81,7 +81,6 @@ export const computeDynamicNecessities = (records, assets) => {
     }
     
     const m = r.month || r.date.slice(0, 7);
-    const dateStr = r.date;
     
     let itemNeedTotal = 0;
     let itemWantTotal = 0;
@@ -100,21 +99,23 @@ export const computeDynamicNecessities = (records, assets) => {
     }
     
     catAmounts.forEach(({ category, amount }) => {
-      const dailyLimit = getDailyBudgetLimit(assets, m, category);
-      const key = `${dateStr}:${category}`;
-      const spentNeedToday = dailySpentNeed[key] || 0;
+      // Get monthly budget for this category in month m
+      const budgets = getBudgetForMonth(assets, m);
+      const monthlyBudget = budgets[category] || 0;
+      const key = `${m}:${category}`;
+      const spentNeedInMonth = monthlySpentNeed[key] || 0;
       
-      if (dailyLimit <= 0) {
+      if (monthlyBudget <= 0) {
         itemWantTotal += amount;
       } else {
-        const allowedNeed = Math.max(0, dailyLimit - spentNeedToday);
+        const allowedNeed = Math.max(0, monthlyBudget - spentNeedInMonth);
         const needAmt = Math.min(amount, allowedNeed);
         const wantAmt = amount - needAmt;
         
         itemNeedTotal += needAmt;
         itemWantTotal += wantAmt;
         
-        dailySpentNeed[key] = spentNeedToday + needAmt;
+        monthlySpentNeed[key] = spentNeedInMonth + needAmt;
       }
     });
     

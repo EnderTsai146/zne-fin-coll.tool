@@ -819,10 +819,10 @@ const MonthlyView = ({
             {/* UNIFIED TRANSACTION DETAILS & MANAGEMENT MODAL */}
             {detailModalRecord && createPortal(
                 <div className="liquid-modal-overlay" onClick={() => setDetailModalRecord(null)}>
-                    <div className="liquid-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '92%', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}>
+                    <div className="liquid-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '92%', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
                         
                         {/* Modal Header */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexShrink: 0 }}>
                             <div style={{ fontWeight: '850', fontSize: '1.15rem', color: '#fff' }} className="liquid-modal-title">
                                 🔍 交易詳細資訊 & 管理
                             </div>
@@ -830,10 +830,10 @@ const MonthlyView = ({
                         </div>
 
                         {/* Scrollable Modal Content */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '52vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '10px', flexGrow: 1 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '68vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '16px', flexGrow: 1 }}>
                             
                             {/* Summary Card */}
-                            <div className="inset-group-card" style={{ padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                            <div className="inset-group-card" style={{ padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: 0 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                                     <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)' }}>💰 交易金額</span>
                                     <strong style={{ fontSize: '1.05rem', color: detailModalRecord.type === 'income' ? '#30d158' : '#fff' }}>
@@ -876,12 +876,12 @@ const MonthlyView = ({
                             })()}
 
                             {/* Editable Fields */}
-                            <div className="inset-group-card">
-                                <div style={{ padding: '4px 10px 10px 10px', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <div className="inset-group-card" style={{ marginBottom: 0 }}>
+                                <div style={{ padding: '8px 12px', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', gap: '4px', alignItems: 'center' }}>
                                     <span>✏️</span>
                                     <span>編輯交易屬性 (金額與帳戶屬唯讀)</span>
                                 </div>
-                                <div className="inset-group-row">
+                                <div className="inset-group-row" style={{ padding: '10px 14px', minHeight: '44px' }}>
                                     <span className="inset-group-label">📅 交易日期</span>
                                     <span className="inset-group-value">
                                         <input 
@@ -892,7 +892,7 @@ const MonthlyView = ({
                                         />
                                     </span>
                                 </div>
-                                <div className="inset-group-row">
+                                <div className="inset-group-row" style={{ padding: '10px 14px', minHeight: '44px' }}>
                                     <span className="inset-group-label">📝 交易備註</span>
                                     <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
                                         <input 
