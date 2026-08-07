@@ -1381,10 +1381,20 @@ const AccountsManager = ({
 
                   {renderToggleRow("自動執行扣款結清 (Auto-Pay)", autoPay, setAutoPay, isReadOnly)}
 
-                  <div style={{ fontSize: '0.68rem', color: autoPay ? '#8effa2' : '#ffb94f', lineHeight: '1.4', background: 'rgba(0,0,0,0.2)', padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    {autoPay
-                      ? '🤖 已開啟自動扣款：到期日前 5 天自動提醒，到期日當天將自動自綁定活儲扣繳。'
-                      : '🖐️ 手動繳款模式：不強制綁定活儲。帳單會自動顯示在『帳單』中心，並在到期前提高提醒頻率供手動選擇帳戶繳費。'}
+                  <div style={{ fontSize: '0.72rem', color: autoPay ? '#8effa2' : '#ffb94f', lineHeight: '1.5', background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '10px', border: `1px solid ${autoPay ? 'rgba(48,209,88,0.2)' : 'rgba(255,185,79,0.2)'}` }}>
+                    <div style={{ fontWeight: '800', marginBottom: '3px', color: autoPay ? '#30d158' : '#ffb94f' }}>
+                      {autoPay ? '🤖 已開啟 App 自動劃撥扣繳' : '🖐️ 手動劃撥模式'}
+                    </div>
+                    {autoPay ? (
+                      <div>
+                        ⚠️ <strong>實體同步提醒</strong>：App 將於每月扣繳日自動劃撥結清。<br />
+                        請務必確認您已向發卡銀行開通實體帳戶自動扣繳，並確保扣繳日當天綁定活儲餘額充足！
+                      </div>
+                    ) : (
+                      <div>
+                        💡 <strong>實體同步提醒</strong>：於網路銀行完成轉帳後，請至【帳單】頁面點擊『確定劃撥繳清』，App 資料庫才會將活儲與信用卡負債同步沖銷！
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

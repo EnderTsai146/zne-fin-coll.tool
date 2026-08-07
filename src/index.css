@@ -2454,6 +2454,17 @@ div {
   font-size: 0.9rem;
 }
 
+@media (max-width: 430px) {
+  .inset-group-row {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    min-height: 44px;
+  }
+  .inset-group-label {
+    font-size: 0.8rem;
+  }
+}
+
 .inset-group-row:not(:last-child) {
   border-bottom: 0.5px solid rgba(255, 255, 255, 0.07);
 }

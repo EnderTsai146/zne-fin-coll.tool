@@ -126,6 +126,10 @@ const ExpenseEntry = ({
   const [selectedBill, setSelectedBill] = useState(null);
   const [billPayAccountId, setBillPayAccountId] = useState('');
 
+  const [showCreditCardModal, setShowCreditCardModal] = useState(false);
+  const [selectedCcBill, setSelectedCcBill] = useState(null);
+  const [helpTooltipConfig, setHelpTooltipConfig] = useState(null);
+
   const [showEditBillModal, setShowEditBillModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [billNote, setBillNote] = useState('');
@@ -887,18 +891,9 @@ const ExpenseEntry = ({
 
   const handleCardClick = async (bill) => {
     if (bill.isCreditCard) {
-      if (bill.amount === 0) {
-        await customAlert(`🎉 信用卡【${bill.rawAccount.nickname}】本期帳單已完全結清 (未繳金額 $0)，無須手動扣繳。`, "帳單已結清");
-        return;
-      }
-
-      if (bill.autoPay) {
-        const confirmManual = await customConfirm(
-          `🤖 提醒：信用卡【${bill.rawAccount.nickname}】已設定於每月 ${bill.rawAccount.billingDay || 10} 日由【${bill.linkedBankName}】自動扣繳。\n\n確定要提前手動劃撥結清嗎？`,
-          "自動扣繳提示"
-        );
-        if (!confirmManual) return;
-      }
+      setSelectedCcBill(bill);
+      setShowCreditCardModal(true);
+      return;
     }
 
     setSelectedBill(bill);
@@ -1249,34 +1244,34 @@ const ExpenseEntry = ({
                                       transition: 'all 0.2s ease'
                                     }}
                                   >
-                                    <span className="inset-group-label" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                      <span style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <span>{bill.icon || (isCc ? '💳' : (bill.isFixedAmount === false ? '📊' : '📌'))}</span>
-                                        <span>{bill.note || bill.category || bill.name}</span>
+                                    <span className="inset-group-label" style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0, paddingRight: '8px' }}>
+                                      <span style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        <span style={{ flexShrink: 0 }}>{bill.icon || (isCc ? '💳' : (bill.isFixedAmount === false ? '📊' : '📌'))}</span>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bill.note || bill.category || bill.name}</span>
                                       </span>
-                                      <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
-                                        繳費日: 每月 {bill.date || (bill.nextDate ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate}
+                                      <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        扣繳日: 每月 {bill.date || (bill.nextDate ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate}
                                       </span>
                                     </span>
 
-                                    <span className="inset-group-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                                      <strong style={{ color: isCc && bill.amount > 0 ? '#ffb94f' : '#fff', fontSize: '0.9rem' }}>
+                                    <span className="inset-group-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
+                                      <strong style={{ color: isCc && bill.amount > 0 ? '#ffb94f' : '#fff', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                                         ${(bill.amount || 0).toLocaleString()} {bill.currency || 'TWD'}
                                       </strong>
 
                                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                         {isCc ? (
                                           bill.autoPay ? (
-                                            <span style={{ fontSize: '0.62rem', background: 'rgba(142,255,162,0.15)', color: '#8effa2', border: '0.5px solid rgba(142,255,162,0.3)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                            <span style={{ fontSize: '0.6rem', background: 'rgba(142,255,162,0.15)', color: '#8effa2', border: '0.5px solid rgba(142,255,162,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
                                               🤖 自動扣款 ({bill.linkedBankName})
                                             </span>
                                           ) : (
-                                            <span style={{ fontSize: '0.62rem', background: 'rgba(255,185,79,0.15)', color: '#ffb94f', border: '0.5px solid rgba(255,185,79,0.3)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                            <span style={{ fontSize: '0.6rem', background: 'rgba(255,185,79,0.15)', color: '#ffb94f', border: '0.5px solid rgba(255,185,79,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
                                               🖐️ 手動繳納
                                             </span>
                                           )
                                         ) : (
-                                          <span style={{ fontSize: '0.62rem', background: bill.isFixedAmount === false ? 'rgba(0,122,255,0.15)' : 'rgba(48,209,88,0.15)', color: bill.isFixedAmount === false ? '#0a84ff' : '#30d158', border: '0.5px solid rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                          <span style={{ fontSize: '0.6rem', background: bill.isFixedAmount === false ? 'rgba(0,122,255,0.15)' : 'rgba(48,209,88,0.15)', color: bill.isFixedAmount === false ? '#0a84ff' : '#30d158', border: '0.5px solid rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
                                             {bill.isFixedAmount === false ? '📊 變動金額' : '📌 固定金額'}
                                           </span>
                                         )}
@@ -1579,10 +1574,10 @@ const ExpenseEntry = ({
         document.body
       )}
 
-      {/* EDIT / ADD BILL MODAL */}
+      {/* EDIT / ADD REGULAR RECURRING BILL MODAL */}
       {showEditBillModal && createPortal(
-        <div className="liquid-modal-overlay" onClick={() => setShowEditBillModal(false)}>
-          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="liquid-modal-overlay" onClick={() => setShowEditBillModal(false)} style={{ zIndex: 9998 }}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto', padding: '20px 16px', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }}>
                 {editingBill ? '✏️ 編輯常態帳單' : '➕ 新增常態帳單'}
@@ -1592,8 +1587,14 @@ const ExpenseEntry = ({
 
             <div className="inset-group-card" style={{ marginBottom: '16px' }}>
               {/* Fixed vs Variable Toggle */}
-              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>📌 帳單金額屬性</span>
+              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '10px 14px' }}>
+                <span className="inset-group-label" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>📌 帳單金額屬性</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "帳單金額屬性說明",
+                    text: "📌 固定金額帳單（如房租、Netflix 訂閱）每月金額固定，到達認列日會精準扣繳與提示。\n\n📊 變動金額帳單（如水電瓦斯費、手機通訊費）到達認列日會提示您確認並輸入當月實際發票金額。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.82rem' }}>❓</button>
+                </span>
                 <SegmentedControl
                   options={[
                     { label: '📌 固定金額帳單', value: true },
@@ -1605,8 +1606,14 @@ const ExpenseEntry = ({
               </div>
 
               {/* Owner Segmented Control */}
-              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>👤 歸屬對象</span>
+              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '10px 14px' }}>
+                <span className="inset-group-label" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>👤 歸屬對象</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "歸屬對象說明",
+                    text: "標記此筆常態帳單屬於大狗狗個人、阿陞個人或是兩人共同公費。系統將依據歸屬對象進行分區展示與權限控管。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.82rem' }}>❓</button>
+                </span>
                 <SegmentedControl
                   options={[
                     { label: userKey === 'userA' ? '🐕 大狗狗' : '🐶 阿陞', value: userKey },
@@ -1619,7 +1626,7 @@ const ExpenseEntry = ({
               </div>
 
               {/* Bill Name/Note */}
-              <div className="inset-group-row">
+              <div className="inset-group-row" style={{ padding: '10px 14px', minHeight: '46px' }}>
                 <span className="inset-group-label">📝 帳單名稱</span>
                 <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
                   <input
@@ -1633,7 +1640,7 @@ const ExpenseEntry = ({
               </div>
 
               {/* Bill Amount */}
-              <div className="inset-group-row">
+              <div className="inset-group-row" style={{ padding: '10px 14px', minHeight: '46px' }}>
                 <span className="inset-group-label">{isFixedAmount ? '💵 每月金額' : '💵 預估金額'}</span>
                 <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
                   <input
@@ -1648,8 +1655,14 @@ const ExpenseEntry = ({
               </div>
 
               {/* Monthly Billing Day */}
-              <div className="inset-group-row">
-                <span className="inset-group-label">📅 每月扣繳/認列日</span>
+              <div className="inset-group-row" style={{ padding: '10px 14px', minHeight: '46px' }}>
+                <span className="inset-group-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>📅 每月扣繳/認列日</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "每月扣繳/認列日說明",
+                    text: "設定每月固定產生繳費提醒或自動劃撥扣款的日期 (1~28 日)。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.82rem' }}>❓</button>
+                </span>
                 <span className="inset-group-value" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span>每月</span>
                   <input
@@ -1665,8 +1678,14 @@ const ExpenseEntry = ({
               </div>
 
               {/* Reminder Advance Days */}
-              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>🔔 到期前提醒天數</span>
+              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '10px 14px' }}>
+                <span className="inset-group-label" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>🔔 到期前提醒天數</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "到期前提醒天數說明",
+                    text: "在帳單到期日前 N 天，App 會開始在帳單清單頂部高亮提示並傳送推播通知提醒您繳納。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.82rem' }}>❓</button>
+                </span>
                 <SegmentedControl
                   options={[
                     { label: '1 天前', value: 1 },
@@ -1680,27 +1699,16 @@ const ExpenseEntry = ({
               </div>
 
               {/* Default Linked Payment Account */}
-              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>💳 預設扣款/代扣帳戶 (選填)</span>
+              <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '10px 14px' }}>
+                <span className="inset-group-label" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>💳 預設扣款/代扣帳戶 (選填)</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "預設扣款帳戶說明",
+                    text: "設定此帳單預設扣款/代扣帳戶。\n• 若選擇活儲/現金：繳款時直接扣減該帳戶餘額。\n• 若選擇信用卡代扣：將自動處理為信用卡負債與費用，於卡費扣繳日由活儲劃撥沖銷，絕不重複計入費用。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.82rem' }}>❓</button>
+                </span>
                 {renderAccountSelector(billDefaultAccountId, setBillDefaultAccountId, () => true, 'isDefaultExpense')}
               </div>
-            </div>
-
-            {/* Dynamic Accounting Impact Card */}
-            <div style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '10px',
-              padding: '10px 12px',
-              marginBottom: '16px',
-              fontSize: '0.76rem',
-              color: 'var(--text-secondary)',
-              lineHeight: '1.45'
-            }}>
-              <div style={{ fontWeight: '800', color: '#fff', marginBottom: '4px' }}>💡 系統認列規範說明：</div>
-              • 類別將自動統一認列為 <strong>「固定費用 (Fixed Expense)」</strong>。<br />
-              • {isFixedAmount ? '固定金額帳單每月到達認列日會精準扣繳/提示。' : '變動金額帳單到達認列日會提示確認當月實際發票/繳費單金額。'}<br />
-              • 若使用信用卡扣繳，系統將自動處理為信用卡負債增額，於卡費扣繳日由活儲劃撥沖銷，<strong>絕不重複計入費用</strong>。
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -1709,6 +1717,169 @@ const ExpenseEntry = ({
                 {editingBill ? '更新帳單' : '確定新增'}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* DEDICATED CREDIT CARD BILL MANAGEMENT MODAL */}
+      {showCreditCardModal && selectedCcBill && createPortal(
+        <div className="liquid-modal-overlay" onClick={() => setShowCreditCardModal(false)} style={{ zIndex: 9999 }}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto', padding: '20px 16px', boxSizing: 'border-box' }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>💳</span>
+                <span>{selectedCcBill.rawAccount.nickname} 信用卡帳單專區</span>
+              </div>
+              <button onClick={() => setShowCreditCardModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* Credit Card Detail Card */}
+            <div className="inset-group-card" style={{ marginBottom: '14px', padding: '14px', background: 'rgba(255,255,255,0.03)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>📊 本期未結算/待繳金額</span>
+                <strong style={{ fontSize: '1.15rem', color: selectedCcBill.amount > 0 ? '#ffb94f' : '#8effa2' }}>
+                  ${(selectedCcBill.amount || 0).toLocaleString()} {selectedCcBill.currency}
+                </strong>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.78rem' }}>
+                <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>📅 每月帳單出帳日</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "帳單結帳/出帳日說明",
+                    text: "結帳日是計算當期應繳總金額的時間基準點。\n在結帳日前刷卡消費時，金額已即時認列為當月消費費用，並增加信用卡負債。\n到達結帳日當天，系統將結帳日前所有刷卡金額彙整封裝為『本期帳單應繳總金額』，絕不重複扣款。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
+                </span>
+                <span style={{ color: '#fff', fontWeight: '600' }}>每月 {selectedCcBill.rawAccount.billingDay || 10} 號</span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.78rem' }}>
+                <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>⏰ 繳費截止日</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "繳費截止日說明",
+                    text: "繳費截止日是活儲實際劃撥沖銷信用卡負債的時間點。\n劃撥扣繳時：活儲 -$X，信用卡負債 +$X (沖銷歸零)，當月費用 +$0 (避免重複計算)。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
+                </span>
+                <span style={{ color: selectedCcBill.diffDays <= 3 ? '#ff453a' : '#fff', fontWeight: '700' }}>
+                  {selectedCcBill.nextDate} (離到期剩 {selectedCcBill.diffDays} 天)
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>🤖 扣繳方式與狀態</span>
+                  <button type="button" onClick={() => setHelpTooltipConfig({
+                    title: "扣繳方式說明",
+                    text: "自動扣繳：系統將於每月扣繳日自動從指定活儲劃撥結清。\n手動劃撥：需於網銀繳款後，在 App 中點擊『確定劃撥繳清』發起金額沖銷。"
+                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
+                </span>
+                <span style={{
+                  fontSize: '0.7rem',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontWeight: '750',
+                  background: selectedCcBill.autoPay ? 'rgba(48,209,88,0.15)' : 'rgba(255,185,79,0.15)',
+                  color: selectedCcBill.autoPay ? '#30d158' : '#ffb94f',
+                  border: `0.5px solid ${selectedCcBill.autoPay ? 'rgba(48,209,88,0.3)' : 'rgba(255,185,79,0.3)'}`
+                }}>
+                  {selectedCcBill.autoPay ? `🤖 自動扣繳 (${selectedCcBill.linkedBankName})` : '🖐️ 手動劃撥繳納'}
+                </span>
+              </div>
+            </div>
+
+            {/* Real-World Synchronization Alert Box */}
+            <div style={{
+              background: selectedCcBill.autoPay ? 'rgba(48,209,88,0.08)' : 'rgba(255,185,79,0.08)',
+              border: `1px solid ${selectedCcBill.autoPay ? 'rgba(48,209,88,0.25)' : 'rgba(255,185,79,0.25)'}`,
+              borderRadius: '12px',
+              padding: '12px 14px',
+              marginBottom: '16px',
+              fontSize: '0.76rem',
+              lineHeight: '1.5',
+              color: 'var(--text-secondary)'
+            }}>
+              <div style={{ fontWeight: '800', color: selectedCcBill.autoPay ? '#30d158' : '#ffb94f', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span>💡 真實現實同步提醒與會計原則</span>
+              </div>
+              {selectedCcBill.autoPay ? (
+                <div>
+                  ⚠️ App 已開啟<strong>「自動扣繳」</strong>，將於出帳日自動將【{selectedCcBill.linkedBankName}】劃撥至信用卡沖銷負債。<br />
+                  <strong>請務必確認</strong>：<br />
+                  1. 您已向發卡銀行開通實體帳戶自動扣繳。<br />
+                  2. 扣繳日當天【{selectedCcBill.linkedBankName}】活儲餘額足夠。
+                </div>
+              ) : (
+                <div>
+                  🖐️ 本卡片為<strong>「手動劃撥模式」</strong>。<br />
+                  當您在網路銀行完成轉帳繳費後，請點擊下方【🚀 提前手動劃撥繳清】，App 資料庫才會將活儲與信用卡負債同步沖銷更新！
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreditCardModal(false);
+                  if (onNavigateTab) onNavigateTab('accounts');
+                }}
+                className="glass-btn"
+                style={{ width: '100%', padding: '10px 0', fontSize: '0.8rem', borderRadius: '10px' }}
+              >
+                ⚙️ 至「帳戶管理」修改此信用卡扣繳設定
+              </button>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setShowCreditCardModal(false)} className="glass-btn" style={{ flex: 1, padding: '10px 0', borderRadius: '10px' }}>關閉</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const b = selectedCcBill;
+                    setShowCreditCardModal(false);
+                    setSelectedBill(b);
+                    if (!billPayAccountId && accounts.length > 0) {
+                      const linkedAcc = b.linkedBankAccountId ? accounts.find(a => a.id === b.linkedBankAccountId) : null;
+                      const defaultAcc = linkedAcc || accounts.find(a => a.owner === userKey && a.isDefaultExpense) || accounts[0];
+                      if (defaultAcc) setBillPayAccountId(defaultAcc.id);
+                    }
+                    setShowBillPayModal(true);
+                  }}
+                  className="glass-btn primary-gradient-btn"
+                  style={{ flex: 2, padding: '10px 0', borderRadius: '10px', fontWeight: '800' }}
+                >
+                  🚀 提前手動劃撥繳清
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* REUSABLE HELP TOOLTIP MICRO-POPOVER MODAL */}
+      {helpTooltipConfig && createPortal(
+        <div className="liquid-modal-overlay" onClick={() => setHelpTooltipConfig(null)} style={{ zIndex: 10000, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '360px', width: '88%', padding: '20px 18px', textAlign: 'left', background: 'rgba(28,28,30,0.96)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', borderRadius: '18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ fontWeight: '850', fontSize: '1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '1.1rem' }}>❓</span>
+                <span>{helpTooltipConfig.title}</span>
+              </div>
+              <button onClick={() => setHelpTooltipConfig(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '18px', whiteSpace: 'pre-line' }}>
+              {helpTooltipConfig.text}
+            </div>
+
+            <button onClick={() => setHelpTooltipConfig(null)} className="glass-btn primary-gradient-btn" style={{ width: '100%', padding: '8px 0', borderRadius: '10px', fontWeight: '750', fontSize: '0.84rem' }}>
+              我知道了
+            </button>
           </div>
         </div>,
         document.body
