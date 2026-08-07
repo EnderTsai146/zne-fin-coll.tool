@@ -1414,43 +1414,70 @@ const ExpenseEntry = ({
 
       {/* BILL PAYMENT POPUP MODAL */}
       {showBillPayModal && selectedBill && createPortal(
-        <div className="liquid-modal-overlay" onClick={() => setShowBillPayModal(false)}>
-          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%' }}>
+        <div className="liquid-modal-overlay" onClick={() => setShowBillPayModal(false)} style={{ zIndex: 9999 }}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto', padding: '20px 16px', boxSizing: 'border-box', touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff' }}>💳 繳納常態帳單</div>
-              <button onClick={() => setShowBillPayModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+              <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>💳</span>
+                <span>{selectedBill.isCreditCard ? '信用卡帳單劃撥繳納' : '繳納常態帳單'}</span>
+              </div>
+              <button onClick={() => setShowBillPayModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer' }}>✕</button>
             </div>
 
-            <div style={{ marginBottom: '16px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
-              您正準備繳納帳單【<strong>{selectedBill.note || selectedBill.category || selectedBill.name || '常態帳單'}</strong>】，應繳金額為 <strong style={{ color: '#fff' }}>${(selectedBill.amount || 0).toLocaleString()} TWD</strong>。
+            <div style={{ marginBottom: '16px', fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+              您正準備繳納帳單【<strong>{selectedBill.note || selectedBill.category || selectedBill.name || '帳單'}</strong>】，應繳金額為 <strong style={{ color: '#fff' }}>${(selectedBill.amount || 0).toLocaleString()} {selectedBill.currency || 'TWD'}</strong>。
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const b = selectedBill;
-                  setShowBillPayModal(false);
-                  handleOpenEditBill(b);
-                }}
-                className="glass-btn"
-                style={{ flex: 1, padding: '6px 0', fontSize: '0.78rem' }}
-              >
-                ✏️ 編輯帳單
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDeleteBill(selectedBill)}
-                className="glass-btn glass-btn-danger"
-                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
-              >
-                🗑️ 刪除
-              </button>
-            </div>
+            {!selectedBill.isCreditCard && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const b = selectedBill;
+                    setShowBillPayModal(false);
+                    handleOpenEditBill(b);
+                  }}
+                  className="glass-btn"
+                  style={{ flex: 1, padding: '6px 0', fontSize: '0.78rem' }}
+                >
+                  ✏️ 編輯帳單
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBill(selectedBill)}
+                  className="glass-btn glass-btn-danger"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                >
+                  🗑️ 刪除
+                </button>
+              </div>
+            )}
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '6px' }}>請選擇扣款支付帳戶</label>
-              {renderAccountSelector(billPayAccountId, setBillPayAccountId, () => true, 'isDefaultExpense')}
+              <label style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>
+                {selectedBill.isCreditCard ? '請選擇劃撥沖銷之活儲/現金帳戶 (不可使用信用卡)' : '請選擇扣款支付帳戶'}
+              </label>
+
+              {renderAccountSelector(
+                (() => {
+                  const isCcBill = selectedBill.isCreditCard || selectedBill.category === '信用卡帳單';
+                  const currentAcc = accounts.find(a => a.id === billPayAccountId);
+                  if (isCcBill && currentAcc && currentAcc.type === 'credit') {
+                    const validAcc = accounts.find(a => a.type !== 'credit');
+                    return validAcc ? validAcc.id : billPayAccountId;
+                  }
+                  return billPayAccountId;
+                })(),
+                setBillPayAccountId,
+                (acc) => {
+                  if (selectedBill.isCreditCard || selectedBill.category === '信用卡帳單') {
+                    return acc.type !== 'credit'; // Exclude credit cards completely!
+                  }
+                  return true;
+                },
+                'isDefaultExpense'
+              )}
 
               {(() => {
                 const payAcc = accounts.find(a => a.id === billPayAccountId);
@@ -1459,8 +1486,8 @@ const ExpenseEntry = ({
                 const amt = selectedBill.amount || 0;
                 return (
                   <div style={{
-                    background: isCc ? 'rgba(255,149,0,0.08)' : 'rgba(10,132,255,0.08)',
-                    border: `1px solid ${isCc ? 'rgba(255,149,0,0.25)' : 'rgba(10,132,255,0.25)'}`,
+                    background: selectedBill.isCreditCard ? 'rgba(48,209,88,0.08)' : (isCc ? 'rgba(255,149,0,0.08)' : 'rgba(10,132,255,0.08)'),
+                    border: `1px solid ${selectedBill.isCreditCard ? 'rgba(48,209,88,0.25)' : (isCc ? 'rgba(255,149,0,0.25)' : 'rgba(10,132,255,0.25)')}`,
                     borderRadius: '10px',
                     padding: '10px 12px',
                     marginTop: '12px',
@@ -1468,10 +1495,20 @@ const ExpenseEntry = ({
                     lineHeight: '1.45',
                     color: 'var(--text-secondary)'
                   }}>
-                    <div style={{ fontWeight: '800', color: isCc ? '#ff9500' : '#0a84ff', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ fontWeight: '800', color: selectedBill.isCreditCard ? '#30d158' : (isCc ? '#ff9500' : '#0a84ff'), marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span>💡 會計效果與資產影響說明</span>
                     </div>
-                    {isCc ? (
+                    {selectedBill.isCreditCard ? (
+                      <div>
+                        使用 <strong>【{payAcc.nickname}】活儲劃撥</strong> 繳納信用卡帳單：
+                        <br />
+                        • 活儲餘額 <strong>-${amt.toLocaleString()}</strong> (真實現金流出)
+                        <br />
+                        • 信用卡負債 <strong>+${amt.toLocaleString()}</strong> (負債沖銷歸零/減少)
+                        <br />
+                        • 當月消費費用 <strong>+$0</strong> (消費已於刷卡當下即時認列，不重複計算費用)
+                      </div>
+                    ) : isCc ? (
                       <div>
                         使用 <strong>【{payAcc.nickname}】信用卡代扣</strong>：
                         <br />
