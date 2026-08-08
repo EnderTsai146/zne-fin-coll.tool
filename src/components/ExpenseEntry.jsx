@@ -131,6 +131,7 @@ const ExpenseEntry = ({
   const [showCreditCardModal, setShowCreditCardModal] = useState(false);
   const [selectedCcBill, setSelectedCcBill] = useState(null);
   const [helpTooltipConfig, setHelpTooltipConfig] = useState(null);
+  const [pendingSubmitConfig, setPendingSubmitConfig] = useState(null);
 
   const [showEditBillModal, setShowEditBillModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
