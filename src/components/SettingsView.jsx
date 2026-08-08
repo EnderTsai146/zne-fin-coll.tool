@@ -553,7 +553,10 @@ const SettingsView = ({
   });
 
   // --- Optimistic Notification Preferences State ---
-  const userNotifSettings = useMemo(() => {
+  const dbNotifObj = assets?.notificationSettings?.[userKey];
+  const dbNotifString = JSON.stringify(dbNotifObj || {});
+
+  const [localNotifSettings, setLocalNotifSettings] = useState(() => {
     const defaults = {
       enabled: true,
       partnerExpense: true,
@@ -563,17 +566,21 @@ const SettingsView = ({
       budgetWarning70: true,
       budgetOverdraft: true,
     };
-    return {
-      ...defaults,
-      ...(assets?.notificationSettings?.[userKey] || {})
-    };
-  }, [assets?.notificationSettings, userKey]);
-
-  const [localNotifSettings, setLocalNotifSettings] = useState(userNotifSettings);
+    return { ...defaults, ...(dbNotifObj || {}) };
+  });
 
   useEffect(() => {
-    setLocalNotifSettings(userNotifSettings);
-  }, [userNotifSettings]);
+    const defaults = {
+      enabled: true,
+      partnerExpense: true,
+      jointExpense: true,
+      billReminders: true,
+      creditCardReminders: true,
+      budgetWarning70: true,
+      budgetOverdraft: true,
+    };
+    setLocalNotifSettings({ ...defaults, ...(dbNotifObj || {}) });
+  }, [dbNotifString, userKey]);
 
   const handleToggleNotifSetting = (settingKey) => {
     const currentVal = localNotifSettings[settingKey] !== false;
@@ -651,18 +658,35 @@ const SettingsView = ({
   // --- Device Tokens Management & Unbind Handlers ---
   const userDeviceTokens = useMemo(() => {
     const raw = assets?.fcmTokens?.[userKey];
-    const arr = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-      ? Object.keys(raw)
-      : (Array.isArray(raw) ? raw : (typeof raw === 'string' ? [raw] : []));
-
     const currentToken = fcmDiagnostic?.token;
-    return arr.map((tokenStr, idx) => {
+    if (!raw) return [];
+
+    let entries = [];
+    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+      entries = Object.entries(raw).map(([tokenStr, val]) => {
+        const meta = (typeof val === 'object' && val !== null) ? val : {};
+        return { token: tokenStr, meta };
+      });
+    } else if (Array.isArray(raw)) {
+      entries = raw.filter(t => typeof t === 'string' && t.length > 5).map(tokenStr => ({ token: tokenStr, meta: {} }));
+    } else if (typeof raw === 'string') {
+      entries = [{ token: raw, meta: {} }];
+    }
+
+    return entries.map(({ token: tokenStr, meta }, idx) => {
       const isCurrent = currentToken && tokenStr === currentToken;
+      const deviceName = meta.deviceName || (isCurrent ? '本機裝置' : `登入裝置 #${idx + 1}`);
+      const icon = meta.icon || (deviceName.includes('iPhone') || deviceName.includes('Mac') ? '🍎' : (deviceName.includes('Android') ? '🤖' : '📱'));
+      const registeredAtStr = meta.registeredAt ? new Date(meta.registeredAt).toLocaleString('zh-TW', { hour12: false }) : '';
+
       return {
         token: tokenStr,
-        shortToken: tokenStr.length > 24 ? `${tokenStr.substring(0, 12)}...${tokenStr.substring(tokenStr.length - 8)}` : tokenStr,
+        shortToken: tokenStr.length > 24 ? `${tokenStr.substring(0, 10)}...${tokenStr.substring(tokenStr.length - 6)}` : tokenStr,
         isCurrent,
-        label: isCurrent ? '📱 本機裝置 (當前使用中)' : `📱 登入裝置 #${idx + 1}`
+        deviceName,
+        icon,
+        registeredAtStr,
+        label: isCurrent ? `${icon} ${deviceName} (當前裝置)` : `${icon} ${deviceName}`
       };
     });
   }, [assets?.fcmTokens, userKey, fcmDiagnostic?.token]);
@@ -1244,16 +1268,18 @@ const SettingsView = ({
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: '750', fontSize: '0.82rem', color: item.isCurrent ? '#8effa2' : '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span>{item.label}</span>
+                        <div style={{ fontWeight: '750', fontSize: '0.84rem', color: item.isCurrent ? '#8effa2' : '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{item.icon}</span>
+                          <span>{item.deviceName}</span>
                           {item.isCurrent && (
-                            <span style={{ fontSize: '0.68rem', background: '#30d158', color: '#000', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>
-                              當前裝置
+                            <span style={{ fontSize: '0.66rem', background: '#30d158', color: '#000', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>
+                              本機
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontFamily: 'monospace', marginTop: '2px' }}>
-                          Token: {item.shortToken}
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '3px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: 'monospace' }}>Token: {item.shortToken}</span>
+                          {item.registeredAtStr && <span>綁定時間: {item.registeredAtStr}</span>}
                         </div>
                       </div>
 

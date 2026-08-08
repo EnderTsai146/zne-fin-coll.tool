@@ -52,23 +52,62 @@ const NAV_ITEMS = [
   { id: 'settings', icon: '⚙️', label: '設定' }
 ];
 
+export const getDeviceInfo = () => {
+  if (typeof navigator === 'undefined') return { deviceName: '未知裝置', icon: '📱', os: '未知', browser: 'Web' };
+  const ua = navigator.userAgent || '';
+  let os = '未知設備';
+  let icon = '📱';
+  if (/iPhone/i.test(ua)) { os = 'iPhone'; icon = '🍎'; }
+  else if (/iPad/i.test(ua)) { os = 'iPad'; icon = '🍎'; }
+  else if (/Macintosh|Mac OS X/i.test(ua)) { os = 'Mac 電腦'; icon = '💻'; }
+  else if (/Android/i.test(ua)) { os = 'Android'; icon = '🤖'; }
+  else if (/Windows/i.test(ua)) { os = 'Windows PC'; icon = '🖥️'; }
+
+  let browser = 'Web Browser';
+  if (/Edg/i.test(ua)) browser = 'Edge';
+  else if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = 'Chrome';
+  else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+  else if (/Firefox/i.test(ua)) browser = 'Firefox';
+
+  const isPWA = (typeof window !== 'undefined') && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
+  const pwaTag = isPWA ? ' (PWA)' : '';
+
+  return {
+    deviceName: `${os} · ${browser}${pwaTag}`,
+    os,
+    browser,
+    icon,
+    registeredAt: new Date().toISOString()
+  };
+};
+
 const getTokensArray = (field) => {
   if (!field) return [];
   if (typeof field === 'string') return [field];
   if (Array.isArray(field)) return field.filter(t => typeof t === 'string' && t.length > 5);
-  if (typeof field === 'object') return Object.keys(field).filter(t => typeof t === 'string' && t.length > 5);
+  if (typeof field === 'object' && field !== null) {
+    return Object.keys(field).filter(t => typeof t === 'string' && t.length > 5);
+  }
   return [];
 };
 
 const addTokenToDict = (field, newToken) => {
   let dict = {};
   if (typeof field === 'string' && field) {
-    dict[field] = true;
+    dict[field] = { deviceName: '舊登入裝置', icon: '📱', registeredAt: '' };
   } else if (typeof field === 'object' && field) {
     dict = { ...field };
   }
   if (newToken) {
-    dict[newToken] = true;
+    const meta = getDeviceInfo();
+    dict[newToken] = {
+      deviceName: meta.deviceName,
+      icon: meta.icon,
+      os: meta.os,
+      browser: meta.browser,
+      registeredAt: dict[newToken]?.registeredAt || meta.registeredAt,
+      lastSeen: meta.registeredAt
+    };
   }
   return dict;
 };
@@ -1586,8 +1625,19 @@ function App() {
     return true;
   };
 
+  const cleanTitle = (rawTitle) => {
+    if (!rawTitle) return '';
+    return String(rawTitle)
+      .replace(/\s*from\s*馬鈴薯管家/gi, '')
+      .replace(/\s*-\s*馬鈴薯管家/gi, '')
+      .replace(/【from馬鈴薯管家】/gi, '')
+      .replace(/from馬鈴薯管家/gi, '')
+      .trim();
+  };
+
   const sendTransactionPush = async (title, body, isTest = false, targetScope = 'partner', notifCategory = null) => {
     try {
+      const finalTitle = cleanTitle(title);
       const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
       const partnerUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
       let localNativeTriggered = false;
@@ -1595,7 +1645,7 @@ function App() {
       // 1. 本地/裝置原生 Web Notification 觸發 (點擊測試推播或日常發送時均立即彈窗)
       if ((isTest || isNotificationEnabledForUser(currentUserKey, notifCategory)) && ('Notification' in window && Notification.permission === 'granted')) {
         try {
-          new Notification(title, {
+          new Notification(finalTitle, {
             body: body,
             icon: '/apple-touch-icon.png',
             badge: '/apple-touch-icon.png'
