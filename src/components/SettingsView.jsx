@@ -732,17 +732,18 @@ const SettingsView = ({
       style={{
         position: 'relative',
         display: 'inline-block',
-        width: '46px',
-        height: '26px',
+        width: '48px',
+        height: '28px',
         padding: 0,
         border: 'none',
         outline: 'none',
         background: checked ? '#30d158' : 'rgba(255,255,255,0.18)',
-        borderRadius: '26px',
+        borderRadius: '28px',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.35 : 1,
         flexShrink: 0,
         transition: 'background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        touchAction: 'manipulation',
         WebkitTapHighlightColor: 'transparent',
         boxShadow: checked ? '0 0 10px rgba(48, 209, 88, 0.4)' : 'none'
       }}
@@ -752,12 +753,13 @@ const SettingsView = ({
           position: 'absolute',
           top: '3px',
           left: checked ? '23px' : '3px',
-          width: '20px',
-          height: '20px',
+          width: '22px',
+          height: '22px',
           backgroundColor: '#ffffff',
           borderRadius: '50%',
           transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: '0 2px 5px rgba(0,0,0,0.35)'
+          boxShadow: '0 2px 5px rgba(0,0,0,0.35)',
+          pointerEvents: 'none'
         }}
       />
     </button>
@@ -768,12 +770,66 @@ const SettingsView = ({
       <h1 className="page-title">管家設定</h1>
 
       {/* Settings Navigation Sub-Tabs */}
-      <div className="settings-tabs" style={{ marginBottom: '20px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-        <button className={`settings-tab-btn ${currentSubTab === 'budget' ? 'active' : ''}`} onClick={() => handleTabChange('budget')}>預算設定</button>
-        <button className={`settings-tab-btn ${currentSubTab === 'notifications' ? 'active' : ''}`} onClick={() => handleTabChange('notifications')}>🔔 推播通知設定</button>
-        <button className={`settings-tab-btn ${currentSubTab === 'guide' || currentSubTab === 'faq' ? 'active' : ''}`} onClick={() => handleTabChange('guide')}>🧭 智慧引導助手</button>
-        <button className={`settings-tab-btn ${currentSubTab === 'logs' ? 'active' : ''}`} onClick={() => handleTabChange('logs')}>歷史軌跡</button>
-        <button className={`settings-tab-btn ${currentSubTab === 'info' ? 'active' : ''}`} onClick={() => handleTabChange('info')}>系統資訊</button>
+      <div
+        className="settings-tabs"
+        style={{
+          marginBottom: '20px',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          whiteSpace: 'nowrap',
+          display: 'flex',
+          gap: '8px',
+          padding: '6px',
+          background: 'rgba(15, 23, 42, 0.65)',
+          borderRadius: '16px',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          touchAction: 'pan-x',
+          WebkitOverflowScrolling: 'touch'
+        }}
+      >
+        {[
+          { key: 'budget', label: '預算設定' },
+          { key: 'notifications', label: '🔔 推播通知設定' },
+          { key: 'guide', label: '🧭 智慧引導助手' },
+          { key: 'logs', label: '歷史軌跡' },
+          { key: 'info', label: '系統資訊' }
+        ].map((tab) => {
+          const isActive = currentSubTab === tab.key || (tab.key === 'guide' && currentSubTab === 'faq');
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleTabChange(tab.key);
+              }}
+              style={{
+                flex: '0 0 auto',
+                padding: '9px 16px',
+                borderRadius: '12px',
+                fontSize: '0.84rem',
+                fontWeight: isActive ? '800' : '600',
+                color: '#ffffff',
+                background: isActive
+                  ? 'linear-gradient(135deg, #007aff 0%, #5856d6 100%)'
+                  : 'rgba(255, 255, 255, 0.08)',
+                border: isActive
+                  ? '1px solid rgba(255, 255, 255, 0.35)'
+                  : '1px solid rgba(255, 255, 255, 0.12)',
+                boxShadow: isActive
+                  ? '0 4px 14px rgba(0, 122, 255, 0.4)'
+                  : 'none',
+                cursor: 'pointer',
+                userSelect: 'none',
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Contents */}
