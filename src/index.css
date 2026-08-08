@@ -85,13 +85,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 
   /* ★ Dark base — gradient concentrated in bottom-left corner */
-  background-color: #000000;
+  background-color: #050B14;
   background-image:
-    radial-gradient(ellipse at 0% 100%, var(--page-grad-1) 0%, transparent 50%),
-    radial-gradient(ellipse at 15% 80%, var(--page-grad-2) 0%, transparent 40%),
-    radial-gradient(ellipse at 8% 60%, var(--page-grad-3) 0%, transparent 35%);
-  background-attachment: fixed;
-  background-size: 100% 100%;
+    radial-gradient(ellipse at 0% 100%, var(--page-grad-1) 0%, transparent 60%),
+    radial-gradient(ellipse at 100% 0%, var(--page-grad-2) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 50%, var(--page-grad-3) 0%, transparent 50%);
+  background-size: cover;
+  background-repeat: no-repeat;
   position: relative;
   overflow-x: hidden;
 
@@ -178,6 +178,16 @@ body[data-page="invest"] {
   --refract-3: rgba(88, 86, 214, 0.50);
 }
 
+/* 帳戶：Cyan → Blue → Indigo */
+body[data-page="accounts"] {
+  --page-grad-1: rgba(50, 173, 230, 0.55);
+  --page-grad-2: rgba(0, 122, 255, 0.45);
+  --page-grad-3: rgba(88, 86, 214, 0.35);
+  --refract-1: rgba(50, 173, 230, 0.55);
+  --refract-2: rgba(0, 122, 255, 0.50);
+  --refract-3: rgba(88, 86, 214, 0.50);
+}
+
 /* 操作：Indigo → Purple → Pink */
 body[data-page="transfer"] {
   --page-grad-1: rgba(88, 86, 214, 0.52);
@@ -195,6 +205,16 @@ body[data-page="expense"] {
   --page-grad-3: rgba(0, 122, 255, 0.32);
   --refract-1: rgba(52, 199, 89, 0.55);
   --refract-2: rgba(90, 200, 250, 0.50);
+  --refract-3: rgba(0, 122, 255, 0.50);
+}
+
+/* 設定：Purple → Cyan → Blue */
+body[data-page="settings"] {
+  --page-grad-1: rgba(175, 82, 222, 0.55);
+  --page-grad-2: rgba(50, 173, 230, 0.45);
+  --page-grad-3: rgba(0, 122, 255, 0.35);
+  --refract-1: rgba(175, 82, 222, 0.55);
+  --refract-2: rgba(50, 173, 230, 0.50);
   --refract-3: rgba(0, 122, 255, 0.50);
 }
 

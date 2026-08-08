@@ -853,7 +853,7 @@ const SettingsView = ({
                     {dynamicCategories.map(cat => (
                       <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                          {cat === '餐費' ? '🍲 ' : cat === '購物' ? '🛍️ ' : cat === '娛樂' ? '✨ ' : '⚙️ '}
+                          {cat === '餐費' ? '🍲 ' : cat === '購物' ? '🛍️ ' : cat === '娛樂' ? '✨ ' : cat === '固定費用' ? '📅 ' : '⚙️ '}
                           {cat} 預算
                         </span>
                         <input 
