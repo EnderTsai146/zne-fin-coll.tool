@@ -988,8 +988,14 @@ const ExpenseEntry = ({
   }, [assets?.accounts]);
 
   const combinedBills = useMemo(() => {
-    const regularBills = (assets?.bills || []).map(b => ({ ...b, isCreditCard: false }));
-    return [...regularBills, ...creditCardBills].sort((a, b) => new Date(a.nextDate) - new Date(b.nextDate));
+    const regularBills = (assets?.bills || [])
+      .filter(Boolean)
+      .map(b => ({ ...b, isCreditCard: false }));
+    return [...regularBills, ...(creditCardBills || [])].sort((a, b) => {
+      const dA = a?.nextDate ? new Date(a.nextDate).getTime() : 0;
+      const dB = b?.nextDate ? new Date(b.nextDate).getTime() : 0;
+      return (isNaN(dA) ? 0 : dA) - (isNaN(dB) ? 0 : dB);
+    });
   }, [assets?.bills, creditCardBills]);
 
   const handleCardClick = async (bill) => {
@@ -1556,7 +1562,7 @@ const ExpenseEntry = ({
                                     {/* Line 2: Date Subtext (Left), Status Badges (Right) */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
                                       <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>
-                                        扣繳日: 每月 {bill.date || (bill.nextDate ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate}
+                                        扣繳日: 每月 {bill.date || (bill.nextDate && !isNaN(new Date(bill.nextDate).getTime()) ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate || '未定'}
                                       </span>
 
                                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>

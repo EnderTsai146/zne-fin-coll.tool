@@ -5,14 +5,16 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
   const containerRef = useRef(null);
   const [pillStyle, setPillStyle] = useState({});
 
+  const optionsKey = options ? options.map(o => String(o.value)).join(',') : '';
+
   // Compute the liquid sliding pill position
   useLayoutEffect(() => {
-    if (!containerRef.current || !value) {
+    if (!containerRef.current || value === undefined || value === null || value === '') {
       setPillStyle(prev => (prev.opacity === 0 ? prev : { opacity: 0 }));
       return;
     }
     const container = containerRef.current;
-    const idx = options.findIndex(o => o.value === value);
+    const idx = options ? options.findIndex(o => o.value === value) : -1;
     if (idx < 0) {
       setPillStyle(prev => (prev.opacity === 0 ? prev : { opacity: 0 }));
       return;
@@ -38,7 +40,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
       }
       return newStyle;
     });
-  }, [value, options]);
+  }, [value, optionsKey]);
 
   return (
     <div
