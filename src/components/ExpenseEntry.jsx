@@ -331,8 +331,9 @@ const ExpenseEntry = ({
           if (ownerAccs.length === 0) return null;
 
           const categories = [
-            { key: 'bank', name: '🏦 銀行活儲', list: ownerAccs.filter(a => a.type === 'bank' || a.type === 'virtual') },
+            { key: 'bank', name: '🏦 銀行活儲', list: ownerAccs.filter(a => a.type === 'bank') },
             { key: 'cash', name: '💵 現金帳戶', list: ownerAccs.filter(a => a.type === 'cash') },
+            { key: 'virtual', name: '📱 虛擬/電子票證', list: ownerAccs.filter(a => a.type === 'virtual') },
             { key: 'credit', name: '💳 信用卡', list: ownerAccs.filter(a => a.type === 'credit') },
             { key: 'investment', name: '📈 投資/交割戶', list: ownerAccs.filter(a => a.type === 'investment') },
           ].filter(c => c.list.length > 0);
@@ -2167,7 +2168,7 @@ const ExpenseEntry = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>💳</span>
-                <span>{selectedCcBill.rawAccount.nickname} 信用卡帳單專區</span>
+                <span>{selectedCcBill?.rawAccount?.nickname || selectedCcBill?.note || selectedCcBill?.name || '信用卡'} 信用卡帳單專區</span>
               </div>
               <button onClick={() => setShowCreditCardModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer' }}>✕</button>
             </div>
@@ -2176,8 +2177,8 @@ const ExpenseEntry = ({
             <div className="inset-group-card" style={{ marginBottom: '14px', padding: '14px', background: 'rgba(255,255,255,0.03)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>📊 本期未結算/待繳金額</span>
-                <strong style={{ fontSize: '1.15rem', color: selectedCcBill.amount > 0 ? '#ffb94f' : '#8effa2' }}>
-                  ${(selectedCcBill.amount || 0).toLocaleString()} {selectedCcBill.currency}
+                <strong style={{ fontSize: '1.15rem', color: (selectedCcBill?.amount || 0) > 0 ? '#ffb94f' : '#8effa2' }}>
+                  ${(selectedCcBill?.amount || 0).toLocaleString()} {selectedCcBill?.currency || 'TWD'}
                 </strong>
               </div>
 
@@ -2189,7 +2190,7 @@ const ExpenseEntry = ({
                     text: "結帳日是計算當期應繳總金額的時間基準點。\n在結帳日前刷卡消費時，金額已即時認列為當月消費費用，並增加信用卡負債。\n到達結帳日當天，系統將結帳日前所有刷卡金額彙整封裝為『本期帳單應繳總金額』，絕不重複扣款。"
                   })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
                 </span>
-                <span style={{ color: '#fff', fontWeight: '600' }}>每月 {selectedCcBill.rawAccount.billingDay || 10} 號</span>
+                <span style={{ color: '#fff', fontWeight: '600' }}>每月 {selectedCcBill?.rawAccount?.billingDay || selectedCcBill?.date || 10} 號</span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.78rem' }}>
@@ -2200,8 +2201,8 @@ const ExpenseEntry = ({
                     text: "繳費截止日是活儲實際劃撥沖銷信用卡負債的時間點。\n劃撥扣繳時：活儲 -$X，信用卡負債 +$X (沖銷歸零)，當月費用 +$0 (避免重複計算)。"
                   })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
                 </span>
-                <span style={{ color: selectedCcBill.diffDays <= 3 ? '#ff453a' : '#fff', fontWeight: '700' }}>
-                  {selectedCcBill.nextDate} (離到期剩 {selectedCcBill.diffDays} 天)
+                <span style={{ color: (selectedCcBill?.diffDays || 99) <= 3 ? '#ff453a' : '#fff', fontWeight: '700' }}>
+                  {selectedCcBill?.nextDate} (離到期剩 {selectedCcBill?.diffDays} 天)
                 </span>
               </div>
 
@@ -2218,19 +2219,19 @@ const ExpenseEntry = ({
                   padding: '2px 8px',
                   borderRadius: '6px',
                   fontWeight: '750',
-                  background: selectedCcBill.autoPay ? 'rgba(48,209,88,0.15)' : 'rgba(255,185,79,0.15)',
-                  color: selectedCcBill.autoPay ? '#30d158' : '#ffb94f',
-                  border: `0.5px solid ${selectedCcBill.autoPay ? 'rgba(48,209,88,0.3)' : 'rgba(255,185,79,0.3)'}`
+                  background: selectedCcBill?.autoPay ? 'rgba(48,209,88,0.15)' : 'rgba(255,185,79,0.15)',
+                  color: selectedCcBill?.autoPay ? '#30d158' : '#ffb94f',
+                  border: `0.5px solid ${selectedCcBill?.autoPay ? 'rgba(48,209,88,0.3)' : 'rgba(255,185,79,0.3)'}`
                 }}>
-                  {selectedCcBill.autoPay ? `🤖 自動扣繳 (${selectedCcBill.linkedBankName})` : '🖐️ 手動劃撥繳納'}
+                  {selectedCcBill?.autoPay ? `🤖 自動扣繳 (${selectedCcBill?.linkedBankName || '活儲'})` : '🖐️ 手動劃撥繳納'}
                 </span>
               </div>
             </div>
 
             {/* Real-World Synchronization Alert Box */}
             <div style={{
-              background: selectedCcBill.autoPay ? 'rgba(48,209,88,0.08)' : 'rgba(255,185,79,0.08)',
-              border: `1px solid ${selectedCcBill.autoPay ? 'rgba(48,209,88,0.25)' : 'rgba(255,185,79,0.25)'}`,
+              background: selectedCcBill?.autoPay ? 'rgba(48,209,88,0.08)' : 'rgba(255,185,79,0.08)',
+              border: `1px solid ${selectedCcBill?.autoPay ? 'rgba(48,209,88,0.25)' : 'rgba(255,185,79,0.25)'}`,
               borderRadius: '12px',
               padding: '12px 14px',
               marginBottom: '16px',
@@ -2238,15 +2239,15 @@ const ExpenseEntry = ({
               lineHeight: '1.5',
               color: 'var(--text-secondary)'
             }}>
-              <div style={{ fontWeight: '800', color: selectedCcBill.autoPay ? '#30d158' : '#ffb94f', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ fontWeight: '800', color: selectedCcBill?.autoPay ? '#30d158' : '#ffb94f', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span>💡 真實現實同步提醒與會計原則</span>
               </div>
-              {selectedCcBill.autoPay ? (
+              {selectedCcBill?.autoPay ? (
                 <div>
-                  ⚠️ App 已開啟<strong>「自動扣繳」</strong>，將於出帳日自動將【{selectedCcBill.linkedBankName}】劃撥至信用卡沖銷負債。<br />
+                  ⚠️ App 已開啟<strong>「自動扣繳」</strong>，將於出帳日自動將【{selectedCcBill?.linkedBankName || '活儲'}】劃撥至信用卡沖銷負債。<br />
                   <strong>請務必確認</strong>：<br />
                   1. 您已向發卡銀行開通實體帳戶自動扣繳。<br />
-                  2. 扣繳日當天【{selectedCcBill.linkedBankName}】活儲餘額足夠。
+                  2. 扣繳日當天【{selectedCcBill?.linkedBankName || '活儲'}】活儲餘額足夠。
                 </div>
               ) : (
                 <div>

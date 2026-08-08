@@ -567,8 +567,9 @@ const AccountsManager = ({
     }
 
     const categories = [
-      { key: 'bank', name: '🏦 銀行活儲帳戶', list: list.filter(a => a.type === 'bank' || a.type === 'virtual') },
+      { key: 'bank', name: '🏦 銀行活儲帳戶', list: list.filter(a => a.type === 'bank') },
       { key: 'cash', name: '💵 現金帳戶', list: list.filter(a => a.type === 'cash') },
+      { key: 'virtual', name: '📱 虛擬與電子票證', list: list.filter(a => a.type === 'virtual') },
       { key: 'credit', name: '💳 信用卡帳戶', list: list.filter(a => a.type === 'credit') },
       { key: 'investment', name: '📈 投資/交割戶', list: list.filter(a => a.type === 'investment') },
     ].filter(cat => cat.list.length > 0);
@@ -585,7 +586,7 @@ const AccountsManager = ({
                 const isSelected = selectedValue === acc.id;
                 const isCredit = acc.type === 'credit';
                 const balanceColor = isCredit ? '#ff9500' : '#8effa2';
-                const defaultIcon = acc.type === 'cash' ? '💵' : (acc.type === 'credit' ? '💳' : (acc.type === 'investment' ? '📈' : '🏦'));
+                const defaultIcon = acc.type === 'cash' ? '💵' : (acc.type === 'credit' ? '💳' : (acc.type === 'investment' ? '📈' : (acc.type === 'virtual' ? '📱' : '🏦')));
                 const iconToRender = acc.icon || defaultIcon;
                 const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
 
@@ -634,15 +635,16 @@ const AccountsManager = ({
   };
 
   const renderGroupedSelectOptions = (accountList, placeholder = '-- 請選擇帳戶 --') => {
-    const bankAccs = accountList.filter(a => a.type === 'bank' || a.type === 'virtual');
+    const bankAccs = accountList.filter(a => a.type === 'bank');
     const cashAccs = accountList.filter(a => a.type === 'cash');
+    const virtualAccs = accountList.filter(a => a.type === 'virtual');
     const creditAccs = accountList.filter(a => a.type === 'credit');
     const investAccs = accountList.filter(a => a.type === 'investment');
     const otherAccs = accountList.filter(a => a.type !== 'bank' && a.type !== 'virtual' && a.type !== 'cash' && a.type !== 'credit' && a.type !== 'investment');
 
     const renderItem = (a) => {
       const ownerTag = a.owner === 'userA' ? '大狗狗🐕' : (a.owner === 'userB' ? '阿陞🐶' : '共同🏫');
-      const defaultIcon = a.type === 'cash' ? '💵' : (a.type === 'credit' ? '💳' : (a.type === 'investment' ? '📈' : '🏦'));
+      const defaultIcon = a.type === 'cash' ? '💵' : (a.type === 'credit' ? '💳' : (a.type === 'investment' ? '📈' : (a.type === 'virtual' ? '📱' : '🏦')));
       const icon = a.icon || defaultIcon;
       return (
         <option key={a.id} value={a.id}>
@@ -656,21 +658,23 @@ const AccountsManager = ({
         {placeholder && <option value="">{placeholder}</option>}
         {bankAccs.length > 0 && <optgroup label="🏦 銀行活儲帳戶">{bankAccs.map(renderItem)}</optgroup>}
         {cashAccs.length > 0 && <optgroup label="💵 現金帳戶">{cashAccs.map(renderItem)}</optgroup>}
+        {virtualAccs.length > 0 && <optgroup label="📱 虛擬/電子票證">{virtualAccs.map(renderItem)}</optgroup>}
         {creditAccs.length > 0 && <optgroup label="💳 信用卡帳戶">{creditAccs.map(renderItem)}</optgroup>}
         {investAccs.length > 0 && <optgroup label="📈 投資/交割戶">{investAccs.map(renderItem)}</optgroup>}
-        {otherAccs.length > 0 && <optgroup label="📱 其他帳戶">{otherAccs.map(renderItem)}</optgroup>}
+        {otherAccs.length > 0 && <optgroup label="🌐 其他帳戶">{otherAccs.map(renderItem)}</optgroup>}
       </>
     );
   };
 
-  // Separate Owner Section Renderer (Prioritizes Current User, Sub-grouped by 4 Account Types)
+  // Separate Owner Section Renderer (Prioritizes Current User, Sub-grouped by Account Types)
   const renderOwnerSection = (ownerKey, ownerTitle, accentColor = '#0a84ff') => {
     const ownerAccounts = accounts.filter(a => a.owner === ownerKey);
     if (ownerAccounts.length === 0) return null;
 
     const categories = [
-      { key: 'bank', title: '🏦 銀行活儲帳戶', list: ownerAccounts.filter(a => a.type === 'bank' || a.type === 'virtual') },
+      { key: 'bank', title: '🏦 銀行活儲帳戶', list: ownerAccounts.filter(a => a.type === 'bank') },
       { key: 'cash', title: '💵 現金帳戶', list: ownerAccounts.filter(a => a.type === 'cash') },
+      { key: 'virtual', title: '📱 虛擬與電子票證帳戶', list: ownerAccounts.filter(a => a.type === 'virtual') },
       { key: 'credit', title: '💳 信用卡帳戶', list: ownerAccounts.filter(a => a.type === 'credit') },
       { key: 'investment', title: '📈 投資與交割帳戶', list: ownerAccounts.filter(a => a.type === 'investment') },
     ].filter(cat => cat.list.length > 0);
