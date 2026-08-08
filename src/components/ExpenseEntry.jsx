@@ -54,7 +54,7 @@ const ExpenseEntry = ({
   // ==========================================
   // 1. Personal Expense States
   // ==========================================
-  const [persCat, setPersCat] = useState(expenseCategories[0] || '餐費');
+  const [persCat, setPersCat] = useState(''); // Empty initial state requiring explicit user tap (anti-mistake defense)
   const [persAmount, setPersAmount] = useState('');
   const [persNote, setPersNote] = useState('');
   const [persAccountId, setPersAccountId] = useState('');
@@ -80,7 +80,7 @@ const ExpenseEntry = ({
   // ==========================================
   // 2. Joint Expense States
   // ==========================================
-  const [jointCat, setJointCat] = useState(expenseCategories[0] || '餐費');
+  const [jointCat, setJointCat] = useState(''); // Empty initial state requiring explicit user tap (anti-mistake defense)
   const [jointAmount, setJointAmount] = useState('');
   const [jointNote, setJointNote] = useState('');
   const [jointAccountId, setJointAccountId] = useState('');
@@ -442,7 +442,14 @@ const ExpenseEntry = ({
   // ==========================================
   // Personal Expense Submission
   // ==========================================
+  // ==========================================
+  // Personal Expense Submission
+  // ==========================================
   const handleAddPersCart = async () => {
+    if (!persCat) {
+      await customAlert("⚠️ 請先點按選擇支出類別！", "未選擇類別");
+      return;
+    }
     const parsedAmount = parseMoney(persAmount);
     if (!parsedAmount) {
       await customAlert("請輸入金額！");
@@ -460,17 +467,21 @@ const ExpenseEntry = ({
     }
 
     const payload = {
-      id: Date.now().toString(),
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
       cat: persCat,
       amount: parsedAmount,
       note: persNote.trim(),
       accountId: persAccountId,
-      accountNickname: acc.nickname
+      accountNickname: acc.nickname,
+      accountType: acc.type,
+      owner: acc.owner,
+      date: txDate
     };
 
     setPersCart([...persCart, payload]);
     setPersAmount('');
     setPersNote('');
+    setPersCat(''); // Reset category to force explicit tap for next item
   };
 
   const handlePersSubmit = async () => {
@@ -478,6 +489,10 @@ const ExpenseEntry = ({
     const parsedAmount = parseMoney(persAmount);
 
     if (parsedAmount > 0) {
+      if (!persCat) {
+        await customAlert("⚠️ 請先點按選擇支出類別！", "未選擇類別");
+        return;
+      }
       if (!persAccountId) {
         await customAlert("請選擇扣款帳戶！");
         return;
@@ -488,12 +503,15 @@ const ExpenseEntry = ({
         return;
       }
       finalItems.push({
-        id: Date.now().toString(),
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         cat: persCat,
         amount: parsedAmount,
         note: persNote.trim(),
         accountId: persAccountId,
-        accountNickname: acc.nickname
+        accountNickname: acc.nickname,
+        accountType: acc.type,
+        owner: acc.owner,
+        date: txDate
       });
     }
 
@@ -503,29 +521,43 @@ const ExpenseEntry = ({
     }
 
     let updatedAccounts = [...accounts];
+    const accountChangesMap = {};
 
     // Deduct from account balances
     for (const item of finalItems) {
+      const acc = updatedAccounts.find(a => a.id === item.accountId);
+      if (acc) {
+        if (!accountChangesMap[acc.id]) {
+          accountChangesMap[acc.id] = { nickname: acc.nickname, oldBal: acc.balance, diff: 0 };
+        }
+        accountChangesMap[acc.id].diff -= item.amount;
+      }
       updatedAccounts = updatedAccounts.map(a => {
         if (a.id === item.accountId) return { ...a, balance: a.balance - item.amount };
         return a;
       });
     }
 
+    const accountChanges = Object.values(accountChangesMap).map(ac => ({
+      ...ac,
+      newBal: ac.oldBal + ac.diff
+    }));
+
     const payerName = userKey === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
     // Generate separate history records
     const historyRecords = finalItems.map((item, idx) => {
-      const details = { food: 0, shopping: 0, entertainment: 0, other: 0 };
+      const details = { food: 0, shopping: 0, entertainment: 0, other: 0, fixed: 0 };
       if (item.cat === '餐費') details.food = item.amount;
       else if (item.cat === '購物') details.shopping = item.amount;
       else if (item.cat === '娛樂') details.entertainment = item.amount;
+      else if (item.cat === '固定費用') details.fixed = item.amount;
       else details.other = item.amount;
 
       return {
         id: `exp_${Date.now()}_${idx}`,
-        date: txDate,
-        month: txDate.slice(0, 7),
+        date: item.date || txDate,
+        month: (item.date || txDate).slice(0, 7),
         type: 'expense',
         category: '個人支出',
         details,
@@ -533,22 +565,38 @@ const ExpenseEntry = ({
         payer: payerName,
         accountId: item.accountId,
         note: item.note || item.cat,
+        subCategory: item.cat,
         necessity: 'need'
       };
     });
 
     const finalAssets = { ...assets, accounts: updatedAccounts };
-    onTransaction(finalAssets, historyRecords);
 
-    setPersCart([]);
-    setPersAmount('');
-    setPersNote('');
+    // Trigger Pre-Submission Confirmation Modal
+    setPendingSubmitConfig({
+      typeTitle: `💰 個人支出送出確認 (${payerName})`,
+      operator: loggedInUserName,
+      txDate: txDate,
+      items: finalItems,
+      accountChanges,
+      onConfirm: () => {
+        onTransaction(finalAssets, historyRecords);
+        setPersCart([]);
+        setPersAmount('');
+        setPersNote('');
+        setPersCat('');
+      }
+    });
   };
 
   // ==========================================
   // Joint Expense Submission
   // ==========================================
   const handleAddJointCart = async () => {
+    if (!jointCat) {
+      await customAlert("⚠️ 請先點按選擇支出類別！", "未選擇類別");
+      return;
+    }
     const parsedAmount = parseMoney(jointAmount);
     if (!parsedAmount) {
       await customAlert("請輸入金額！");
@@ -566,17 +614,21 @@ const ExpenseEntry = ({
     }
 
     const payload = {
-      id: Date.now().toString(),
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
       cat: jointCat,
       amount: parsedAmount,
       note: jointNote.trim(),
       accountId: jointAccountId,
-      accountNickname: acc.nickname
+      accountNickname: acc.nickname,
+      accountType: acc.type,
+      owner: acc.owner,
+      date: txDate
     };
 
     setJointCart([...jointCart, payload]);
     setJointAmount('');
     setJointNote('');
+    setJointCat(''); // Reset category
   };
 
   const handleJointSubmit = async () => {
@@ -584,6 +636,10 @@ const ExpenseEntry = ({
     const parsedAmount = parseMoney(jointAmount);
 
     if (parsedAmount > 0) {
+      if (!jointCat) {
+        await customAlert("⚠️ 請先點按選擇支出類別！", "未選擇類別");
+        return;
+      }
       if (!jointAccountId) {
         await customAlert("請選擇支付帳戶！");
         return;
@@ -594,12 +650,15 @@ const ExpenseEntry = ({
         return;
       }
       finalItems.push({
-        id: Date.now().toString(),
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         cat: jointCat,
         amount: parsedAmount,
         note: jointNote.trim(),
         accountId: jointAccountId,
-        accountNickname: acc.nickname
+        accountNickname: acc.nickname,
+        accountType: acc.type,
+        owner: acc.owner,
+        date: txDate
       });
     }
 
@@ -609,14 +668,27 @@ const ExpenseEntry = ({
     }
 
     let updatedAccounts = [...accounts];
+    const accountChangesMap = {};
 
     // Deduct from account balances
     for (const item of finalItems) {
+      const acc = updatedAccounts.find(a => a.id === item.accountId);
+      if (acc) {
+        if (!accountChangesMap[acc.id]) {
+          accountChangesMap[acc.id] = { nickname: acc.nickname, oldBal: acc.balance, diff: 0 };
+        }
+        accountChangesMap[acc.id].diff -= item.amount;
+      }
       updatedAccounts = updatedAccounts.map(a => {
         if (a.id === item.accountId) return { ...a, balance: a.balance - item.amount };
         return a;
       });
     }
+
+    const accountChanges = Object.values(accountChangesMap).map(ac => ({
+      ...ac,
+      newBal: ac.oldBal + ac.diff
+    }));
 
     const historyRecords = finalItems.map((item, idx) => {
       const sampleAcc = accounts.find(a => a.id === item.accountId);
@@ -624,8 +696,8 @@ const ExpenseEntry = ({
 
       return {
         id: `spend_${Date.now()}_${idx}`,
-        date: txDate,
-        month: txDate.slice(0, 7),
+        date: item.date || txDate,
+        month: (item.date || txDate).slice(0, 7),
         type: 'spend',
         category: '共同支出',
         total: item.amount,
@@ -640,11 +712,22 @@ const ExpenseEntry = ({
     });
 
     const finalAssets = { ...assets, accounts: updatedAccounts };
-    onTransaction(finalAssets, historyRecords);
-    
-    setJointCart([]);
-    setJointAmount('');
-    setJointNote('');
+
+    // Trigger Pre-Submission Confirmation Modal
+    setPendingSubmitConfig({
+      typeTitle: `🏫 共同支出送出確認`,
+      operator: loggedInUserName,
+      txDate: txDate,
+      items: finalItems,
+      accountChanges,
+      onConfirm: () => {
+        onTransaction(finalAssets, historyRecords);
+        setJointCart([]);
+        setJointAmount('');
+        setJointNote('');
+        setJointCat('');
+      }
+    });
   };
 
   // ==========================================
@@ -663,12 +746,13 @@ const ExpenseEntry = ({
     const acc = accounts.find(a => a.id === incAccountId);
 
     const payload = {
-      id: Date.now().toString(),
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
       cat: incCat,
       amount: parsedAmount,
       note: incNote.trim(),
       accountId: incAccountId,
-      accountNickname: acc.nickname
+      accountNickname: acc.nickname,
+      date: txDate
     };
 
     setIncomeCart([...incomeCart, payload]);
@@ -687,12 +771,13 @@ const ExpenseEntry = ({
       }
       const acc = accounts.find(a => a.id === incAccountId);
       finalItems.push({
-        id: Date.now().toString(),
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         cat: incCat,
         amount: parsedAmount,
         note: incNote.trim(),
         accountId: incAccountId,
-        accountNickname: acc.nickname
+        accountNickname: acc.nickname,
+        date: txDate
       });
     }
 
@@ -702,21 +787,31 @@ const ExpenseEntry = ({
     }
 
     let updatedAccounts = [...accounts];
+    const accountChangesMap = {};
 
     for (const item of finalItems) {
+      const acc = updatedAccounts.find(a => a.id === item.accountId);
+      if (acc) {
+        if (!accountChangesMap[acc.id]) {
+          accountChangesMap[acc.id] = { nickname: acc.nickname, oldBal: acc.balance, diff: 0 };
+        }
+        accountChangesMap[acc.id].diff += item.amount;
+      }
       updatedAccounts = updatedAccounts.map(a => {
         if (a.id === item.accountId) return { ...a, balance: a.balance + item.amount };
         return a;
       });
     }
 
-    const totalSum = finalItems.reduce((s, e) => s + e.amount, 0);
-    const combinedNotes = finalItems.map(i => i.note || i.cat).join('，');
+    const accountChanges = Object.values(accountChangesMap).map(ac => ({
+      ...ac,
+      newBal: ac.oldBal + ac.diff
+    }));
 
     // Create income record list
     const newIncomes = finalItems.map(item => ({
-      date: txDate,
-      month: txDate.slice(0, 7),
+      date: item.date || txDate,
+      month: (item.date || txDate).slice(0, 7),
       type: 'income',
       category: item.cat,
       total: item.amount,
@@ -727,16 +822,22 @@ const ExpenseEntry = ({
       timestamp: new Date().toISOString()
     }));
 
-    const finalAssets = {
-      ...assets,
-      accounts: updatedAccounts
-    };
+    const finalAssets = { ...assets, accounts: updatedAccounts };
 
-    onTransaction(finalAssets, newIncomes);
-    
-    setIncomeCart([]);
-    setIncAmount('');
-    setIncNote('');
+    // Trigger Pre-Submission Confirmation Modal
+    setPendingSubmitConfig({
+      typeTitle: `💵 收入入帳送出確認`,
+      operator: loggedInUserName,
+      txDate: txDate,
+      items: finalItems,
+      accountChanges,
+      onConfirm: () => {
+        onTransaction(finalAssets, newIncomes);
+        setIncomeCart([]);
+        setIncAmount('');
+        setIncNote('');
+      }
+    });
   };
 
   const handleExecuteBillPay = async () => {
@@ -1058,16 +1159,109 @@ const ExpenseEntry = ({
                 )}
               </div>
 
-              {/* Cart List */}
+              {/* Apple-Style Inset Grouped Personal Expense Cart */}
               {persCart.length > 0 && (
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '12px', marginTop: '16px', border: '0.5px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px', fontWeight: '800' }}>🛒 暫存個人支出明細：</div>
-                  {persCart.map(item => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>
-                      <span>[{item.cat}] {item.note || '無備註'} ({item.accountNickname})</span>
-                      <strong style={{ color: '#fff' }}>${item.amount.toLocaleString()}</strong>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '16px',
+                  padding: '14px',
+                  marginTop: '16px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.95rem' }}>🛒</span>
+                      <span style={{ fontWeight: '800', fontSize: '0.86rem', color: '#fff' }}>
+                        待確認個人支出 (<strong>{persCart.length}</strong> 筆)
+                      </span>
+                      <span style={{ fontSize: '0.7rem', background: 'rgba(10,132,255,0.15)', color: '#0a84ff', border: '0.5px solid rgba(10,132,255,0.3)', padding: '1px 7px', borderRadius: '8px', fontWeight: '750' }}>
+                        累計: ${persCart.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} TWD
+                      </span>
                     </div>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => setPersCart([])}
+                      className="glass-btn glass-btn-danger"
+                      style={{ padding: '2px 8px', fontSize: '0.7rem', borderRadius: '6px' }}
+                    >
+                      🗑️ 清空暫存
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {persCart.map((item, idx) => (
+                      <div key={item.id || idx} style={{
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                        borderRadius: '12px',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              fontSize: '0.9rem',
+                              background: 'rgba(255,255,255,0.08)',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              {item.cat.includes('餐') ? '🍲' : (item.cat.includes('購') ? '🛍️' : (item.cat.includes('娛') ? '🎮' : (item.cat.includes('固定') ? '📌' : '🏷️')))}
+                            </span>
+                            <div>
+                              <div style={{ fontWeight: '750', fontSize: '0.84rem', color: '#fff' }}>
+                                {item.cat}
+                              </div>
+                              <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>
+                                  🏦 {item.accountNickname}
+                                </span>
+                                <span>• {item.date || txDate}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <strong style={{ fontSize: '0.9rem', color: '#fff' }}>
+                              ${item.amount.toLocaleString()} TWD
+                            </strong>
+                            <button
+                              type="button"
+                              onClick={() => setPersCart(persCart.filter(i => i.id !== item.id))}
+                              style={{
+                                background: 'rgba(255,69,58,0.15)',
+                                border: 'none',
+                                color: '#ff453a',
+                                width: '22px',
+                                height: '22px',
+                                borderRadius: '50%',
+                                cursor: 'pointer',
+                                fontSize: '0.76rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+
+                        {item.note && (
+                          <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontStyle: 'italic', paddingLeft: '36px' }}>
+                            📝 {item.note}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1130,16 +1324,109 @@ const ExpenseEntry = ({
                 )}
               </div>
 
-              {/* Cart List */}
+              {/* Apple-Style Inset Grouped Joint Expense Cart */}
               {jointCart.length > 0 && (
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '12px', marginTop: '16px', border: '0.5px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px', fontWeight: '800' }}>🛒 暫存共同支出明細：</div>
-                  {jointCart.map(item => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>
-                      <span>[{item.cat}] {item.note || '無備註'} ({item.accountNickname})</span>
-                      <strong style={{ color: '#fff' }}>${item.amount.toLocaleString()}</strong>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '16px',
+                  padding: '14px',
+                  marginTop: '16px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.95rem' }}>🛒</span>
+                      <span style={{ fontWeight: '800', fontSize: '0.86rem', color: '#fff' }}>
+                        待確認共同支出 (<strong>{jointCart.length}</strong> 筆)
+                      </span>
+                      <span style={{ fontSize: '0.7rem', background: 'rgba(48,209,88,0.15)', color: '#30d158', border: '0.5px solid rgba(48,209,88,0.3)', padding: '1px 7px', borderRadius: '8px', fontWeight: '750' }}>
+                        累計: ${jointCart.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} TWD
+                      </span>
                     </div>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => setJointCart([])}
+                      className="glass-btn glass-btn-danger"
+                      style={{ padding: '2px 8px', fontSize: '0.7rem', borderRadius: '6px' }}
+                    >
+                      🗑️ 清空暫存
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {jointCart.map((item, idx) => (
+                      <div key={item.id || idx} style={{
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                        borderRadius: '12px',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              fontSize: '0.9rem',
+                              background: 'rgba(255,255,255,0.08)',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              🏫
+                            </span>
+                            <div>
+                              <div style={{ fontWeight: '750', fontSize: '0.84rem', color: '#fff' }}>
+                                {item.cat}
+                              </div>
+                              <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>
+                                  🏦 {item.accountNickname}
+                                </span>
+                                <span>• {item.date || txDate}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <strong style={{ fontSize: '0.9rem', color: '#fff' }}>
+                              ${item.amount.toLocaleString()} TWD
+                            </strong>
+                            <button
+                              type="button"
+                              onClick={() => setJointCart(jointCart.filter(i => i.id !== item.id))}
+                              style={{
+                                background: 'rgba(255,69,58,0.15)',
+                                border: 'none',
+                                color: '#ff453a',
+                                width: '22px',
+                                height: '22px',
+                                borderRadius: '50%',
+                                cursor: 'pointer',
+                                fontSize: '0.76rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+
+                        {item.note && (
+                          <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontStyle: 'italic', paddingLeft: '36px' }}>
+                            📝 {item.note}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1404,16 +1691,109 @@ const ExpenseEntry = ({
               )}
             </div>
 
-            {/* Cart List */}
+            {/* Apple-Style Inset Grouped Income Cart */}
             {incomeCart.length > 0 && (
-              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '12px', marginTop: '16px', border: '0.5px solid rgba(255,255,255,0.08)' }}>
-                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px', fontWeight: '800' }}>🛒 暫存收入入帳明細：</div>
-                {incomeCart.map(item => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '0.5px solid rgba(255,255,255,0.04)' }}>
-                    <span>[{item.cat}] {item.note || '無備註'} ({item.accountNickname})</span>
-                    <strong style={{ color: '#fff' }}>${item.amount.toLocaleString()}</strong>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '14px',
+                marginTop: '16px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.95rem' }}>🛒</span>
+                    <span style={{ fontWeight: '800', fontSize: '0.86rem', color: '#fff' }}>
+                      待確認收入入帳 (<strong>{incomeCart.length}</strong> 筆)
+                    </span>
+                    <span style={{ fontSize: '0.7rem', background: 'rgba(255,159,10,0.15)', color: '#ff9f0a', border: '0.5px solid rgba(255,159,10,0.3)', padding: '1px 7px', borderRadius: '8px', fontWeight: '750' }}>
+                      累計: ${incomeCart.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} TWD
+                    </span>
                   </div>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setIncomeCart([])}
+                    className="glass-btn glass-btn-danger"
+                    style={{ padding: '2px 8px', fontSize: '0.7rem', borderRadius: '6px' }}
+                  >
+                    🗑️ 清空暫存
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {incomeCart.map((item, idx) => (
+                    <div key={item.id || idx} style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderRadius: '12px',
+                      padding: '10px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            fontSize: '0.9rem',
+                            background: 'rgba(255,255,255,0.08)',
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            💵
+                          </span>
+                          <div>
+                            <div style={{ fontWeight: '750', fontSize: '0.84rem', color: '#fff' }}>
+                              {item.cat}
+                            </div>
+                            <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>
+                                🏦 {item.accountNickname}
+                              </span>
+                              <span>• {item.date || txDate}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ fontSize: '0.9rem', color: '#fff' }}>
+                            ${item.amount.toLocaleString()} TWD
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={() => setIncomeCart(incomeCart.filter(i => i.id !== item.id))}
+                            style={{
+                              background: 'rgba(255,69,58,0.15)',
+                              border: 'none',
+                              color: '#ff453a',
+                              width: '22px',
+                              height: '22px',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              fontSize: '0.76rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      {item.note && (
+                        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontStyle: 'italic', paddingLeft: '36px' }}>
+                          📝 {item.note}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1912,6 +2292,97 @@ const ExpenseEntry = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* PRE-SUBMISSION CONFIRMATION MODAL */}
+      {pendingSubmitConfig && createPortal(
+        <div className="liquid-modal-overlay" onClick={() => setPendingSubmitConfig(null)} style={{ zIndex: 10000, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px', width: '92%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: '20px 18px', boxSizing: 'border-box', background: 'rgba(28,28,30,0.96)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)', borderRadius: '20px' }}>
+            
+            {/* Modal Header (Fixed) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexShrink: 0 }}>
+              <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🚀</span>
+                <span>{pendingSubmitConfig.typeTitle || '確認送出記帳明細'}</span>
+              </div>
+              <button onClick={() => setPendingSubmitConfig(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.3rem', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '14px', touchAction: 'pan-y' }}>
+              
+              {/* Operator & Date Info Card */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <div>👤 記帳操作者：<strong style={{ color: '#fff' }}>{pendingSubmitConfig.operator}</strong></div>
+                <div>📅 入帳日期：<strong style={{ color: '#fff' }}>{pendingSubmitConfig.txDate}</strong></div>
+              </div>
+
+              {/* Account Balance Changes Card */}
+              {pendingSubmitConfig.accountChanges && pendingSubmitConfig.accountChanges.length > 0 && (
+                <div style={{ background: 'rgba(10,132,255,0.06)', border: '1px solid rgba(10,132,255,0.2)', borderRadius: '12px', padding: '12px 14px' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#0a84ff', marginBottom: '8px' }}>
+                    💡 預期帳戶餘額變動對比：
+                  </div>
+                  {pendingSubmitConfig.accountChanges.map((acc, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '4px 0', borderBottom: idx < pendingSubmitConfig.accountChanges.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none' }}>
+                      <span style={{ color: '#fff', fontWeight: '700' }}>🏦 {acc.nickname}</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        ${acc.oldBal.toLocaleString()} ➔ <strong style={{ color: acc.diff < 0 ? '#ffb94f' : '#8effa2' }}>${acc.newBal.toLocaleString()}</strong> ({acc.diff > 0 ? `+$${acc.diff.toLocaleString()}` : `-$${Math.abs(acc.diff).toLocaleString()}`})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Itemized Items Breakdown */}
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>
+                  🛒 即將寫入資料庫之項目 (共 {pendingSubmitConfig.items.length} 筆)：
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {pendingSubmitConfig.items.map((item, idx) => (
+                    <div key={idx} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: '750', fontSize: '0.84rem', color: '#fff' }}>
+                          {item.cat || '項目'} {item.note ? `• ${item.note}` : ''}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                          扣款/存入帳戶: {item.accountNickname}
+                        </div>
+                      </div>
+
+                      <strong style={{ fontSize: '0.92rem', color: '#fff' }}>
+                        ${item.amount.toLocaleString()} TWD
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer (Fixed) */}
+            <div style={{ display: 'flex', gap: '10px', paddingTop: '14px', flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '12px' }}>
+              <button onClick={() => setPendingSubmitConfig(null)} className="glass-btn" style={{ flex: 1, padding: '10px 0', borderRadius: '10px' }}>
+                ✏️ 返回修改
+              </button>
+              <button
+                onClick={() => {
+                  const cfg = pendingSubmitConfig;
+                  setPendingSubmitConfig(null);
+                  if (cfg.onConfirm) cfg.onConfirm();
+                }}
+                className="glass-btn primary-gradient-btn"
+                style={{ flex: 2, padding: '10px 0', borderRadius: '10px', fontWeight: '800' }}
+              >
+                🚀 確定寫入資料庫
+              </button>
+            </div>
+
           </div>
         </div>,
         document.body

@@ -1657,6 +1657,62 @@ function App() {
     }
   };
 
+  // 檢查常態帳單與信用卡帳單到期推播提醒
+  const checkAndTriggerBillReminders = (currentAssets) => {
+    if (!currentAssets) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const today = new Date();
+
+    // 1. 檢查常態帳單
+    const bills = currentAssets.bills || [];
+    bills.forEach(bill => {
+      if (!bill.nextDate) return;
+      const due = new Date(bill.nextDate);
+      const diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+      const reminderDays = bill.reminderDays || 3;
+
+      if (diffDays >= 0 && diffDays <= reminderDays) {
+        const notifKey = `notified_bill_${bill.id}_${todayStr}`;
+        if (!localStorage.getItem(notifKey)) {
+          localStorage.setItem(notifKey, '1');
+          const title = `⏰ 常態帳單到期提醒：${bill.note || bill.category || bill.name}`;
+          const body = `帳單【${bill.note || bill.name}】應繳金額 $${(bill.amount || 0).toLocaleString()} TWD，離到期日剩 ${diffDays} 天 (${bill.nextDate})！`;
+          sendTransactionPush(title, body, true);
+        }
+      }
+    });
+
+    // 2. 檢查信用卡帳單
+    const ccAccounts = (currentAssets.accounts || []).filter(a => a.type === 'credit');
+    ccAccounts.forEach(cc => {
+      const bDay = cc.billingDay || 10;
+      let nextDue = new Date(today.getFullYear(), today.getMonth(), bDay);
+      if (nextDue < today) {
+        nextDue = new Date(today.getFullYear(), today.getMonth() + 1, bDay);
+      }
+      const dueStr = nextDue.toISOString().split('T')[0];
+      const diffDays = Math.ceil((nextDue - today) / (1000 * 60 * 60 * 24));
+      const amount = Math.abs(cc.balance || 0);
+
+      if (amount > 0 && diffDays >= 0 && diffDays <= 3) {
+        const notifKey = `notified_cc_${cc.id}_${todayStr}`;
+        if (!localStorage.getItem(notifKey)) {
+          localStorage.setItem(notifKey, '1');
+          const autoPayStr = cc.autoPay ? `🤖 自動扣繳 (${cc.linkedBankName || '活儲'})` : '🖐️ 手動劃撥';
+          const title = `💳 信用卡帳單到期提醒：${cc.nickname}`;
+          const body = `信用卡【${cc.nickname}】本期待繳 $${amount.toLocaleString()} TWD，離結帳/扣款日剩 ${diffDays} 天 (${dueStr})！扣繳方式：${autoPayStr}。`;
+          sendTransactionPush(title, body, true);
+        }
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (assets) {
+      checkAndTriggerBillReminders(assets);
+    }
+  }, [assets]);
+
 
   const handleTransaction = (newAssets, historyRecordsInput) => {
     const timestamp = new Date().toISOString();

@@ -219,7 +219,8 @@ const SettingsView = ({
   const [showAllHistory, setShowAllHistory] = useState(false);
   
   // Category inputs
-  const dynamicCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
+  const rawCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
+  const dynamicCategories = rawCategories.includes("固定費用") ? rawCategories : [...rawCategories.slice(0, 3), "固定費用", ...rawCategories.slice(3)];
   const [budgetInputs, setBudgetInputs] = useState({});
 
   const isConfiguredInDb = assets?.budgets && assets.budgets[selectedBudgetMonth] !== undefined;

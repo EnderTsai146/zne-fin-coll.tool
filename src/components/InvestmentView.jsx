@@ -387,7 +387,7 @@ const InvestmentView = ({
     const targetAccount = accounts.find(a => a.id === selectedAccountId);
 
     const payload = {
-      id: Date.now().toString(),
+      id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
       accountId: selectedAccountId,
       accountNickname: targetAccount.nickname,
       investAction,
@@ -980,43 +980,113 @@ const InvestmentView = ({
             </button>
           </div>
 
-          {/* Cart display */}
+          {/* Apple-Style Inset Grouped Investment Cart */}
           {investCart.length > 0 && (
-            <div className="glass-card" style={{ padding: '16px', marginTop: '16px' }}>
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '16px',
+              padding: '16px',
+              marginTop: '16px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
+            }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontWeight: '800', fontSize: '0.9rem', color: '#fff' }}>📝 待確認交易項目 ({investCart.length} 筆)</span>
-                <button onClick={() => setInvestCart([])} style={{ background: 'none', border: 'none', color: '#ff453a', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer' }}>全部清除</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '1rem' }}>🛒</span>
+                  <span style={{ fontWeight: '800', fontSize: '0.88rem', color: '#fff' }}>
+                    待確認投資交易 (<strong>{investCart.length}</strong> 筆)
+                  </span>
+                  <span style={{ fontSize: '0.7rem', background: 'rgba(193,150,255,0.15)', color: '#c196ff', border: '0.5px solid rgba(193,150,255,0.3)', padding: '1px 7px', borderRadius: '8px', fontWeight: '750' }}>
+                    累計: ${investCart.reduce((sum, item) => sum + (item.investAmount || 0), 0).toLocaleString()} TWD
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInvestCart([])}
+                  className="glass-btn glass-btn-danger"
+                  style={{ padding: '2px 8px', fontSize: '0.7rem', borderRadius: '6px' }}
+                >
+                  🗑️ 全部清除
+                </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {investCart.map((item) => {
                   const isBuy = item.investAction === 'buy';
                   const actionLabel = isBuy ? '買入' : (item.investAction === 'sell' ? '賣出' : '當沖');
                   const actionColor = isBuy ? '#c196ff' : (item.investAction === 'sell' ? '#ffd88d' : '#ff9c8d');
                   
                   return (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                      <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#fff' }}>
-                          <span style={{ color: actionColor, marginRight: '6px' }}>[{actionLabel}]</span>
-                          {item.investType === 'stock' ? `${item.stockSymbol} (${item.stockShares}股)` : item.investType.toUpperCase()}
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                          支付帳戶: {item.accountNickname}
+                    <div key={item.id} style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      borderRadius: '12px',
+                      padding: '10px 12px',
+                      display: 'flex',
+                      justify: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{
+                          fontSize: '0.9rem',
+                          background: `${actionColor}22`,
+                          color: actionColor,
+                          border: `1px solid ${actionColor}44`,
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: '800',
+                          flexShrink: 0
+                        }}>
+                          {isBuy ? '📈' : '📉'}
+                        </span>
+                        <div>
+                          <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>
+                            <span style={{ color: actionColor, marginRight: '6px', fontWeight: '800' }}>[{actionLabel}]</span>
+                            {item.investType === 'stock' ? `${item.stockSymbol} (${item.stockShares} 股 @ $${item.stockPrice})` : item.investType.toUpperCase()}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>
+                              🏦 {item.accountNickname}
+                            </span>
+                            <span>• 交割幣別: {item.settleCurrency || 'TWD'}</span>
+                          </div>
                         </div>
                       </div>
+
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>
-                            ${item.investAmount.toLocaleString()} TWD
-                          </div>
-                          {item.stockMarket === 'US' && (
+                          <strong style={{ fontSize: '0.9rem', color: '#fff' }}>
+                            ${(item.investAmount || 0).toLocaleString()} TWD
+                          </strong>
+                          {item.stockMarket === 'US' && item.usTotalUsd > 0 && (
                             <div style={{ fontSize: '0.66rem', color: 'var(--accent-orange)' }}>
                               ${item.usTotalUsd.toLocaleString()} USD
                             </div>
                           )}
                         </div>
-                        <button onClick={() => handleRemoveCartItem(item.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.1rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCartItem(item.id)}
+                          style={{
+                            background: 'rgba(255,69,58,0.15)',
+                            border: 'none',
+                            color: '#ff453a',
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            cursor: 'pointer',
+                            fontSize: '0.76rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
                   );
