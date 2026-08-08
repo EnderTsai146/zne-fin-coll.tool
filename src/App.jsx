@@ -10,6 +10,7 @@ import ReviewView from './components/ReviewView';
 import './index.css';
 import ReviewAndDatabaseView from './components/ReviewAndDatabaseView';
 import SettingsView from './components/SettingsView';
+import ErrorBoundary from './components/ErrorBoundary';
 import { getBudgetForMonth } from './utils/budgetUtils';
 import { db, auth, getFcmToken, onFcmMessage } from './firebase';
 import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter, runTransaction } from "firebase/firestore";
@@ -2632,7 +2633,11 @@ function App() {
               />
             )}
             {currentPage === 'accounts' && <AccountsManager key="accounts" assets={assets} setAssets={handleAssetsUpdate} currentUser={currentUser} operatorName={operatorName} customAlert={customAlert} customConfirm={customConfirm} currentFxRate={currentFxRate} onTransaction={handleTransaction} />}
-            {currentPage === 'expense' && <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={operatorName} onNavigateTab={setCurrentPage} />}
+            {currentPage === 'expense' && (
+              <ErrorBoundary title="✍️ 記帳與帳單模組載入異常">
+                <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={operatorName} onNavigateTab={setCurrentPage} />
+              </ErrorBoundary>
+            )}
             {currentPage === 'settings' && (
               <SettingsView
                 assets={assets}
