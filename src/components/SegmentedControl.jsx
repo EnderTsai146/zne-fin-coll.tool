@@ -8,24 +8,35 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
   // Compute the liquid sliding pill position
   useLayoutEffect(() => {
     if (!containerRef.current || !value) {
-      setPillStyle({ opacity: 0 });
+      setPillStyle(prev => (prev.opacity === 0 ? prev : { opacity: 0 }));
       return;
     }
     const container = containerRef.current;
     const idx = options.findIndex(o => o.value === value);
     if (idx < 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPillStyle({ opacity: 0 });
+      setPillStyle(prev => (prev.opacity === 0 ? prev : { opacity: 0 }));
       return;
     }
     const child = container.children[idx + 1]; // +1 because first child is the pill itself
     if (!child) return;
 
-    setPillStyle({
+    const newStyle = {
       opacity: 1,
       width: child.offsetWidth,
       height: child.offsetHeight,
       transform: `translate(${child.offsetLeft}px, ${child.offsetTop}px)`,
+    };
+
+    setPillStyle(prev => {
+      if (
+        prev.opacity === newStyle.opacity &&
+        prev.width === newStyle.width &&
+        prev.height === newStyle.height &&
+        prev.transform === newStyle.transform
+      ) {
+        return prev;
+      }
+      return newStyle;
     });
   }, [value, options]);
 

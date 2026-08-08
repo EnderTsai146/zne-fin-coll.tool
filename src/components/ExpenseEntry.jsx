@@ -33,7 +33,7 @@ const ExpenseEntry = ({
   getBudgetProgressText,
   onNavigateTab
 }) => {
-  const accounts = assets.accounts || [];
+  const accounts = assets?.accounts || [];
   const loggedInUserName = currentUser || "系統";
   const userKey = loggedInUserName.includes('大狗狗') ? 'userA' : 'userB';
   const partnerKey = userKey === 'userA' ? 'userB' : 'userA';
@@ -44,7 +44,7 @@ const ExpenseEntry = ({
   const expenseCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
   const incomeCategories = ["薪資", "獎金", "投資", "其他"];
 
-  const categoryOptions = expenseCategories.map(cat => ({ label: cat, value: cat }));
+  const categoryOptions = useMemo(() => expenseCategories.map(cat => ({ label: cat, value: cat })), [expenseCategories]);
 
   const [entryMode, setEntryMode] = useState('expense'); // 'expense', 'income'
   const [activeTab, setActiveTab] = useState('personal'); // 'personal', 'joint', 'bills'
