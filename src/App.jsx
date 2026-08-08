@@ -1586,7 +1586,7 @@ function App() {
     return true;
   };
 
-  const sendTransactionPush = (title, body, isTest = false, targetScope = 'partner', notifCategory = null) => {
+  const sendTransactionPush = async (title, body, isTest = false, targetScope = 'partner', notifCategory = null) => {
     try {
       const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
       const partnerUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
@@ -1631,14 +1631,17 @@ function App() {
       console.log(`[Push] Target scope: ${targetScope}, category: ${notifCategory}, tokens:`, allTokens);
 
       if (allTokens.length === 0) {
-        console.log(`[Push] No registered FCM tokens or notification disabled for targets.`);
-        if (isTest) {
-          customAlert("✅ 測試推播已發送！(若瀏覽器權限已開啟，上方已跳出通知彈窗)", "測試推播成功");
-        }
-        return Promise.resolve();
+        const errDesc = isTest
+          ? `當前帳號【${currentUserKey}】尚未在任何裝置上完成 FCM Web Push 註冊，或全域通知開關已關閉。`
+          : '無已註冊並開啟通知之接收目標。';
+        console.warn(`[Push] ${errDesc}`);
+        return { success: false, targetCount: 0, error: errDesc };
       }
 
       // 4. 廣播發送推播給受影響使用者的所有裝置
+      let successCount = 0;
+      let errorList = [];
+
       const promises = allTokens.map(token => {
         return fetch(MY_GOOGLE_API_URL, {
           method: 'POST',
@@ -1655,23 +1658,33 @@ function App() {
             try {
               const json = JSON.parse(text);
               if (json && json.status === 'success') {
-                if (isTest) {
-                  customAlert(`✅ 測試推播已成功廣播發送給 ${allTokens.length} 台登錄裝置！`, "測試推播成功");
-                }
+                successCount++;
               } else if (json && json.errorType === 'UNREGISTERED') {
                 handleRemoveBadToken(json.token);
+                errorList.push(`Token [${token.substring(0, 10)}...] 已失效 (UNREGISTERED)`);
+              } else {
+                errorList.push(json?.message || text || 'GAS 廣播傳送回傳非成功狀態');
               }
-            } catch (e) {}
+            } catch (e) {
+              errorList.push(`GAS 回傳格式異常: ${text.substring(0, 100)}`);
+            }
           })
           .catch(err => {
-            console.warn("[Push] Background push network dispatch skipped silently:", err);
+            errorList.push(`網路請求連線失敗: ${err.message}`);
           });
       });
 
-      return Promise.all(promises);
+      await Promise.all(promises);
+
+      if (successCount > 0) {
+        const msg = `已成功推播至 ${successCount}/${allTokens.length} 台登入裝置`;
+        return { success: true, targetCount: successCount, message: msg };
+      } else {
+        return { success: false, targetCount: 0, error: errorList.join('; ') || '背景推播廣播失敗' };
+      }
     } catch (e) {
       console.error("[Push] Send transaction push outer catch error:", e);
-      return Promise.resolve();
+      return { success: false, targetCount: 0, error: e.message || String(e) };
     }
   };
 

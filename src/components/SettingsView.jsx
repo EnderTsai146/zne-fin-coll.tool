@@ -42,23 +42,6 @@ const SettingsView = ({
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [isTestingPush, setIsTestingPush] = useState(false);
 
-  const handleSendTestPushClick = async () => {
-    if (isTestingPush) return;
-    setIsTestingPush(true);
-    try {
-      if (onSendTestPush) {
-        await onSendTestPush();
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      // 3秒後重新啟用按鈕，防止連續點按
-      setTimeout(() => {
-        setIsTestingPush(false);
-      }, 3000);
-    }
-  };
-
   // --- Reset Test Data with Backup ---
   const [isResetting, setIsResetting] = useState(false);
 
@@ -562,6 +545,14 @@ const SettingsView = ({
   const userKey = loggedInUserName.includes('大狗狗') ? 'userA' : 'userB';
   const userDisplayName = userKey === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
 
+  // --- Test Push Diagnostic State ---
+  const [testPushDiagnostic, setTestPushDiagnostic] = useState({
+    status: 'idle', // 'idle' | 'testing' | 'success' | 'error'
+    message: null,
+    error: null
+  });
+
+  // --- Optimistic Notification Preferences State ---
   const userNotifSettings = useMemo(() => {
     const defaults = {
       enabled: true,
@@ -578,63 +569,198 @@ const SettingsView = ({
     };
   }, [assets?.notificationSettings, userKey]);
 
+  const [localNotifSettings, setLocalNotifSettings] = useState(userNotifSettings);
+
+  useEffect(() => {
+    setLocalNotifSettings(userNotifSettings);
+  }, [userNotifSettings]);
+
   const handleToggleNotifSetting = (settingKey) => {
-    const currentVal = userNotifSettings[settingKey] !== false;
-    const updatedUserSettings = {
-      ...userNotifSettings,
-      [settingKey]: !currentVal
+    const currentVal = localNotifSettings[settingKey] !== false;
+    const nextVal = !currentVal;
+
+    // 0ms Instant UI Feedback
+    const nextSettings = {
+      ...localNotifSettings,
+      [settingKey]: nextVal
     };
+    setLocalNotifSettings(nextSettings);
 
     const updatedAssets = {
       ...assets,
       notificationSettings: {
         ...(assets?.notificationSettings || {}),
-        [userKey]: updatedUserSettings
+        [userKey]: nextSettings
       }
     };
 
     saveToCloud(updatedAssets);
   };
 
-  const registeredTokensCount = useMemo(() => {
-    const userField = assets?.fcmTokens?.[userKey];
-    if (!userField) return 0;
-    if (typeof userField === 'object') return Object.keys(userField).length;
-    if (Array.isArray(userField)) return userField.length;
-    return typeof userField === 'string' ? 1 : 0;
-  }, [assets?.fcmTokens, userKey]);
+  // --- Enhanced Test Push Click Handler ---
+  const handleSendTestPushClick = async () => {
+    if (isTestingPush) return;
+    setIsTestingPush(true);
+    setTestPushDiagnostic({ status: 'testing', message: '正在連線發送測試推播...', error: null });
+
+    try {
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        const perm = Notification.permission;
+        setTestPushDiagnostic({
+          status: 'error',
+          error: `瀏覽器 Notification.permission 狀態為: '${perm}'。請先允許權限。`
+        });
+        setIsTestingPush(false);
+        return;
+      }
+
+      if (onSendTestPush) {
+        const res = await onSendTestPush();
+        if (res && res.success === true) {
+          setTestPushDiagnostic({
+            status: 'success',
+            message: res.message || '✅ 測試推播已成功發送並經由 Google Cloud Messaging 廣播給您的登入裝置！',
+            error: null
+          });
+        } else if (res && res.success === false) {
+          setTestPushDiagnostic({
+            status: 'error',
+            error: res.error || '測試推播連線回應為失敗狀態。'
+          });
+        } else {
+          setTestPushDiagnostic({
+            status: 'success',
+            message: '✅ 測試推播請求已送出！若您在上屏看到彈窗代表推播成功！',
+            error: null
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[TestPush Error]", e);
+      setTestPushDiagnostic({
+        status: 'error',
+        error: `發送失敗 [${e.name || 'Error'}]: ${e.message || String(e)}`
+      });
+    } finally {
+      setTimeout(() => {
+        setIsTestingPush(false);
+      }, 1500);
+    }
+  };
+
+  // --- Device Tokens Management & Unbind Handlers ---
+  const userDeviceTokens = useMemo(() => {
+    const raw = assets?.fcmTokens?.[userKey];
+    const arr = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? Object.keys(raw)
+      : (Array.isArray(raw) ? raw : (typeof raw === 'string' ? [raw] : []));
+
+    const currentToken = fcmDiagnostic?.token;
+    return arr.map((tokenStr, idx) => {
+      const isCurrent = currentToken && tokenStr === currentToken;
+      return {
+        token: tokenStr,
+        shortToken: tokenStr.length > 24 ? `${tokenStr.substring(0, 12)}...${tokenStr.substring(tokenStr.length - 8)}` : tokenStr,
+        isCurrent,
+        label: isCurrent ? '📱 本機裝置 (當前使用中)' : `📱 登入裝置 #${idx + 1}`
+      };
+    });
+  }, [assets?.fcmTokens, userKey, fcmDiagnostic?.token]);
+
+  const registeredTokensCount = userDeviceTokens.length;
+
+  const handleUnbindToken = async (targetTokenStr) => {
+    if (!await customConfirm("⚠️ 確定要解除綁定此裝置的推播 Token 嗎？\n解除後該裝置將無法接收推播提醒。", "解除裝置綁定確認")) {
+      return;
+    }
+
+    const rawUserTokens = assets?.fcmTokens?.[userKey] || {};
+    let updatedUserTokens = {};
+
+    if (typeof rawUserTokens === 'object' && !Array.isArray(rawUserTokens)) {
+      updatedUserTokens = { ...rawUserTokens };
+      delete updatedUserTokens[targetTokenStr];
+    } else if (Array.isArray(rawUserTokens)) {
+      updatedUserTokens = rawUserTokens.filter(t => t !== targetTokenStr);
+    }
+
+    const updatedAssets = {
+      ...assets,
+      fcmTokens: {
+        ...(assets?.fcmTokens || {}),
+        [userKey]: updatedUserTokens
+      }
+    };
+
+    saveToCloud(updatedAssets);
+    await customAlert("🗑️ 已成功解除該裝置的推播綁定。");
+  };
+
+  const handleClearOtherTokens = async () => {
+    const currentToken = fcmDiagnostic?.token;
+    if (!currentToken) {
+      await customAlert("⚠️ 本機裝置尚未取得 FCM Token，無法清理其他裝置。");
+      return;
+    }
+
+    if (!await customConfirm("🧹 確定要清理所有其他離線裝置，僅保留【本機裝置】嗎？")) {
+      return;
+    }
+
+    const updatedAssets = {
+      ...assets,
+      fcmTokens: {
+        ...(assets?.fcmTokens || {}),
+        [userKey]: { [currentToken]: true }
+      }
+    };
+
+    saveToCloud(updatedAssets);
+    await customAlert("🧹 已清理完畢，目前僅保留本機裝置。");
+  };
 
   const ToggleSwitch = ({ checked, onChange, disabled }) => (
-    <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '26px', opacity: disabled ? 0.4 : 1, cursor: disabled ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        disabled={disabled}
-        style={{ opacity: 0, width: 0, height: 0 }}
-      />
-      <span style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: checked ? '#30d158' : 'rgba(255,255,255,0.15)',
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled && onChange) onChange();
+      }}
+      style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: '46px',
+        height: '26px',
+        padding: 0,
+        border: 'none',
+        outline: 'none',
+        background: checked ? '#30d158' : 'rgba(255,255,255,0.18)',
         borderRadius: '26px',
-        transition: 'all 0.3s ease',
-        border: checked ? 'none' : '0.5px solid rgba(255,255,255,0.2)'
-      }}>
-        <span style={{
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.35 : 1,
+        flexShrink: 0,
+        transition: 'background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        WebkitTapHighlightColor: 'transparent',
+        boxShadow: checked ? '0 0 10px rgba(48, 209, 88, 0.4)' : 'none'
+      }}
+    >
+      <span
+        style={{
           position: 'absolute',
-          content: '""',
-          height: '20px',
+          top: '3px',
+          left: checked ? '23px' : '3px',
           width: '20px',
-          left: checked ? '20px' : '3px',
-          bottom: '3px',
-          backgroundColor: '#fff',
+          height: '20px',
+          backgroundColor: '#ffffff',
           borderRadius: '50%',
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        }} />
-      </span>
-    </label>
+          transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: '0 2px 5px rgba(0,0,0,0.35)'
+        }}
+      />
+    </button>
   );
 
   return (
@@ -897,14 +1023,14 @@ const SettingsView = ({
                 </div>
 
                 <ToggleSwitch
-                  checked={userNotifSettings.enabled !== false}
+                  checked={localNotifSettings.enabled !== false}
                   onChange={() => handleToggleNotifSetting('enabled')}
                 />
               </div>
             </div>
 
             {/* Category Toggles List */}
-            <div className="glass-card" style={{ padding: '18px', opacity: userNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
+            <div className="glass-card" style={{ padding: '18px', opacity: localNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
               <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>💸</span>
                 <span>記帳與交易動態通知</span>
@@ -920,9 +1046,9 @@ const SettingsView = ({
                     </div>
                   </div>
                   <ToggleSwitch
-                    checked={userNotifSettings.partnerExpense !== false}
+                    checked={localNotifSettings.partnerExpense !== false}
                     onChange={() => handleToggleNotifSetting('partnerExpense')}
-                    disabled={userNotifSettings.enabled === false}
+                    disabled={localNotifSettings.enabled === false}
                   />
                 </div>
 
@@ -935,16 +1061,16 @@ const SettingsView = ({
                     </div>
                   </div>
                   <ToggleSwitch
-                    checked={userNotifSettings.jointExpense !== false}
+                    checked={localNotifSettings.jointExpense !== false}
                     onChange={() => handleToggleNotifSetting('jointExpense')}
-                    disabled={userNotifSettings.enabled === false}
+                    disabled={localNotifSettings.enabled === false}
                   />
                 </div>
               </div>
             </div>
 
             {/* Bill & Credit Card Alerts */}
-            <div className="glass-card" style={{ padding: '18px', opacity: userNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
+            <div className="glass-card" style={{ padding: '18px', opacity: localNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
               <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>📅</span>
                 <span>帳單與信用卡到期提醒</span>
@@ -960,9 +1086,9 @@ const SettingsView = ({
                     </div>
                   </div>
                   <ToggleSwitch
-                    checked={userNotifSettings.billReminders !== false}
+                    checked={localNotifSettings.billReminders !== false}
                     onChange={() => handleToggleNotifSetting('billReminders')}
-                    disabled={userNotifSettings.enabled === false}
+                    disabled={localNotifSettings.enabled === false}
                   />
                 </div>
 
@@ -975,16 +1101,16 @@ const SettingsView = ({
                     </div>
                   </div>
                   <ToggleSwitch
-                    checked={userNotifSettings.creditCardReminders !== false}
+                    checked={localNotifSettings.creditCardReminders !== false}
                     onChange={() => handleToggleNotifSetting('creditCardReminders')}
-                    disabled={userNotifSettings.enabled === false}
+                    disabled={localNotifSettings.enabled === false}
                   />
                 </div>
               </div>
             </div>
 
             {/* Dynamic Budget Warnings */}
-            <div className="glass-card" style={{ padding: '18px', opacity: userNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
+            <div className="glass-card" style={{ padding: '18px', opacity: localNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
               <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>📊</span>
                 <span>動態預算水位預警</span>
@@ -1000,9 +1126,9 @@ const SettingsView = ({
                     </div>
                   </div>
                   <ToggleSwitch
-                    checked={userNotifSettings.budgetWarning70 !== false}
+                    checked={localNotifSettings.budgetWarning70 !== false}
                     onChange={() => handleToggleNotifSetting('budgetWarning70')}
-                    disabled={userNotifSettings.enabled === false}
+                    disabled={localNotifSettings.enabled === false}
                   />
                 </div>
 
@@ -1015,19 +1141,85 @@ const SettingsView = ({
                     </div>
                   </div>
                   <ToggleSwitch
-                    checked={userNotifSettings.budgetOverdraft !== false}
+                    checked={localNotifSettings.budgetOverdraft !== false}
                     onChange={() => handleToggleNotifSetting('budgetOverdraft')}
-                    disabled={userNotifSettings.enabled === false}
+                    disabled={localNotifSettings.enabled === false}
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Bound Devices Management Card */}
+            <div className="glass-card" style={{ padding: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
+                <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📱</span>
+                  <span>已綁定推播裝置管理 (共 {registeredTokensCount} 台)</span>
+                </div>
+                {userDeviceTokens.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleClearOtherTokens}
+                    className="glass-btn"
+                    style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px', color: '#ffb94f', borderColor: 'rgba(255,185,79,0.3)' }}
+                  >
+                    🧹 清理其他裝置
+                  </button>
+                )}
+              </div>
+
+              {userDeviceTokens.length === 0 ? (
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '12px 0', textAlign: 'center' }}>
+                  尚未於任何裝置上註冊 FCM 推播 Token。
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {userDeviceTokens.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        justify: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px 12px',
+                        background: item.isCurrent ? 'rgba(48, 209, 88, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                        border: item.isCurrent ? '1px solid rgba(48, 209, 88, 0.3)' : '1px solid rgba(255, 255, 255, 0.06)',
+                        borderRadius: '12px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '750', fontSize: '0.82rem', color: item.isCurrent ? '#8effa2' : '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{item.label}</span>
+                          {item.isCurrent && (
+                            <span style={{ fontSize: '0.68rem', background: '#30d158', color: '#000', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>
+                              當前裝置
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontFamily: 'monospace', marginTop: '2px' }}>
+                          Token: {item.shortToken}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleUnbindToken(item.token)}
+                        className="glass-btn"
+                        style={{ fontSize: '0.74rem', padding: '4px 8px', borderRadius: '8px', color: '#ff453a', borderColor: 'rgba(255,69,58,0.3)', background: 'rgba(255,69,58,0.06)' }}
+                      >
+                        🗑️ 解除綁定
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Device Diagnostics & Test Push Button */}
             <div className="glass-card" style={{ padding: '18px' }}>
               <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>🚀</span>
-                <span>本機裝置推播連線診斷</span>
+                <span>本機裝置推播連線診斷與測試</span>
               </div>
 
               <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: '1.5' }}>
@@ -1063,6 +1255,55 @@ const SettingsView = ({
                   {isTestingPush ? '發送中...' : '🚀 發送本機測試推播'}
                 </button>
               </div>
+
+              {/* Inline Diagnostic Output Card (ErrorBoundary Style for AI Debugging) */}
+              {testPushDiagnostic.status === 'error' && (
+                <div style={{
+                  marginTop: '14px',
+                  padding: '14px',
+                  background: 'rgba(255, 69, 58, 0.1)',
+                  border: '1px solid rgba(255, 69, 58, 0.4)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '0.78rem'
+                }}>
+                  <div style={{ fontWeight: '800', color: '#ff453a', fontSize: '0.86rem', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>⚠️</span>
+                    <span>測試推播發送失敗 (推播診斷報錯)</span>
+                  </div>
+                  <div style={{
+                    fontFamily: 'SF Mono, Consolas, monospace',
+                    fontSize: '0.74rem',
+                    color: '#ffb94f',
+                    wordBreak: 'break-all',
+                    whiteSpace: 'pre-wrap',
+                    background: 'rgba(0,0,0,0.4)',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.08)'
+                  }}>
+                    {testPushDiagnostic.error}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', marginTop: '8px', lineHeight: '1.4' }}>
+                    💡 提示：您可以將上方這段紅色報錯訊息完整複製並貼給 AI 代理協助診斷。
+                  </div>
+                </div>
+              )}
+
+              {testPushDiagnostic.status === 'success' && (
+                <div style={{
+                  marginTop: '14px',
+                  padding: '12px 14px',
+                  background: 'rgba(48, 209, 88, 0.12)',
+                  border: '1px solid rgba(48, 209, 88, 0.35)',
+                  borderRadius: '12px',
+                  color: '#8effa2',
+                  fontSize: '0.8rem',
+                  fontWeight: '700'
+                }}>
+                  {testPushDiagnostic.message}
+                </div>
+              )}
             </div>
 
           </div>
