@@ -1578,45 +1578,68 @@ function App() {
     });
   };
 
-  const sendTransactionPush = (title, body, isTest = false) => {
+  const isNotificationEnabledForUser = (userKey, notifCategory) => {
+    const userSettings = assets?.notificationSettings?.[userKey];
+    if (!userSettings) return true;
+    if (userSettings.enabled === false) return false;
+    if (notifCategory && userSettings[notifCategory] === false) return false;
+    return true;
+  };
+
+  const sendTransactionPush = (title, body, isTest = false, targetScope = 'partner', notifCategory = null) => {
     try {
-      // 1. 本地/裝置原生 Web Notification 立即觸發 (免依賴 GAS，100% 成功彈窗)
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(title, {
-            body: body,
-            icon: '/apple-touch-icon.png',
-            badge: '/apple-touch-icon.png'
-          });
-        } catch (err) {
-          console.warn("[Push] Native Web Notification dispatch error:", err);
+      const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
+      const partnerUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
+
+      // 1. 本地/裝置原生 Web Notification 立即觸發 (若當前使用者有授權並啟用該類別)
+      if (!isTest && isNotificationEnabledForUser(currentUserKey, notifCategory)) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(title, {
+              body: body,
+              icon: '/apple-touch-icon.png',
+              badge: '/apple-touch-icon.png'
+            });
+          } catch (err) {
+            console.warn("[Push] Native Web Notification dispatch error:", err);
+          }
         }
       }
 
-      const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
-      const targetUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
-      
-      const tokensToNotify = isTest 
-        ? getTokensArray(assets?.fcmTokens?.[currentUserKey])
-        : getTokensArray(assets?.fcmTokens?.[targetUserKey]);
-        
-      const allTokens = Array.from(new Set(tokensToNotify));
-      
-      console.log("[Push] currentUserKey:", currentUserKey);
-      console.log("[Push] tokensToNotify:", tokensToNotify);
-      console.log("[Push] allTokens to target:", allTokens);
-      
+      // 2. 計算受影響的目標使用者 (targetUserKeys)
+      let targetUserKeys = [];
+      if (isTest) {
+        targetUserKeys = [currentUserKey];
+      } else if (targetScope === 'partner') {
+        targetUserKeys = [partnerUserKey];
+      } else if (targetScope === 'self') {
+        targetUserKeys = [currentUserKey];
+      } else if (targetScope === 'both') {
+        targetUserKeys = ['userA', 'userB'];
+      }
+
+      // 3. 過濾出開啟該通知類別的使用者，並收集其所有已註冊裝置的 FCM Tokens (跨多平臺/多裝置)
+      let allTokens = [];
+      targetUserKeys.forEach(uKey => {
+        if (isNotificationEnabledForUser(uKey, notifCategory)) {
+          const userTokens = getTokensArray(assets?.fcmTokens?.[uKey]);
+          allTokens.push(...userTokens);
+        }
+      });
+      allTokens = Array.from(new Set(allTokens));
+
+      console.log(`[Push] Target scope: ${targetScope}, category: ${notifCategory}, tokens:`, allTokens);
+
       if (allTokens.length === 0) {
-        console.log(`[Push] No registered FCM tokens for target. Skip push.`);
+        console.log(`[Push] No registered FCM tokens or notification disabled for targets.`);
         if (isTest) {
           customAlert("✅ 測試推播已發送！(若瀏覽器權限已開啟，上方已跳出通知彈窗)", "測試推播成功");
         }
         return Promise.resolve();
       }
-      
-      // 2. 靜默異步背景 GAS 發送 (發生 404 或網頁錯誤時靜默記錄，不干擾使用者日常記帳)
+
+      // 4. 廣播發送推播給受影響使用者的所有裝置
       const promises = allTokens.map(token => {
-        console.log(`[Push] Fetching GAS Web App for token: ${token.substring(0, 15)}...`);
         return fetch(MY_GOOGLE_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -1629,22 +1652,16 @@ function App() {
         })
           .then(async (res) => {
             const text = await res.text();
-            console.log(`[Push] GAS Web App Response for ${token.substring(0, 8)}...:`, text);
-            
             try {
               const json = JSON.parse(text);
               if (json && json.status === 'success') {
-                console.log(`[Push] Push sent successfully for token prefix: ${token.substring(0, 8)}`);
                 if (isTest) {
-                  customAlert(`✅ 測試推播已成功發送！`, "測試推播成功");
+                  customAlert(`✅ 測試推播已成功廣播發送給 ${allTokens.length} 台登錄裝置！`, "測試推播成功");
                 }
               } else if (json && json.errorType === 'UNREGISTERED') {
-                console.warn(`[Push] Token ${json.token} is unregistered. Removing from database...`);
                 handleRemoveBadToken(json.token);
               }
-            } catch (e) {
-              console.warn("[Push] GAS endpoint returned non-JSON/HTML. Skipped background push notification modal.");
-            }
+            } catch (e) {}
           })
           .catch(err => {
             console.warn("[Push] Background push network dispatch skipped silently:", err);
@@ -1678,7 +1695,7 @@ function App() {
           localStorage.setItem(notifKey, '1');
           const title = `⏰ 常態帳單到期提醒：${bill.note || bill.category || bill.name}`;
           const body = `帳單【${bill.note || bill.name}】應繳金額 $${(bill.amount || 0).toLocaleString()} TWD，離到期日剩 ${diffDays} 天 (${bill.nextDate})！`;
-          sendTransactionPush(title, body, false);
+          sendTransactionPush(title, body, false, 'both', 'billReminders');
         }
       }
     });
@@ -1702,7 +1719,7 @@ function App() {
           const autoPayStr = cc.autoPay ? `🤖 自動扣繳 (${cc.linkedBankName || '活儲'})` : '🖐️ 手動劃撥';
           const title = `💳 信用卡帳單到期提醒：${cc.nickname}`;
           const body = `信用卡【${cc.nickname}】本期待繳 $${amount.toLocaleString()} TWD，離結帳/扣款日剩 ${diffDays} 天 (${dueStr})！扣繳方式：${autoPayStr}。`;
-          sendTransactionPush(title, body, false);
+          sendTransactionPush(title, body, false, 'both', 'creditCardReminders');
         }
       }
     });
@@ -1862,7 +1879,7 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    sendTransactionPush("💰 個人支出異動", `${payerName} 登錄個人支出：${finalNote} - $${totalAmount.toLocaleString()}`);
+    sendTransactionPush("💰 個人支出異動", `${payerName} 登錄個人支出：${finalNote} - $${totalAmount.toLocaleString()}`, false, 'partner', 'partnerExpense');
     setNewlyAddedRecordTimestamp(targetTimestamp);
     setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
@@ -1931,7 +1948,7 @@ function App() {
     saveToCloud(finalAssetsWithLog);
     const payerNameText = operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶';
     const pushMethodStr = advancedBy === 'jointCash' ? '共同現金直付' : '代墊款';
-    sendTransactionPush("🤝 共同支出異動", `${payerNameText} 登錄共同支出（${pushMethodStr}）：${category}${safeNote ? ' - ' + safeNote : ''} - $${val.toLocaleString()}`);
+    sendTransactionPush("🤝 共同支出異動", `${payerNameText} 登錄共同支出（${pushMethodStr}）：${category}${safeNote ? ' - ' + safeNote : ''} - $${val.toLocaleString()}`, false, 'both', 'jointExpense');
     setNewlyAddedRecordTimestamp(targetTimestamp);
     setMonthlyViewSubTab('database');
     setCurrentPage('monthly');

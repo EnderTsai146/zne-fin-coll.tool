@@ -546,16 +546,108 @@ const SettingsView = ({
     return 'timeline-dot';
   };
 
+  // --- Notification Preferences Helper States & Handlers ---
+  const [internalSubTab, setInternalSubTab] = useState(activeSubTab || 'budget');
+  useEffect(() => {
+    if (activeSubTab) setInternalSubTab(activeSubTab);
+  }, [activeSubTab]);
+
+  const currentSubTab = activeSubTab || internalSubTab;
+  const handleTabChange = (tab) => {
+    setInternalSubTab(tab);
+    if (setActiveSubTab) setActiveSubTab(tab);
+  };
+
+  const loggedInUserName = operatorName || currentUser || "系統";
+  const userKey = loggedInUserName.includes('大狗狗') ? 'userA' : 'userB';
+  const userDisplayName = userKey === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
+
+  const userNotifSettings = useMemo(() => {
+    const defaults = {
+      enabled: true,
+      partnerExpense: true,
+      jointExpense: true,
+      billReminders: true,
+      creditCardReminders: true,
+      budgetWarning70: true,
+      budgetOverdraft: true,
+    };
+    return {
+      ...defaults,
+      ...(assets?.notificationSettings?.[userKey] || {})
+    };
+  }, [assets?.notificationSettings, userKey]);
+
+  const handleToggleNotifSetting = (settingKey) => {
+    const currentVal = userNotifSettings[settingKey] !== false;
+    const updatedUserSettings = {
+      ...userNotifSettings,
+      [settingKey]: !currentVal
+    };
+
+    const updatedAssets = {
+      ...assets,
+      notificationSettings: {
+        ...(assets?.notificationSettings || {}),
+        [userKey]: updatedUserSettings
+      }
+    };
+
+    saveToCloud(updatedAssets);
+  };
+
+  const registeredTokensCount = useMemo(() => {
+    const userField = assets?.fcmTokens?.[userKey];
+    if (!userField) return 0;
+    if (typeof userField === 'object') return Object.keys(userField).length;
+    if (Array.isArray(userField)) return userField.length;
+    return typeof userField === 'string' ? 1 : 0;
+  }, [assets?.fcmTokens, userKey]);
+
+  const ToggleSwitch = ({ checked, onChange, disabled }) => (
+    <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '26px', opacity: disabled ? 0.4 : 1, cursor: disabled ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        style={{ opacity: 0, width: 0, height: 0 }}
+      />
+      <span style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: checked ? '#30d158' : 'rgba(255,255,255,0.15)',
+        borderRadius: '26px',
+        transition: 'all 0.3s ease',
+        border: checked ? 'none' : '0.5px solid rgba(255,255,255,0.2)'
+      }}>
+        <span style={{
+          position: 'absolute',
+          content: '""',
+          height: '20px',
+          width: '20px',
+          left: checked ? '20px' : '3px',
+          bottom: '3px',
+          backgroundColor: '#fff',
+          borderRadius: '50%',
+          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+        }} />
+      </span>
+    </label>
+  );
+
   return (
     <div className="page-transition-enter" style={{ padding: '0 16px' }}>
       <h1 className="page-title">管家設定</h1>
 
       {/* Settings Navigation Sub-Tabs */}
       <div className="settings-tabs" style={{ marginBottom: '20px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-        <button className={`settings-tab-btn ${activeSubTab === 'budget' ? 'active' : ''}`} onClick={() => setActiveSubTab('budget')}>預算設定</button>
-        <button className={`settings-tab-btn ${activeSubTab === 'guide' || activeSubTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveSubTab('guide')}>🧭 智慧引導助手</button>
-        <button className={`settings-tab-btn ${activeSubTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveSubTab('logs')}>歷史軌跡</button>
-        <button className={`settings-tab-btn ${activeSubTab === 'info' ? 'active' : ''}`} onClick={() => setActiveSubTab('info')}>系統資訊</button>
+        <button className={`settings-tab-btn ${currentSubTab === 'budget' ? 'active' : ''}`} onClick={() => handleTabChange('budget')}>預算設定</button>
+        <button className={`settings-tab-btn ${currentSubTab === 'notifications' ? 'active' : ''}`} onClick={() => handleTabChange('notifications')}>🔔 推播通知設定</button>
+        <button className={`settings-tab-btn ${currentSubTab === 'guide' || currentSubTab === 'faq' ? 'active' : ''}`} onClick={() => handleTabChange('guide')}>🧭 智慧引導助手</button>
+        <button className={`settings-tab-btn ${currentSubTab === 'logs' ? 'active' : ''}`} onClick={() => handleTabChange('logs')}>歷史軌跡</button>
+        <button className={`settings-tab-btn ${currentSubTab === 'info' ? 'active' : ''}`} onClick={() => handleTabChange('info')}>系統資訊</button>
       </div>
 
       {/* Tab Contents */}
@@ -768,8 +860,216 @@ const SettingsView = ({
 
 
 
-        {/* === 2. 智慧引導助手 (替代原操作指南與常見問題) === */}
-        {(activeSubTab === 'guide' || activeSubTab === 'faq') && (
+        {/* === 2. 推播通知設定 === */}
+        {currentSubTab === 'notifications' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            
+            {/* Identity & Multi-Device Summary Banner */}
+            <div className="glass-card" style={{ padding: '16px 18px', background: 'rgba(10,132,255,0.06)', border: '1px solid rgba(10,132,255,0.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ fontWeight: '850', fontSize: '1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>👤</span>
+                    <span>當前登錄使用者：{userDisplayName}</span>
+                  </div>
+                  <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                    偏好設定將針對【{userDisplayName}】的所有登入裝置（含手機、平板、電腦）同步套用，不影響其他使用者。
+                  </p>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.08)', padding: '6px 12px', borderRadius: '10px', fontSize: '0.78rem', color: '#fff', fontWeight: '700' }}>
+                  📱 已綁定裝置：<strong>{registeredTokensCount}</strong> 台
+                </div>
+              </div>
+            </div>
+
+            {/* Master Toggle Card */}
+            <div className="glass-card" style={{ padding: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: '800', fontSize: '0.95rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🔔</span>
+                    <span>允許推播通知 (總開關)</span>
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                    關閉後，所有來自管家的推播提醒將不會傳送至您的任何裝置。
+                  </div>
+                </div>
+
+                <ToggleSwitch
+                  checked={userNotifSettings.enabled !== false}
+                  onChange={() => handleToggleNotifSetting('enabled')}
+                />
+              </div>
+            </div>
+
+            {/* Category Toggles List */}
+            <div className="glass-card" style={{ padding: '18px', opacity: userNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
+              <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>💸</span>
+                <span>記帳與交易動態通知</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Partner Daily Expense */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1, paddingRight: '12px' }}>
+                    <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>📱 對方日常記帳即時通知</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                      當【{userKey === 'userA' ? '阿陞 🐶' : '大狗狗 🐕'}】登錄個人或共同支出時，即時推播通知您的裝置。
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={userNotifSettings.partnerExpense !== false}
+                    onChange={() => handleToggleNotifSetting('partnerExpense')}
+                    disabled={userNotifSettings.enabled === false}
+                  />
+                </div>
+
+                {/* Joint & High Expense */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1, paddingRight: '12px' }}>
+                    <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>🏫 共同公費與大額異動通知</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                      當有共同公費支出或進行大額帳戶劃撥時傳送通知。
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={userNotifSettings.jointExpense !== false}
+                    onChange={() => handleToggleNotifSetting('jointExpense')}
+                    disabled={userNotifSettings.enabled === false}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Bill & Credit Card Alerts */}
+            <div className="glass-card" style={{ padding: '18px', opacity: userNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
+              <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>📅</span>
+                <span>帳單與信用卡到期提醒</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Fixed Bill Reminders */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1, paddingRight: '12px' }}>
+                    <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>📌 常態固定帳單到期提醒</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                      房租、水電通訊費等常態帳單到期前 N 天，自動發送推播提醒繳納。
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={userNotifSettings.billReminders !== false}
+                    onChange={() => handleToggleNotifSetting('billReminders')}
+                    disabled={userNotifSettings.enabled === false}
+                  />
+                </div>
+
+                {/* Credit Card Statements */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1, paddingRight: '12px' }}>
+                    <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>💳 信用卡結算與自動扣款提醒</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                      信用卡帳單結帳日與自動劃撥扣款到期日前發送提醒。
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={userNotifSettings.creditCardReminders !== false}
+                    onChange={() => handleToggleNotifSetting('creditCardReminders')}
+                    disabled={userNotifSettings.enabled === false}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dynamic Budget Warnings */}
+            <div className="glass-card" style={{ padding: '18px', opacity: userNotifSettings.enabled !== false ? 1 : 0.45, transition: 'all 0.3s ease' }}>
+              <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>📊</span>
+                <span>動態預算水位預警</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Budget 70%/90% */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1, paddingRight: '12px' }}>
+                    <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>🟡 預算累計達 70% / 90% 溫馨預警</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                      當月共同預算消耗達到 70% 與 90% 時傳送預警文字通知。
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={userNotifSettings.budgetWarning70 !== false}
+                    onChange={() => handleToggleNotifSetting('budgetWarning70')}
+                    disabled={userNotifSettings.enabled === false}
+                  />
+                </div>
+
+                {/* Budget Overdraft */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1, paddingRight: '12px' }}>
+                    <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>🚨 預算超支警報 (100%+)</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                      當總支出超過預算上限時，即時推播紅色超支警戒通知。
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={userNotifSettings.budgetOverdraft !== false}
+                    onChange={() => handleToggleNotifSetting('budgetOverdraft')}
+                    disabled={userNotifSettings.enabled === false}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Device Diagnostics & Test Push Button */}
+            <div className="glass-card" style={{ padding: '18px' }}>
+              <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🚀</span>
+                <span>本機裝置推播連線診斷</span>
+              </div>
+
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: '1.5' }}>
+                權限狀態：<strong style={{ color: notificationPermission === 'granted' ? '#30d158' : '#ff9500' }}>
+                  {notificationPermission === 'granted' ? '✅ 已授權推播' : (notificationPermission === 'denied' ? '🚫 已拒絕通知' : '⚠️ 尚未授權')}
+                </strong>
+                <br />
+                此裝置註冊狀態：<span style={{ color: fcmDiagnostic.status === 'ready' ? '#8effa2' : 'var(--text-tertiary)' }}>
+                  {fcmDiagnostic.status === 'ready' ? '🟢 已成功對接 FCM Cloud Messaging' : (fcmDiagnostic.error || '未完成連線')}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {notificationPermission !== 'granted' && (
+                  <button
+                    type="button"
+                    onClick={handleEnableNotification}
+                    disabled={isSubscribing}
+                    className="glass-btn primary-gradient-btn"
+                    style={{ padding: '8px 16px', fontSize: '0.82rem', borderRadius: '10px', fontWeight: '800' }}
+                  >
+                    {isSubscribing ? '啟用中...' : '⚡ 授權本裝置接收推播'}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSendTestPushClick}
+                  disabled={isTestingPush}
+                  className="glass-btn"
+                  style={{ padding: '8px 16px', fontSize: '0.82rem', borderRadius: '10px' }}
+                >
+                  {isTestingPush ? '發送中...' : '🚀 發送本機測試推播'}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* === 3. 智慧引導助手 (替代原操作指南與常見問題) === */}
+        {(currentSubTab === 'guide' || currentSubTab === 'faq') && (
           <HelpWizard onNavigateWithGuide={onNavigateWithGuide} />
         )}
 
