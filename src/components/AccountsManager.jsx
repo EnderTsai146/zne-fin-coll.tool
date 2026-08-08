@@ -850,6 +850,9 @@ const AccountsManager = ({
   return (
     <div className="overview-container" style={{ paddingBottom: '90px' }}>
       
+      {/* Page Title */}
+      <h1 className="page-title" style={{ textAlign: 'left', margin: '12px 0 16px 0' }}>帳戶資產管理</h1>
+
       {/* Apple-style Net Worth Hero Card */}
       <div className="header-glass-banner" style={{ marginBottom: '20px', paddingBottom: '16px' }}>
         <div className="banner-glow-spot" />
