@@ -1478,140 +1478,150 @@ const ExpenseEntry = ({
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {(() => {
+                    const normalizeOwner = (owner) => {
+                      if (!owner) return userKey;
+                      const o = String(owner).toLowerCase();
+                      if (o === 'usera' || o.includes('大狗狗') || o.includes('user_a')) return 'userA';
+                      if (o === 'userb' || o.includes('阿陞') || o.includes('user_b')) return 'userB';
+                      if (o === 'joint' || o.includes('共同')) return 'joint';
+                      return userKey;
+                    };
+
+                    const renderBillGroup = (billsList, groupTitle, groupIcon) => {
+                      if (!billsList || billsList.length === 0) return null;
+                      return (
+                        <div style={{ marginBottom: '10px' }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: '800', color: 'rgba(255,255,255,0.6)', marginBottom: '6px', paddingLeft: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>{groupIcon}</span>
+                            <span>{groupTitle}</span>
+                            <span style={{ fontSize: '0.62rem', opacity: 0.5 }}>({billsList.length})</span>
+                          </div>
+
+                          <div className="inset-group-card">
+                            {billsList.map((bill, idx) => {
+                              if (!bill) return null;
+                              const isNear = isApproaching(bill.nextDate);
+                              const isCc = bill.isCreditCard;
+                              const diffDays = bill.diffDays !== undefined ? bill.diffDays : 99;
+
+                              let rowBorderLeft = 'none';
+                              let rowBg = 'none';
+
+                              if (isCc && !bill.autoPay) {
+                                if (diffDays <= 1) {
+                                  rowBorderLeft = '4px solid #ff453a';
+                                  rowBg = 'rgba(255,69,58,0.08)';
+                                } else if (diffDays <= 3) {
+                                  rowBorderLeft = '4px solid #ff9500';
+                                  rowBg = 'rgba(255,149,0,0.06)';
+                                } else if (diffDays <= 7) {
+                                  rowBorderLeft = '3px solid #ffb94f';
+                                  rowBg = 'rgba(255,185,79,0.04)';
+                                }
+                              } else if (isNear) {
+                                rowBorderLeft = '3px solid #ff9500';
+                                rowBg = 'rgba(255,149,0,0.05)';
+                              }
+
+                              return (
+                                <div
+                                  key={bill.id || `bill_${idx}`}
+                                  onClick={() => handleCardClick(bill)}
+                                  style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '6px',
+                                    padding: '10px 14px 10px 12px',
+                                    cursor: 'pointer',
+                                    background: rowBg,
+                                    borderLeft: rowBorderLeft,
+                                    borderBottom: '0.5px solid rgba(255,255,255,0.06)',
+                                    transition: 'all 0.2s ease',
+                                    boxSizing: 'border-box'
+                                  }}
+                                >
+                                  {/* Line 1: Icon + Name (Left), Amount (Right) */}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                      <span style={{ fontSize: '1rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                        {bill.icon || (isCc ? '💳' : (bill.isFixedAmount === false ? '📊' : '📌'))}
+                                      </span>
+                                      <span style={{ fontWeight: '750', fontSize: '0.88rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {bill.note || bill.category || bill.name || '帳單明細'}
+                                      </span>
+                                    </div>
+
+                                    <strong style={{ color: isCc && (bill.amount || 0) > 0 ? '#ffb94f' : '#fff', fontSize: '0.9rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                      ${(bill.amount || 0).toLocaleString()} {bill.currency || 'TWD'}
+                                    </strong>
+                                  </div>
+
+                                  {/* Line 2: Date Subtext (Left), Status Badges (Right) */}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
+                                    <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>
+                                      扣繳日: 每月 {bill.date || (bill.nextDate && !isNaN(new Date(bill.nextDate).getTime()) ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate || '未定'}
+                                    </span>
+
+                                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
+                                      {isCc ? (
+                                        bill.autoPay ? (
+                                          <span style={{ fontSize: '0.6rem', background: 'rgba(142,255,162,0.15)', color: '#8effa2', border: '0.5px solid rgba(142,255,162,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                                            🤖 自動扣款 ({bill.linkedBankName || '活儲'})
+                                          </span>
+                                        ) : (
+                                          <span style={{ fontSize: '0.6rem', background: 'rgba(255,185,79,0.15)', color: '#ffb94f', border: '0.5px solid rgba(255,185,79,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                                            🖐️ 手動繳納
+                                          </span>
+                                        )
+                                      ) : (
+                                        <span style={{ fontSize: '0.6rem', background: bill.isFixedAmount === false ? 'rgba(0,122,255,0.15)' : 'rgba(48,209,88,0.15)', color: bill.isFixedAmount === false ? '#0a84ff' : '#30d158', border: '0.5px solid rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                                          {bill.isFixedAmount === false ? '📊 變動金額' : '📌 固定金額'}
+                                        </span>
+                                      )}
+
+                                      {isCc && !bill.autoPay && diffDays <= 1 && (
+                                        <span style={{ fontSize: '0.6rem', background: '#ff453a', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                                          🚨 到期
+                                        </span>
+                                      )}
+                                      {isCc && !bill.autoPay && diffDays > 1 && diffDays <= 3 && (
+                                        <span style={{ fontSize: '0.6rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                                          ⚠️ 3天內到期
+                                        </span>
+                                      )}
+                                      {isCc && !bill.autoPay && diffDays > 3 && diffDays <= 7 && (
+                                        <span style={{ fontSize: '0.62rem', background: 'rgba(255,149,0,0.25)', color: '#ffb94f', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                          📅 7天內到期
+                                        </span>
+                                      )}
+
+                                      {!isCc && isNear && (
+                                        <span style={{ fontSize: '0.58rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                          即將到期
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    };
+
                     const owners = [
                       { key: userKey, title: userKey === 'userA' ? '🐕 大狗狗的常態帳單' : '🐶 阿陞的常態帳單', accentColor: '#0a84ff' },
                       { key: 'joint', title: '🏫 共同公費常態帳單', accentColor: '#30d158' },
                       { key: partnerKey, title: partnerKey === 'userA' ? '🐕 大狗狗的常態帳單' : '🐶 阿陞的常態帳單', accentColor: 'rgba(255,255,255,0.4)' },
                     ];
 
-                    return owners.map(ownerSection => {
-                      const ownerBills = combinedBills.filter(b => (b.owner || userKey) === ownerSection.key);
+                    const renderedSections = owners.map(ownerSection => {
+                      const ownerBills = combinedBills.filter(b => normalizeOwner(b.owner) === ownerSection.key);
                       if (ownerBills.length === 0) return null;
 
                       const fixedBills = ownerBills.filter(b => b.isFixedAmount !== false);
                       const variableBills = ownerBills.filter(b => b.isFixedAmount === false);
-
-                      const renderBillGroup = (billsList, groupTitle, groupIcon) => {
-                        if (billsList.length === 0) return null;
-                        return (
-                          <div style={{ marginBottom: '10px' }}>
-                            <div style={{ fontSize: '0.72rem', fontWeight: '800', color: 'rgba(255,255,255,0.6)', marginBottom: '6px', paddingLeft: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span>{groupIcon}</span>
-                              <span>{groupTitle}</span>
-                              <span style={{ fontSize: '0.62rem', opacity: 0.5 }}>({billsList.length})</span>
-                            </div>
-
-                            <div className="inset-group-card">
-                              {billsList.map(bill => {
-                                const isNear = isApproaching(bill.nextDate);
-                                const isCc = bill.isCreditCard;
-                                const diffDays = bill.diffDays !== undefined ? bill.diffDays : 99;
-
-                                let rowBorderLeft = 'none';
-                                let rowBg = 'none';
-
-                                if (isCc && !bill.autoPay) {
-                                  if (diffDays <= 1) {
-                                    rowBorderLeft = '4px solid #ff453a';
-                                    rowBg = 'rgba(255,69,58,0.08)';
-                                  } else if (diffDays <= 3) {
-                                    rowBorderLeft = '4px solid #ff9500';
-                                    rowBg = 'rgba(255,149,0,0.06)';
-                                  } else if (diffDays <= 7) {
-                                    rowBorderLeft = '3px solid #ffb94f';
-                                    rowBg = 'rgba(255,185,79,0.04)';
-                                  }
-                                } else if (isNear) {
-                                  rowBorderLeft = '3px solid #ff9500';
-                                  rowBg = 'rgba(255,149,0,0.05)';
-                                }
-
-                                return (
-                                  <div
-                                    key={bill.id}
-                                    onClick={() => handleCardClick(bill)}
-                                    style={{
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: '6px',
-                                      padding: '10px 14px 10px 12px',
-                                      cursor: 'pointer',
-                                      background: rowBg,
-                                      borderLeft: rowBorderLeft,
-                                      borderBottom: '0.5px solid rgba(255,255,255,0.06)',
-                                      transition: 'all 0.2s ease',
-                                      boxSizing: 'border-box'
-                                    }}
-                                  >
-                                    {/* Line 1: Icon + Name (Left), Amount (Right) */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                                        <span style={{ fontSize: '1rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                                          {bill.icon || (isCc ? '💳' : (bill.isFixedAmount === false ? '📊' : '📌'))}
-                                        </span>
-                                        <span style={{ fontWeight: '750', fontSize: '0.88rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                          {bill.note || bill.category || bill.name}
-                                        </span>
-                                      </div>
-
-                                      <strong style={{ color: isCc && bill.amount > 0 ? '#ffb94f' : '#fff', fontSize: '0.9rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                        ${(bill.amount || 0).toLocaleString()} {bill.currency || 'TWD'}
-                                      </strong>
-                                    </div>
-
-                                    {/* Line 2: Date Subtext (Left), Status Badges (Right) */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
-                                      <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>
-                                        扣繳日: 每月 {bill.date || (bill.nextDate && !isNaN(new Date(bill.nextDate).getTime()) ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate || '未定'}
-                                      </span>
-
-                                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
-                                        {isCc ? (
-                                          bill.autoPay ? (
-                                            <span style={{ fontSize: '0.6rem', background: 'rgba(142,255,162,0.15)', color: '#8effa2', border: '0.5px solid rgba(142,255,162,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                              🤖 自動扣款 ({bill.linkedBankName})
-                                            </span>
-                                          ) : (
-                                            <span style={{ fontSize: '0.6rem', background: 'rgba(255,185,79,0.15)', color: '#ffb94f', border: '0.5px solid rgba(255,185,79,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                              🖐️ 手動繳納
-                                            </span>
-                                          )
-                                        ) : (
-                                          <span style={{ fontSize: '0.6rem', background: bill.isFixedAmount === false ? 'rgba(0,122,255,0.15)' : 'rgba(48,209,88,0.15)', color: bill.isFixedAmount === false ? '#0a84ff' : '#30d158', border: '0.5px solid rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                            {bill.isFixedAmount === false ? '📊 變動金額' : '📌 固定金額'}
-                                          </span>
-                                        )}
-
-                                        {isCc && !bill.autoPay && diffDays <= 1 && (
-                                          <span style={{ fontSize: '0.6rem', background: '#ff453a', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
-                                            🚨 到期
-                                          </span>
-                                        )}
-                                        {isCc && !bill.autoPay && diffDays > 1 && diffDays <= 3 && (
-                                          <span style={{ fontSize: '0.6rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
-                                            ⚠️ 3天內到期
-                                          </span>
-                                        )}
-                                        {isCc && !bill.autoPay && diffDays > 3 && diffDays <= 7 && (
-                                          <span style={{ fontSize: '0.62rem', background: 'rgba(255,149,0,0.25)', color: '#ffb94f', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
-                                            📅 7天內到期
-                                          </span>
-                                        )}
-
-                                        {!isCc && isNear && (
-                                          <span style={{ fontSize: '0.58rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
-                                            即將到期
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      };
 
                       return (
                         <div key={ownerSection.key} style={{
@@ -1629,7 +1639,29 @@ const ExpenseEntry = ({
                           {renderBillGroup(variableBills, '變動金額帳單', '📊')}
                         </div>
                       );
-                    });
+                    }).filter(Boolean);
+
+                    if (renderedSections.length === 0) {
+                      const fixedBills = combinedBills.filter(b => b.isFixedAmount !== false);
+                      const variableBills = combinedBills.filter(b => b.isFixedAmount === false);
+                      return (
+                        <div style={{
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '14px',
+                          padding: '12px 12px 4px 12px'
+                        }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: '850', color: '#fff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ width: '4px', height: '14px', background: '#0a84ff', borderRadius: '2px' }} />
+                            📋 所有常態與信用卡帳單
+                          </div>
+                          {renderBillGroup(fixedBills, '固定金額帳單', '📌')}
+                          {renderBillGroup(variableBills, '變動金額帳單', '📊')}
+                        </div>
+                      );
+                    }
+
+                    return renderedSections;
                   })()}
                 </div>
               )}
