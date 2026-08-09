@@ -16,6 +16,7 @@ import { db, auth, getFcmToken, onFcmMessage } from './firebase';
 import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter, runTransaction } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MY_GOOGLE_API_URL } from './config';
+import { logger } from './utils/logger';
 
 
 
@@ -1518,11 +1519,10 @@ function App() {
     };
   };
 
-
-
   const handleLogout = async () => {
     if (await customConfirm("確定要登出嗎？")) {
       localStorage.removeItem('loginTimestamp');
+      logger.clearSessionLogs();
       signOut(auth);
     }
   };
@@ -1574,6 +1574,7 @@ function App() {
     try {
       const logsRef = collection(db, "finance", "data", "operationsLog");
       addDoc(logsRef, logEntry).catch(err => console.error("Firestore Log Fail:", err));
+      logger.addLog('CLOUD', `操作紀錄: ${actionType} - ${detail}`);
     } catch (e) {
       console.error("Log error:", e);
     }
@@ -1635,12 +1636,14 @@ function App() {
       .trim();
   };
 
-  const sendTransactionPush = async (title, body, isTest = false, targetScope = 'partner', notifCategory = null) => {
+  const sendTransactionPush = async (title, body, isTest = false, targetScope = 'both', notifCategory = null) => {
     try {
       const finalTitle = cleanTitle(title);
       const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
       const partnerUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
       let localNativeTriggered = false;
+
+      logger.addLog('PUSH', `廣播推播: [${finalTitle}] - ${body}`, { targetScope, notifCategory, sender: operatorName });
 
       // 1. 本地/裝置原生 Web Notification 觸發 (點擊測試推播或日常發送時均立即彈窗)
       if ((isTest || isNotificationEnabledForUser(currentUserKey, notifCategory)) && ('Notification' in window && Notification.permission === 'granted')) {

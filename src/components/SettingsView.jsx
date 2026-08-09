@@ -16,6 +16,7 @@ import { db } from '../firebase';
 import { collection, query, orderBy, limit, getDocs, startAfter, where, deleteDoc } from 'firebase/firestore';
 import { getBudgetForMonth } from '../utils/budgetUtils';
 import { MY_GOOGLE_API_URL } from '../config';
+import { logger } from '../utils/logger';
 import HelpWizard from './HelpWizard';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -552,37 +553,29 @@ const SettingsView = ({
     error: null
   });
 
+  // --- Session Diagnostic Logs Modal State ---
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+
   // --- Optimistic Notification Preferences State ---
   const dbNotifObj = assets?.notificationSettings?.[userKey];
-  const dbNotifString = JSON.stringify(dbNotifObj || {});
+  const defaultNotifSettings = useMemo(() => ({
+    enabled: true,
+    partnerExpense: true,
+    jointExpense: true,
+    billReminders: true,
+    creditCardReminders: true,
+    budgetWarning70: true,
+    budgetOverdraft: true,
+  }), []);
 
-  const [localNotifSettings, setLocalNotifSettings] = useState(() => {
-    const defaults = {
-      enabled: true,
-      partnerExpense: true,
-      jointExpense: true,
-      billReminders: true,
-      creditCardReminders: true,
-      budgetWarning70: true,
-      budgetOverdraft: true,
-    };
-    return { ...defaults, ...(dbNotifObj || {}) };
-  });
+  const currentNotifFromAssets = useMemo(() => {
+    return { ...defaultNotifSettings, ...(dbNotifObj || {}) };
+  }, [JSON.stringify(dbNotifObj || {}), defaultNotifSettings]);
 
-  useEffect(() => {
-    const defaults = {
-      enabled: true,
-      partnerExpense: true,
-      jointExpense: true,
-      billReminders: true,
-      creditCardReminders: true,
-      budgetWarning70: true,
-      budgetOverdraft: true,
-    };
-    setLocalNotifSettings({ ...defaults, ...(dbNotifObj || {}) });
-  }, [dbNotifString, userKey]);
+  const [localNotifOverride, setLocalNotifOverride] = useState(null);
+  const localNotifSettings = localNotifOverride || currentNotifFromAssets;
 
-  const handleToggleNotifSetting = (settingKey) => {
+  const handleToggleNotifSetting = async (settingKey) => {
     const currentVal = localNotifSettings[settingKey] !== false;
     const nextVal = !currentVal;
 
@@ -591,7 +584,7 @@ const SettingsView = ({
       ...localNotifSettings,
       [settingKey]: nextVal
     };
-    setLocalNotifSettings(nextSettings);
+    setLocalNotifOverride(nextSettings);
 
     const updatedAssets = {
       ...assets,
@@ -601,7 +594,12 @@ const SettingsView = ({
       }
     };
 
-    saveToCloud(updatedAssets);
+    try {
+      await saveToCloud(updatedAssets);
+      logger.addLog('INFO', `推播通知設定 [${settingKey}] 已更新為 ${nextVal ? '開啟' : '關閉'}`);
+    } catch (e) {
+      logger.addLog('ERROR', `推播通知設定更新失敗: ${e.message}`, e);
+    }
   };
 
   // --- Enhanced Test Push Click Handler ---
@@ -1656,6 +1654,43 @@ const SettingsView = ({
                 </p>
               </div>
 
+              {/* 🐞 Session Diagnostic Debug Center Card */}
+              <div className="glass-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontWeight: '850', fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🐞</span>
+                  <span>系統除錯與報錯診斷中心</span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
+                  如果在操作過程或推播時遇到任何異常，可開啟診斷視窗並點擊「一鍵複製」，將當前登入階段的所有系統後台日誌與報錯訊息直接貼給 AI 代理進行秒速排錯。
+                </p>
+
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsLogsModalOpen(true)}
+                    className="glass-btn"
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      borderRadius: '12px',
+                      fontSize: '0.82rem',
+                      fontWeight: '700',
+                      color: '#ffffff',
+                      background: 'linear-gradient(135deg, rgba(0,122,255,0.7) 0%, rgba(88,86,214,0.7) 100%)',
+                      borderColor: 'rgba(0,122,255,0.4)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span>📋</span>
+                    <span>彈出系統日誌與除錯診斷視窗</span>
+                  </button>
+                </div>
+              </div>
+
               {/* 隱密紅字劃底線：測試資料歸零重置 */}
               <div style={{ textAlign: 'center', marginTop: '16px', marginBottom: '12px' }}>
                 <button
@@ -1682,6 +1717,213 @@ const SettingsView = ({
           );
         })()}
 
+      </div>
+
+      {/* Session Diagnostic Logs Modal */}
+      <SystemLogsModal
+        isOpen={isLogsModalOpen}
+        onClose={() => setIsLogsModalOpen(false)}
+        appContext={{
+          operatorName,
+          currentUser: currentUser?.email,
+          fcmToken: fcmDiagnostic?.token
+        }}
+        customAlert={customAlert}
+      />
+    </div>
+  );
+};
+
+// --- Session Diagnostic Logs Modal Component ---
+const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
+  const [copied, setCopied] = useState(false);
+  const [logs, setLogs] = useState([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLogs([...logger.getLogs()].reverse());
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleCopyReport = async () => {
+    const reportText = logger.generateDiagnosticReport(appContext);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(reportText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = reportText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      if (customAlert) {
+        customAlert("📋 已成功複製本階段所有除錯診斷日誌！您可以直接貼給 AI 進行排錯。", "複製成功");
+      }
+    } catch (err) {
+      console.error("Copy report fail:", err);
+    }
+  };
+
+  const handleClearLogs = () => {
+    logger.clearSessionLogs();
+    setLogs([]);
+  };
+
+  return (
+    <div className="liquid-modal-overlay" onClick={onClose} style={{ zIndex: 100000 }}>
+      <div
+        className="liquid-modal-card"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '94%',
+          maxWidth: '680px',
+          maxHeight: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '24px',
+          background: 'rgba(15, 23, 42, 0.94)',
+          backdropFilter: 'blur(28px) saturate(200%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(200%)',
+          borderRadius: '24px',
+          border: '1px solid rgba(255, 255, 255, 0.16)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)'
+        }}
+      >
+        {/* Modal Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '12px' }}>
+          <div style={{ fontWeight: '850', fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>🐞</span>
+            <span>系統本階段除錯與日誌診斷中心</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              color: '#fff',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Info Banner */}
+        <div style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)', background: 'rgba(255, 255, 255, 0.03)', padding: '10px 14px', borderRadius: '12px', marginBottom: '14px', border: '1px solid rgba(255, 255, 255, 0.06)', lineHeight: '1.5' }}>
+          ℹ️ 本除錯視窗紀錄僅在目前登入階段留存。當登出或切換使用者時，上一次的日誌紀錄將會自動清除，維護系統安全與效能。
+        </div>
+
+        {/* Modal Action Toolbar */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleCopyReport}
+            className="glass-btn"
+            style={{
+              flex: 1,
+              padding: '10px 16px',
+              borderRadius: '12px',
+              fontSize: '0.86rem',
+              fontWeight: '750',
+              color: '#ffffff',
+              background: copied ? 'linear-gradient(135deg, #34c759 0%, #30d158 100%)' : 'linear-gradient(135deg, #007aff 0%, #5856d6 100%)',
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>{copied ? '✅ 已複製！' : '📋 一鍵複製所有診斷日誌 (貼給 AI)'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleClearLogs}
+            className="glass-btn"
+            style={{
+              padding: '10px 14px',
+              borderRadius: '12px',
+              fontSize: '0.82rem',
+              color: '#ff9500',
+              borderColor: 'rgba(255,149,0,0.3)',
+              cursor: 'pointer'
+            }}
+          >
+            <span>🧹 清除本階段日誌</span>
+          </button>
+        </div>
+
+        {/* Logs Console Scroll Box */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            background: 'rgba(5, 11, 20, 0.88)',
+            borderRadius: '14px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            padding: '14px',
+            fontFamily: 'SFMono-Regular, Consolas, Monaco, monospace',
+            fontSize: '0.76rem',
+            color: '#e2e8f0',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {logs.length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'rgba(255, 255, 255, 0.4)', padding: '40px 0' }}>
+              🟢 本階段尚無系統報錯或事件日誌。系統運作順暢！
+            </div>
+          ) : (
+            logs.map((item, i) => {
+              const isErr = item.type === 'ERROR';
+              const isWarn = item.type === 'WARN';
+              const isPush = item.type === 'PUSH';
+
+              const badgeBg = isErr ? '#ff3b30' : (isWarn ? '#ff9500' : (isPush ? '#34c759' : '#007aff'));
+
+              return (
+                <div
+                  key={i}
+                  style={{
+                    marginBottom: '12px',
+                    paddingBottom: '10px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '0.72rem' }}>[{item.timestamp}]</span>
+                    <span style={{ background: badgeBg, color: '#fff', fontSize: '0.66rem', fontWeight: '800', padding: '1px 6px', borderRadius: '4px' }}>
+                      {item.type}
+                    </span>
+                  </div>
+                  <div style={{ color: isErr ? '#ff6b6b' : (isWarn ? '#ffd166' : '#f8fafc'), wordBreak: 'break-all', lineHeight: '1.4' }}>
+                    {item.message}
+                  </div>
+                  {item.details && (
+                    <pre style={{ margin: '6px 0 0 0', padding: '8px', background: 'rgba(0, 0, 0, 0.4)', borderRadius: '6px', fontSize: '0.72rem', color: '#cbd5e1', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      {item.details}
+                    </pre>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
