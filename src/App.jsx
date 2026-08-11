@@ -556,6 +556,7 @@ function App() {
   const inactivityTimerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
   const lastActiveTimeRef = useRef(Date.now());
+  const prevExpensesCountRef = useRef(null);
 
   const performAutoLogout = useCallback((reason) => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
@@ -1369,6 +1370,32 @@ function App() {
         }
 
         if (needsUpdate) setDoc(docRef, data);
+
+        // --- Real-time Cross-Device Notification Trigger ---
+        if (data.monthlyExpenses && data.monthlyExpenses.length > 0) {
+          const newExpensesList = data.monthlyExpenses;
+          const prevCount = prevExpensesCountRef.current;
+          if (prevCount !== null && newExpensesList.length > prevCount) {
+            const latestRec = newExpensesList[newExpensesList.length - 1];
+            if (latestRec && latestRec.operator && !latestRec.operator.includes(operatorName)) {
+              const notifTitle = latestRec.category === '個人支出' ? '💰 伴侶個人支出異動' : '🤝 共同支出異動';
+              const notifBody = `${latestRec.operator} 登錄了交易：${latestRec.note || latestRec.category} - $${(latestRec.total || 0).toLocaleString()}`;
+              if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                  new Notification(notifTitle, {
+                    body: notifBody,
+                    icon: '/apple-touch-icon.png',
+                    badge: '/apple-touch-icon.png'
+                  });
+                  console.log("[Realtime Sync Notif] Native Web Notification triggered for incoming partner transaction!");
+                } catch (err) {
+                  console.warn("[Realtime Sync Notif] Dispatch error:", err);
+                }
+              }
+            }
+          }
+          prevExpensesCountRef.current = newExpensesList.length;
+        }
 
         setAssets(data);
         setDataReady(true);
