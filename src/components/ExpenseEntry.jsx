@@ -311,7 +311,7 @@ const ExpenseEntry = ({
 
     const selectedAcc = accounts.find(a => a.id === selectedValue);
     const isSelectedPartner = selectedAcc && selectedAcc.owner === partnerKey;
-    const activeList = isSelectedPartner ? [...ownAndJoint, selectedAcc] : ownAndJoint;
+    const activeList = isSelectedPartner ? [...ownAndJoint, ...partnerAccs] : ownAndJoint;
 
     const owners = [
       { key: userKey, title: userKey === 'userA' ? '🐕 我的個人帳戶 (大狗狗)' : '🐶 我的個人帳戶 (阿陞)', accentColor: '#0a84ff' },
@@ -322,7 +322,7 @@ const ExpenseEntry = ({
       owners.push({
         key: partnerKey,
         title: partnerKey === 'userA' ? '🐕 伴侶帳戶 (大狗狗)' : '🐶 伴侶帳戶 (阿陞)',
-        accentColor: 'rgba(255,255,255,0.4)'
+        accentColor: '#af52de'
       });
     }
 
@@ -408,7 +408,7 @@ const ExpenseEntry = ({
           );
         })}
 
-        {partnerAccs.length > 0 && !isSelectedPartner && (
+        {partnerAccs.length > 0 && (
           <button
             type="button"
             onClick={() => setAccountModalConfig({
@@ -421,21 +421,21 @@ const ExpenseEntry = ({
               }
             })}
             style={{
-              padding: '8px 10px',
+              padding: '9px 12px',
               borderRadius: '10px',
-              border: '1px dashed rgba(255,255,255,0.15)',
-              background: 'rgba(255,255,255,0.02)',
-              color: 'var(--text-tertiary)',
-              fontSize: '0.74rem',
-              fontWeight: '600',
+              border: isSelectedPartner ? '1.5px dashed rgba(175,82,222,0.5)' : '1px dashed rgba(255,255,255,0.15)',
+              background: isSelectedPartner ? 'rgba(175,82,222,0.12)' : 'rgba(255,255,255,0.02)',
+              color: isSelectedPartner ? '#e5c0ff' : 'var(--text-tertiary)',
+              fontSize: '0.76rem',
+              fontWeight: '700',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '4px'
+              gap: '6px'
             }}
           >
-            👥 選擇伴侶的帳戶 (更多)
+            👥 {isSelectedPartner ? '更換或選擇其他伴侶帳戶 (更多)' : '選擇伴侶的帳戶 (更多)'}
           </button>
         )}
       </div>
@@ -588,6 +588,7 @@ const ExpenseEntry = ({
         setPersAmount('');
         setPersNote('');
         setPersCat('');
+        setPersAccountId('');
       }
     });
   };
@@ -729,6 +730,7 @@ const ExpenseEntry = ({
         setJointAmount('');
         setJointNote('');
         setJointCat('');
+        setJointAccountId('');
       }
     });
   };
