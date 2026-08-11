@@ -1961,7 +1961,7 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    sendTransactionPush("💰 個人支出異動", `${payerName} 登錄個人支出：${finalNote} - $${totalAmount.toLocaleString()}`, false, 'partner', 'partnerExpense');
+    sendTransactionPush("💰 個人支出異動", `${payerName} 登錄個人支出：${finalNote} - $${totalAmount.toLocaleString()}`, false, 'both', 'partnerExpense');
     setNewlyAddedRecordTimestamp(targetTimestamp);
     setMonthlyViewSubTab('database');
     setCurrentPage('monthly');
