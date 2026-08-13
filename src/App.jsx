@@ -1656,10 +1656,12 @@ function App() {
   const cleanTitle = (rawTitle) => {
     if (!rawTitle) return '';
     return String(rawTitle)
-      .replace(/\s*from\s*馬鈴薯管家/gi, '')
+      .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
       .replace(/\s*-\s*馬鈴薯管家/gi, '')
-      .replace(/【from馬鈴薯管家】/gi, '')
-      .replace(/from馬鈴薯管家/gi, '')
+      .replace(/【(from|drom)馬鈴薯管家】/gi, '')
+      .replace(/【馬鈴薯管家】/gi, '')
+      .replace(/(from|drom)馬鈴薯管家/gi, '')
+      .replace(/馬鈴薯管家/gi, '')
       .trim();
   };
 
@@ -1735,7 +1737,7 @@ function App() {
           body: JSON.stringify({
             action: 'push',
             token: token,
-            title,
+            title: finalTitle,
             body
           })
         })
