@@ -2643,7 +2643,7 @@ function App() {
             {currentPage === 'accounts' && <AccountsManager key="accounts" assets={assets} setAssets={handleAssetsUpdate} currentUser={currentUser} operatorName={operatorName} customAlert={customAlert} customConfirm={customConfirm} currentFxRate={currentFxRate} onTransaction={handleTransaction} />}
             {currentPage === 'expense' && (
               <ErrorBoundary title="✍️ 記帳與帳單模組載入異常">
-                <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={operatorName} onNavigateTab={setCurrentPage} />
+                <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={currentUser} operatorName={operatorName} currentFxRate={currentFxRate} onNavigateTab={setCurrentPage} />
               </ErrorBoundary>
             )}
             {currentPage === 'settings' && (

@@ -1,11 +1,13 @@
 // src/components/SegmentedControl.jsx
 import React, { useRef, useState, useLayoutEffect } from 'react';
 
-const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
+const SegmentedControl = ({ options, value, onChange, disabledValue, activeColor }) => {
   const containerRef = useRef(null);
   const [pillStyle, setPillStyle] = useState({});
 
   const optionsKey = options ? options.map(o => String(o.value)).join(',') : '';
+  const selectedOpt = options ? options.find(o => o.value === value) : null;
+  const currentActiveColor = activeColor || selectedOpt?.activeColor || null;
 
   // Compute the liquid sliding pill position
   useLayoutEffect(() => {
@@ -42,6 +44,14 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
     });
   }, [value, optionsKey, options]);
 
+  const pillBackground = currentActiveColor
+    ? `linear-gradient(135deg, ${currentActiveColor}cc, ${currentActiveColor})`
+    : 'rgba(255, 255, 255, 0.16)';
+
+  const pillShadow = currentActiveColor
+    ? `0 3px 14px ${currentActiveColor}55, 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.3)`
+    : '0 1px 4px rgba(0,0,0,0.18), 0 0.5px 1px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.12)';
+
   return (
     <div
       ref={containerRef}
@@ -70,14 +80,13 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
           top: 0,
           left: 0,
           borderRadius: '11px',
-          background: 'rgba(255, 255, 255, 0.14)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          boxShadow:
-            '0 1px 4px rgba(0,0,0,0.18), 0 0.5px 1px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.12)',
+          background: pillBackground,
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          boxShadow: pillShadow,
           zIndex: 0,
           pointerEvents: 'none',
-          transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transition: 'all 0.32s cubic-bezier(0.34, 1.56, 0.64, 1)',
           ...pillStyle,
         }}
       />
@@ -94,7 +103,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
               padding: '9px 12px',
               borderRadius: '11px',
               fontSize: '0.84rem',
-              fontWeight: isSelected ? '600' : '500',
+              fontWeight: isSelected ? '750' : '500',
               fontFamily: 'var(--font-family)',
               cursor: isDisabled ? 'not-allowed' : 'pointer',
               minWidth: 'fit-content',
@@ -104,12 +113,13 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
               /* No background here — the liquid pill handles it */
               background: 'transparent',
               color: isSelected
-                ? 'var(--text-primary)'
+                ? '#ffffff'
                 : isDisabled
                   ? 'var(--text-tertiary)'
                   : 'var(--text-secondary)',
 
-              transition: 'color 0.3s cubic-bezier(0.16, 1, 0.3, 1), font-weight 0.2s ease',
+              textShadow: isSelected && currentActiveColor ? '0 1px 2px rgba(0,0,0,0.4)' : 'none',
+              transition: 'color 0.25s cubic-bezier(0.16, 1, 0.3, 1), font-weight 0.2s ease',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

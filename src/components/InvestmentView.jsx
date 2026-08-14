@@ -1,6 +1,6 @@
-// src/components/InvestmentView.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import SegmentedControl from './SegmentedControl';
+import IOSAccountMenuPicker from './IOSAccountMenuPicker';
 import { MY_GOOGLE_API_URL } from '../config';
 
 const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
@@ -75,7 +75,6 @@ const InvestmentView = ({
   const [selectedAccountId, setSelectedAccountId] = useState('');
   
   const accounts = useMemo(() => assets?.accounts || [], [assets?.accounts]);
-  const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
 
   // Search suggest states
   const [searchResults, setSearchResults] = useState([]);
@@ -126,21 +125,6 @@ const InvestmentView = ({
 
   // Invest Cart state
   const [investCart, setInvestCart] = useState([]);
-
-  // Filter accounts for select
-  const filteredAccounts = useMemo(() => {
-    // Determine target owner based on the selected target tab/owner context in the form
-    // Actually let user select any account they own or joint accounts
-    return accounts.filter(a => {
-      // Allow only cash / bank / virtual accounts (or credit cards for payment)
-      if (investAction === 'buy') {
-        // Can buy stocks/funds using bank or credit cards (if credit cards, it counts as debt)
-        return true;
-      }
-      // Selling must deposit into cash/bank/virtual
-      return a.type !== 'credit';
-    });
-  }, [accounts, investAction]);
 
   // FIFO Calculations
   const history = useMemo(() => assets.monthlyExpenses || [], [assets.monthlyExpenses]);
@@ -801,50 +785,16 @@ const InvestmentView = ({
 
               {/* Payoff Account Selector */}
               <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>交割 / 支付帳戶</span>
-                <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="glass-input"
-                  style={{ width: '100%', height: '36px', borderRadius: '8px' }}
-                >
-                  <option value="">-- 選擇支付/交割帳戶 --</option>
-                  {(() => {
-                    const candidateAccs = filteredAccounts.filter(a => settleCurrency === 'USD' && stockMarket === 'US' ? a.currency === 'USD' : a.currency === 'TWD');
-                    const partnerKey = userKey === 'userA' ? 'userB' : 'userA';
-                    const userName = userKey === 'userA' ? '大狗狗🐕' : '阿陞🐶';
-                    const partnerName = partnerKey === 'userA' ? '大狗狗🐕' : '阿陞🐶';
-
-                    const myAccs = candidateAccs.filter(a => a.owner === userKey);
-                    const jointAccs = candidateAccs.filter(a => a.owner === 'joint');
-                    const partnerAccs = candidateAccs.filter(a => a.owner === partnerKey);
-
-                    const renderItems = (list) => {
-                      const categories = [
-                        { key: 'bank', name: '🏦 銀行活儲', items: list.filter(a => a.type === 'bank' || a.type === 'virtual') },
-                        { key: 'cash', name: '💵 現金帳戶', items: list.filter(a => a.type === 'cash') },
-                        { key: 'credit', name: '💳 信用卡', items: list.filter(a => a.type === 'credit') },
-                        { key: 'investment', name: '📈 投資/交割戶', items: list.filter(a => a.type === 'investment') },
-                      ].filter(c => c.items.length > 0);
-
-                      return categories.map(cat => (
-                        cat.items.map(a => (
-                          <option key={a.id} value={a.id}>
-                            {a.icon || '🏦'} {a.nickname} ({cat.name.replace(/[^\u4e00-\u9fa5]/g, '')} · ${(a.balance || 0).toLocaleString()} {a.currency || 'TWD'})
-                          </option>
-                        ))
-                      ));
-                    };
-
-                    return (
-                      <>
-                        {myAccs.length > 0 && <optgroup label={`👤 我的帳戶 (${userName})`}>{renderItems(myAccs)}</optgroup>}
-                        {jointAccs.length > 0 && <optgroup label="🏫 共同公費帳戶">{renderItems(jointAccs)}</optgroup>}
-                        {partnerAccs.length > 0 && <optgroup label={`👥 伴侶帳戶 (${partnerName})`}>{renderItems(partnerAccs)}</optgroup>}
-                      </>
-                    );
-                  })()}
-                </select>
+                <IOSAccountMenuPicker
+                  label="💳 交割 / 支付帳戶"
+                  accounts={accounts}
+                  selectedValue={selectedAccountId}
+                  onChange={setSelectedAccountId}
+                  filterFn={a => settleCurrency === 'USD' && stockMarket === 'US' ? a.currency === 'USD' : a.currency === 'TWD'}
+                  currentUser={operatorName}
+                  themeColor="#0a84ff"
+                  modalTitle="選擇投資交割帳戶"
+                />
               </div>
 
               {/* Stock Details */}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import SegmentedControl from './SegmentedControl';
+import IOSAccountMenuPicker from './IOSAccountMenuPicker';
 
 const formatInputMoney = (valStr) => {
   if (valStr === '' || valStr === undefined || valStr === null) return '';
@@ -555,81 +556,6 @@ const AccountsManager = ({
     setCalNote('');
   };
 
-  // Custom Account grid selector helper
-  const renderAccountSelector = (selectedValue, onChange, filterFn = () => true) => {
-    const list = accounts.filter(filterFn);
-    if (list.length === 0) {
-      return <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '6px' }}>無相符帳戶</div>;
-    }
-
-    const categories = [
-      { key: 'bank', name: '🏦 銀行活儲帳戶', list: list.filter(a => a.type === 'bank') },
-      { key: 'cash', name: '💵 現金帳戶', list: list.filter(a => a.type === 'cash') },
-      { key: 'virtual', name: '📱 虛擬與電子票證', list: list.filter(a => a.type === 'virtual') },
-      { key: 'credit', name: '💳 信用卡帳戶', list: list.filter(a => a.type === 'credit') },
-      { key: 'investment', name: '📈 投資/交割戶', list: list.filter(a => a.type === 'investment') },
-    ].filter(cat => cat.list.length > 0);
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
-        {categories.map(cat => (
-          <div key={cat.key}>
-            <div style={{ fontSize: '0.68rem', fontWeight: '800', color: 'rgba(255,255,255,0.5)', marginBottom: '4px', paddingLeft: '2px' }}>
-              {cat.name}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
-              {cat.list.map(acc => {
-                const isSelected = selectedValue === acc.id;
-                const isCredit = acc.type === 'credit';
-                const balanceColor = isCredit ? '#ff9500' : '#8effa2';
-                const defaultIcon = acc.type === 'cash' ? '💵' : (acc.type === 'credit' ? '💳' : (acc.type === 'investment' ? '📈' : (acc.type === 'virtual' ? '📱' : '🏦')));
-                const iconToRender = acc.icon || defaultIcon;
-                const ownerLabel = acc.owner === 'joint' ? '共同 🏫' : (acc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶');
-
-                return (
-                  <button
-                    key={acc.id}
-                    type="button"
-                    onClick={() => onChange(acc.id)}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '10px',
-                      border: isSelected ? '1.5px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.08)',
-                      background: isSelected ? 'rgba(0,122,255,0.15)' : 'rgba(255,255,255,0.02)',
-                      color: isSelected ? '#fff' : 'var(--text-secondary)',
-                      fontSize: '0.78rem',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '2px',
-                      transition: 'all 0.2s ease',
-                      boxShadow: isSelected ? '0 0 10px rgba(0,122,255,0.2)' : 'none',
-                      minHeight: '52px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ fontSize: '0.76rem', color: isSelected ? '#fff' : 'var(--text-primary)', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {iconToRender} {acc.nickname}
-                      </span>
-                      <span style={{ fontSize: '0.58rem', opacity: 0.7, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                        {ownerLabel}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: '0.66rem', color: isSelected ? '#fff' : balanceColor, fontWeight: '700' }}>
-                      ${(acc.balance || 0).toLocaleString()} {acc.currency || 'TWD'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   const renderGroupedSelectOptions = (accountList, placeholder = '-- 請選擇帳戶 --') => {
     const bankAccs = accountList.filter(a => a.type === 'bank');
     const cashAccs = accountList.filter(a => a.type === 'cash');
@@ -964,14 +890,28 @@ const AccountsManager = ({
           <div style={{ fontWeight: '800', fontSize: '1rem', color: '#fff', marginBottom: '16px' }}>🔄 帳戶資金轉帳劃撥</div>
           
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉出帳戶</label>
-            {renderAccountSelector(tfSource, setTfSource)}
+            <IOSAccountMenuPicker
+              label="📤 轉出帳戶"
+              accounts={accounts}
+              selectedValue={tfSource}
+              onChange={setTfSource}
+              currentUser={operatorName}
+              themeColor="#bf5af2"
+              modalTitle="選擇轉出帳戶"
+            />
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉入帳戶</label>
-            {/* Filter target account: omit the source account so it cannot be selected */}
-            {renderAccountSelector(tfTarget, setTfTarget, a => a.id !== tfSource)}
+            <IOSAccountMenuPicker
+              label="📥 轉入帳戶"
+              accounts={accounts}
+              selectedValue={tfTarget}
+              onChange={setTfTarget}
+              filterFn={a => a.id !== tfSource}
+              currentUser={operatorName}
+              themeColor="#bf5af2"
+              modalTitle="選擇轉入帳戶"
+            />
           </div>
 
           <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
@@ -1041,13 +981,28 @@ const AccountsManager = ({
           <div style={{ fontWeight: '800', fontSize: '1rem', color: '#fff', marginBottom: '16px' }}>💱 貨幣外幣換匯交易</div>
           
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉出外幣帳戶 (售出)</label>
-            {renderAccountSelector(exSource, setExSource)}
+            <IOSAccountMenuPicker
+              label="📤 售出 (轉出) 帳戶"
+              accounts={accounts}
+              selectedValue={exSource}
+              onChange={setExSource}
+              currentUser={operatorName}
+              themeColor="#ff9f0a"
+              modalTitle="選擇售出帳戶"
+            />
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>轉入外幣帳戶 (買入)</label>
-            {renderAccountSelector(exTarget, setExTarget)}
+            <IOSAccountMenuPicker
+              label="📥 買入 (轉入) 帳戶"
+              accounts={accounts}
+              selectedValue={exTarget}
+              onChange={setExTarget}
+              filterFn={a => a.id !== exSource}
+              currentUser={operatorName}
+              themeColor="#ff9f0a"
+              modalTitle="選擇買入帳戶"
+            />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
@@ -1110,8 +1065,15 @@ const AccountsManager = ({
           <div style={{ fontWeight: '800', fontSize: '1rem', color: '#fff', marginBottom: '16px' }}>⚖️ 帳戶餘額手動校正 (校正回歸)</div>
           
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '6px' }}>要校正的帳戶</label>
-            {renderAccountSelector(calAcc, setCalAcc)}
+            <IOSAccountMenuPicker
+              label="⚖️ 要校正的帳戶"
+              accounts={accounts}
+              selectedValue={calAcc}
+              onChange={setCalAcc}
+              currentUser={operatorName}
+              themeColor="#0a84ff"
+              modalTitle="選擇校正帳戶"
+            />
           </div>
 
           <div style={{ marginBottom: '16px' }}>

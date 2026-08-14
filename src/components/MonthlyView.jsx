@@ -575,35 +575,63 @@ const MonthlyView = ({
                                                     {record.note || record.category}
                                                 </div>
 
-                                                {/* Line 3: Account info change */}
+                                                {/* Line 3: Account info change & Post-Transaction Balance */}
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                                     {(() => {
                                                         const sourceAcc = assets.accounts?.find(a => a.id === record.accountId);
                                                         const targetAcc = assets.accounts?.find(a => a.id === record.targetAccountId);
                                                         
+                                                        // Check audit trail for exact snapshot of account balances immediately after this transaction
+                                                        const srcAfter = record.auditTrail?.after?.accounts?.find(a => a.id === record.accountId);
+                                                        const tgtAfter = record.auditTrail?.after?.accounts?.find(a => a.id === record.targetAccountId);
+                                                        
                                                         if (record.type === 'transfer') {
                                                             const srcName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '未指定帳戶';
                                                             const tgtName = targetAcc ? `${targetAcc.icon || '🏦'} ${targetAcc.nickname}` : '未指定帳戶';
                                                             return (
-                                                                <span>
-                                                                    🔁 資金劃撥：<strong style={{ color: '#0a84ff' }}>{srcName}</strong> ➡️ <strong style={{ color: '#0a84ff' }}>{tgtName}</strong>
-                                                                </span>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    <span>
+                                                                        🔁 資金劃撥：<strong style={{ color: '#bf5af2' }}>{srcName}</strong> ➡️ <strong style={{ color: '#bf5af2' }}>{tgtName}</strong>
+                                                                    </span>
+                                                                    {(srcAfter || tgtAfter) && (
+                                                                        <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.45)' }}>
+                                                                            交易後餘額：{srcAfter ? `${srcName} $${srcAfter.balance.toLocaleString()} ${srcAfter.currency || 'TWD'}` : ''}
+                                                                            {srcAfter && tgtAfter ? ' ｜ ' : ''}
+                                                                            {tgtAfter ? `${tgtName} $${tgtAfter.balance.toLocaleString()} ${tgtAfter.currency || 'TWD'}` : ''}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             );
                                                         } else if (record.type === 'exchange') {
                                                             const srcName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '未指定帳戶';
                                                             const tgtName = targetAcc ? `${targetAcc.icon || '🏦'} ${targetAcc.nickname}` : '未指定帳戶';
                                                             return (
-                                                                <span>
-                                                                    💱 外幣換匯：<strong style={{ color: '#ff9500' }}>{srcName}</strong> ➡️ <strong style={{ color: '#ff9500' }}>{tgtName}</strong>
-                                                                </span>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    <span>
+                                                                        💱 外幣換匯：<strong style={{ color: '#ff9f0a' }}>{srcName}</strong> ➡️ <strong style={{ color: '#ff9f0a' }}>{tgtName}</strong>
+                                                                    </span>
+                                                                    {(srcAfter || tgtAfter) && (
+                                                                        <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.45)' }}>
+                                                                            交易後餘額：{srcAfter ? `${srcName} $${srcAfter.balance.toLocaleString()} ${srcAfter.currency || 'USD'}` : ''}
+                                                                            {srcAfter && tgtAfter ? ' ｜ ' : ''}
+                                                                            {tgtAfter ? `${tgtName} $${tgtAfter.balance.toLocaleString()} ${tgtAfter.currency || 'TWD'}` : ''}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             );
                                                         } else {
                                                             const accName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '';
                                                             if (accName) {
                                                                 const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
+                                                                const postBalance = srcAfter ? srcAfter.balance : null;
                                                                 return (
                                                                     <span>
                                                                         💳 交易帳戶：<strong style={{ color: '#8effa2' }}>{accName}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
+                                                                        {postBalance !== null && (
+                                                                            <span style={{ marginLeft: '6px', fontSize: '0.66rem', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '4px' }}>
+                                                                                餘額: ${postBalance.toLocaleString()} {srcAfter.currency || 'TWD'}
+                                                                            </span>
+                                                                        )}
                                                                     </span>
                                                                 );
                                                             } else {
