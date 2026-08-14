@@ -556,6 +556,89 @@ const SettingsView = ({
   // --- Session Diagnostic Logs Modal State ---
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
 
+  // --- Manual Backup & Data Export/Import Handlers ---
+  const [isManualBackingUp, setIsManualBackingUp] = useState(false);
+  const backupFileInputRef = useRef(null);
+
+  const handleManualCloudBackup = async () => {
+    setIsManualBackingUp(true);
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const fileName = `手動備份_${todayStr}_${timeStr}.json`;
+
+    try {
+      const response = await fetch(MY_GOOGLE_API_URL, {
+        method: 'POST',
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: 'backup',
+          fileName: fileName,
+          assets: assets,
+          date: todayStr
+        }),
+        redirect: 'follow'
+      });
+      const text = await response.text();
+      try {
+        const resJson = JSON.parse(text);
+        if (resJson.status === 'success') {
+          await customAlert(`✅ 雲端備份成功！\n備份檔案名稱：【${fileName}】\n已安全保存至您的 Google 雲端硬碟。`, "備份完成");
+          logger.addLog('CLOUD', `手動雲端備份成功: ${fileName}`);
+        } else {
+          await customAlert(`⚠️ 備份指令已傳送，伺服器回應：${resJson.message || text}`, "備份回報");
+        }
+      } catch {
+        await customAlert(`✅ 備份指令已成功傳送至 Google 雲端處理！`, "備份傳送完成");
+      }
+    } catch (err) {
+      await customAlert("❌ 雲端備份傳送失敗：" + err.message, "備份失敗");
+      logger.addLog('ERROR', `手動雲端備份失敗: ${err.message}`, err);
+    } finally {
+      setIsManualBackingUp(false);
+    }
+  };
+
+  const handleExportJson = () => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(assets, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `馬鈴薯管家_備份_${todayStr}.json`);
+    dlAnchorElem.click();
+    if (customAlert) {
+      customAlert("✅ 已下載本機 JSON 備份檔案！您可以妥善保存此檔案。", "匯出成功");
+    }
+  };
+
+  const handleImportJsonClick = () => {
+    if (backupFileInputRef.current) backupFileInputRef.current.click();
+  };
+
+  const handleBackupFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const imported = JSON.parse(evt.target.result);
+        if (!imported || (imported.userA === undefined && !imported.accounts)) {
+          return await customAlert("❌ JSON 檔案格式不正確，缺乏必要財務資料欄位！", "格式錯誤");
+        }
+        if (!await customConfirm("⚠️ 警告：匯入此備份檔案將會覆蓋您當前所有的帳戶餘額、預算與交易歷史紀錄！\n\n確定要繼續匯入覆蓋嗎？", "確認還原備份")) return;
+        
+        await saveToCloud(imported);
+        await customAlert("✅ 備份資料覆蓋匯入成功！所有資產數據已還原至該備份點。", "還原成功");
+        logger.addLog('CLOUD', '成功從本機 JSON 檔案還原備份資料');
+      } catch (err) {
+        await customAlert("❌ 讀取備份檔案失敗：" + err.message, "讀取失敗");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // --- Optimistic Notification Preferences State ---
   const dbNotifObj = assets?.notificationSettings?.[userKey];
   const defaultNotifSettings = useMemo(() => ({
@@ -1688,6 +1771,96 @@ const SettingsView = ({
                     <span>📋</span>
                     <span>彈出系統日誌與除錯診斷視窗</span>
                   </button>
+                </div>
+              </div>
+
+              {/* 💾 Data Backup & Restore Card */}
+              <div className="glass-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontWeight: '850', fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>💾</span>
+                  <span>資料備份與還原管理</span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
+                  支援手動同步備份至 Google 雲端硬碟 (Google Drive)，以及下載完整 JSON 檔案進行本機永久保存與一鍵還原。
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleManualCloudBackup}
+                  disabled={isManualBackingUp}
+                  className="glass-btn glass-btn-cta"
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    borderRadius: '12px',
+                    fontSize: '0.84rem',
+                    fontWeight: '750',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    cursor: isManualBackingUp ? 'wait' : 'pointer',
+                    opacity: isManualBackingUp ? 0.65 : 1
+                  }}
+                >
+                  <span>{isManualBackingUp ? '⏳ 雲端備份傳送中...' : '☁️ 手動觸發 Google 雲端硬碟備份'}</span>
+                </button>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={handleExportJson}
+                    className="glass-btn"
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '12px',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      color: '#ffffff',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      borderColor: 'rgba(255, 255, 255, 0.15)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <span>📥</span>
+                    <span>匯出 JSON 本機檔案</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleImportJsonClick}
+                    className="glass-btn"
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '12px',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      color: '#ff9500',
+                      background: 'rgba(255, 149, 0, 0.06)',
+                      borderColor: 'rgba(255, 149, 0, 0.25)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <span>📤</span>
+                    <span>匯入 JSON 檔案還原</span>
+                  </button>
+                  <input
+                    type="file"
+                    ref={backupFileInputRef}
+                    style={{ display: 'none' }}
+                    accept=".json"
+                    onChange={handleBackupFileChange}
+                  />
                 </div>
               </div>
 
