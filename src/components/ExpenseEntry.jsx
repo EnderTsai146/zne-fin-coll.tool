@@ -438,6 +438,12 @@ const ExpenseEntry = ({
 
     const payerName = userKey === 'userA' ? '大狗狗🐕' : '阿陞🐶';
 
+    // Check if this submission is a multi-item cart batch
+    const isBatch = finalItems.length > 1;
+    const batchId = isBatch ? `batch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : undefined;
+    const batchTotal = isBatch ? finalItems.reduce((s, i) => s + i.amount, 0) : undefined;
+    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname })) : undefined;
+
     // Generate separate history records
     const historyRecords = finalItems.map((item, idx) => {
       const details = { food: 0, shopping: 0, entertainment: 0, other: 0, fixed: 0 };
@@ -459,7 +465,12 @@ const ExpenseEntry = ({
         accountId: item.accountId,
         note: item.note || item.cat,
         subCategory: item.cat,
-        necessity: 'need'
+        necessity: 'need',
+        batchId,
+        batchCount: isBatch ? finalItems.length : undefined,
+        batchIndex: isBatch ? (idx + 1) : undefined,
+        batchTotal,
+        batchItems
       };
     });
 
@@ -584,6 +595,12 @@ const ExpenseEntry = ({
       newBal: ac.oldBal + ac.diff
     }));
 
+    // Check if this submission is a multi-item cart batch
+    const isBatch = finalItems.length > 1;
+    const batchId = isBatch ? `batch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : undefined;
+    const batchTotal = isBatch ? finalItems.reduce((s, i) => s + i.amount, 0) : undefined;
+    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname })) : undefined;
+
     const historyRecords = finalItems.map((item, idx) => {
       const sampleAcc = accounts.find(a => a.id === item.accountId);
       const advancedBy = sampleAcc.owner === 'joint' ? null : sampleAcc.owner;
@@ -601,7 +618,12 @@ const ExpenseEntry = ({
         advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
         isSettled: false,
         necessity: 'need',
-        subCategory: item.cat
+        subCategory: item.cat,
+        batchId,
+        batchCount: isBatch ? finalItems.length : undefined,
+        batchIndex: isBatch ? (idx + 1) : undefined,
+        batchTotal,
+        batchItems
       };
     });
 
@@ -703,8 +725,14 @@ const ExpenseEntry = ({
       newBal: ac.oldBal + ac.diff
     }));
 
+    // Check if this submission is a multi-item cart batch
+    const isBatch = finalItems.length > 1;
+    const batchId = isBatch ? `batch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : undefined;
+    const batchTotal = isBatch ? finalItems.reduce((s, i) => s + i.amount, 0) : undefined;
+    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname })) : undefined;
+
     // Create income record list
-    const newIncomes = finalItems.map(item => ({
+    const newIncomes = finalItems.map((item, idx) => ({
       date: item.date || txDate,
       month: (item.date || txDate).slice(0, 7),
       type: 'income',
@@ -714,7 +742,12 @@ const ExpenseEntry = ({
       accountId: item.accountId,
       operator: loggedInUserName,
       note: item.note || item.cat,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      batchId,
+      batchCount: isBatch ? finalItems.length : undefined,
+      batchIndex: isBatch ? (idx + 1) : undefined,
+      batchTotal,
+      batchItems
     }));
 
     const finalAssets = { ...assets, accounts: updatedAccounts };
@@ -1114,9 +1147,28 @@ const ExpenseEntry = ({
           {/* Sub Tab: Personal Expense */}
           {activeTab === 'personal' && (
             <div className="glass-card expense-mode-glow-blue" style={{ padding: '20px 18px' }}>
-              <h3 style={{ margin: '0 0 16px 0', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>👤 個人支出登錄</span>
-              </h3>
+              {/* Distinct Personal Header Banner */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(10,132,255,0.18), rgba(10,132,255,0.06))',
+                border: '1px solid rgba(10,132,255,0.3)',
+                borderRadius: '14px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '1.4rem' }}>👤</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#0a84ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>【{loggedInUserName} 個人專屬支出】</span>
+                    <span style={{ fontSize: '0.62rem', background: '#0a84ff', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>私有</span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: '2px', lineHeight: '1.4' }}>
+                    💡 此為個人私有消費，僅從個人帳戶扣款，<strong>絕不計入公費對帳</strong>。
+                  </div>
+                </div>
+              </div>
 
               <div className="inset-group-card">
                 {/* Date */}
@@ -1136,7 +1188,7 @@ const ExpenseEntry = ({
                 {/* Account (iOS UIMenu Context Menu Picker) */}
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <IOSAccountMenuPicker
-                    label="💳 支付帳戶"
+                    label="💳 扣款帳戶 (個人)"
                     accounts={accounts}
                     selectedValue={persAccountId}
                     onChange={setPersAccountId}
@@ -1147,55 +1199,11 @@ const ExpenseEntry = ({
                 </div>
 
                 {/* Amount */}
-                <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="inset-group-label">💵 金額</span>
-                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                      <input type="text" inputMode="numeric" className="inset-group-input tabular-nums" value={persAmount} onChange={(e) => setPersAmount(formatInputMoney(e.target.value))} placeholder="$0" style={{ fontSize: '1.2rem', fontWeight: '800' }} />
-                    </span>
-                  </div>
-
-                  {/* Quick Increment Buttons */}
-                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
-                    {[100, 500, 1000].map(amt => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => {
-                          const current = parseMoney(persAmount);
-                          setPersAmount(formatInputMoney(current + amt));
-                        }}
-                        style={{
-                          padding: '3px 8px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          background: 'rgba(255,255,255,0.05)',
-                          color: 'var(--text-secondary)',
-                          fontSize: '0.72rem',
-                          fontWeight: '600',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        +{amt}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setPersAmount('')}
-                      style={{
-                        padding: '3px 8px',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(255,69,58,0.2)',
-                        background: 'rgba(255,69,58,0.08)',
-                        color: 'var(--accent-red)',
-                        fontSize: '0.72rem',
-                        fontWeight: '600',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      清空
-                    </button>
-                  </div>
+                <div className="inset-group-row">
+                  <span className="inset-group-label">💵 金額</span>
+                  <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                    <input type="text" inputMode="numeric" className="inset-group-input tabular-nums" value={persAmount} onChange={(e) => setPersAmount(formatInputMoney(e.target.value))} placeholder="$0" style={{ fontSize: '1.2rem', fontWeight: '800' }} />
+                  </span>
                 </div>
 
                 {/* Note */}
@@ -1332,9 +1340,28 @@ const ExpenseEntry = ({
           {/* Sub Tab: Joint Expense */}
           {activeTab === 'joint' && (
             <div className="glass-card expense-mode-glow-green" style={{ padding: '20px 18px' }}>
-              <h3 style={{ margin: '0 0 16px 0', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🏫 共同支出登錄</span>
-              </h3>
+              {/* Distinct Joint Header Banner with Strong Warning */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(48,209,88,0.18), rgba(48,209,88,0.06))',
+                border: '1px solid rgba(48,209,88,0.3)',
+                borderRadius: '14px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '1.4rem' }}>🏫</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#30d158', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>【兩人共同公費支出 · 會計對帳】</span>
+                    <span style={{ fontSize: '0.62rem', background: '#30d158', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>公費</span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)', marginTop: '2px', lineHeight: '1.4' }}>
+                    ⚠️ <strong>注意：</strong>此筆為兩人共同支出。若選擇個人帳戶支付將自動列為<strong>「個人代墊款」</strong>並納入結算對帳！
+                  </div>
+                </div>
+              </div>
 
               <div className="inset-group-card">
                 {/* Date */}
@@ -1354,13 +1381,13 @@ const ExpenseEntry = ({
                 {/* Account (iOS UIMenu Context Menu Picker) */}
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <IOSAccountMenuPicker
-                    label="💳 共同扣款/代墊帳戶"
+                    label="💳 共同扣款 / 代墊帳戶"
                     accounts={accounts}
                     selectedValue={jointAccountId}
                     onChange={setJointAccountId}
                     currentUser={loggedInUserName}
                     themeColor="#30d158"
-                    modalTitle="選擇共同支付帳戶"
+                    modalTitle="選擇共同支付或代墊帳戶"
                   />
                 </div>
 
@@ -1368,7 +1395,7 @@ const ExpenseEntry = ({
                 <div className="inset-group-row">
                   <span className="inset-group-label">💵 金額</span>
                   <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
-                    <input type="text" inputMode="numeric" className="inset-group-input" value={jointAmount} onChange={(e) => setJointAmount(formatInputMoney(e.target.value))} placeholder="$0" />
+                    <input type="text" inputMode="numeric" className="inset-group-input tabular-nums" value={jointAmount} onChange={(e) => setJointAmount(formatInputMoney(e.target.value))} placeholder="$0" style={{ fontSize: '1.2rem', fontWeight: '800' }} />
                   </span>
                 </div>
 
@@ -2001,32 +2028,6 @@ const ExpenseEntry = ({
                     style={{ fontSize: '1.2rem', fontWeight: '800' }}
                   />
                 </span>
-              </div>
-
-              {/* Quick Increment Buttons */}
-              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', padding: '0 14px 10px' }}>
-                {[500, 1000, 5000, 10000].map(amt => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => {
-                      const current = parseMoney(tfAmount);
-                      setTfAmount(formatInputMoney(current + amt));
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'var(--text-secondary)',
-                      fontSize: '0.72rem',
-                      fontWeight: '600',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    +{amt >= 1000 ? `${amt / 1000}k` : amt}
-                  </button>
-                ))}
               </div>
 
               {/* Cross-Currency Target Amount if needed */}

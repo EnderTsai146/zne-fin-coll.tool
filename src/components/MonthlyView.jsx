@@ -548,7 +548,7 @@ const MonthlyView = ({
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                             <div style={{ minWidth: 0, flex: 1 }}>
-                                                {/* Line 1: Type / Category & Date */}
+                                                {/* Line 1: Type / Category & Date & Batch Info */}
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
                                                     <span style={{
                                                         fontSize: '0.64rem',
@@ -563,6 +563,19 @@ const MonthlyView = ({
                                                     <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
                                                         {record.date}
                                                     </span>
+                                                    {record.batchId && (
+                                                        <span style={{
+                                                            fontSize: '0.6rem',
+                                                            background: 'rgba(255,159,10,0.12)',
+                                                            color: '#ff9f0a',
+                                                            border: '0.5px solid rgba(255,159,10,0.3)',
+                                                            padding: '1px 5px',
+                                                            borderRadius: '4px',
+                                                            fontWeight: '750'
+                                                        }}>
+                                                            🛒 合併結帳 ({record.batchIndex || '1'}/{record.batchCount || '多'})
+                                                        </span>
+                                                    )}
                                                     {isDeleted && (
                                                         <span style={{ fontSize: '0.6rem', backgroundColor: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
                                                             已作廢
@@ -918,6 +931,54 @@ const MonthlyView = ({
                                     </span>
                                 </div>
                             </div>
+
+                            {/* Cart Batch Items Breakdown Section */}
+                            {detailModalRecord.batchItems && detailModalRecord.batchItems.length > 1 && (
+                                <div style={{
+                                    background: 'rgba(255, 159, 10, 0.08)',
+                                    border: '1px solid rgba(255, 159, 10, 0.25)',
+                                    borderRadius: '14px',
+                                    padding: '12px 14px'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#ff9f0a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span>🛒</span>
+                                            <span>購物車整批送出明細 (共 {detailModalRecord.batchCount || detailModalRecord.batchItems.length} 筆)</span>
+                                        </div>
+                                        <strong style={{ fontSize: '0.86rem', color: '#fff' }}>
+                                            合計 ${detailModalRecord.batchTotal ? detailModalRecord.batchTotal.toLocaleString() : detailModalRecord.batchItems.reduce((s, i) => s + i.amount, 0).toLocaleString()} TWD
+                                        </strong>
+                                    </div>
+                                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.65)', marginBottom: '8px', lineHeight: '1.4' }}>
+                                        💡 本筆項目係與下方其他項目於同一購物車批次結帳，因此下方帳戶餘額變動軌跡反映的是該批次之<strong>總扣款金額</strong>。
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        {detailModalRecord.batchItems.map((item, idx) => {
+                                            const isCurrent = (item.cat === detailModalRecord.subCategory || item.cat === detailModalRecord.category) && item.amount === detailModalRecord.total;
+                                            return (
+                                                <div key={idx} style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    fontSize: '0.74rem',
+                                                    padding: '5px 8px',
+                                                    borderRadius: '6px',
+                                                    background: isCurrent ? 'rgba(255, 159, 10, 0.18)' : 'rgba(255,255,255,0.03)',
+                                                    border: isCurrent ? '0.5px solid rgba(255, 159, 10, 0.45)' : '0.5px solid rgba(255,255,255,0.04)'
+                                                }}>
+                                                    <span style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{ color: isCurrent ? '#ff9f0a' : 'rgba(255,255,255,0.4)' }}>•</span>
+                                                        <strong>{item.cat}</strong>
+                                                        {item.note ? <span style={{ opacity: 0.6 }}>({item.note})</span> : ''}
+                                                        {isCurrent && <span style={{ fontSize: '0.6rem', color: '#ff9f0a', fontWeight: '800' }}>(當前項目)</span>}
+                                                    </span>
+                                                    <span style={{ fontWeight: '700', color: '#fff' }}>${item.amount.toLocaleString()} TWD</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Audit Trail Balance Diffs Section */}
                             {detailModalRecord.auditTrail && (() => {
