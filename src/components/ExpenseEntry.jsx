@@ -1147,29 +1147,6 @@ const ExpenseEntry = ({
           {/* Sub Tab: Personal Expense */}
           {activeTab === 'personal' && (
             <div className="glass-card expense-mode-glow-blue" style={{ padding: '20px 18px' }}>
-              {/* Distinct Personal Header Banner */}
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(10,132,255,0.18), rgba(10,132,255,0.06))',
-                border: '1px solid rgba(10,132,255,0.3)',
-                borderRadius: '14px',
-                padding: '12px 14px',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                <span style={{ fontSize: '1.4rem' }}>👤</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#0a84ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>【{loggedInUserName} 個人專屬支出】</span>
-                    <span style={{ fontSize: '0.62rem', background: '#0a84ff', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>私有</span>
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: '2px', lineHeight: '1.4' }}>
-                    💡 此為個人私有消費，僅從個人帳戶扣款，<strong>絕不計入公費對帳</strong>。
-                  </div>
-                </div>
-              </div>
-
               <div className="inset-group-card">
                 {/* Date */}
                 <div className="inset-group-row">
@@ -1331,7 +1308,31 @@ const ExpenseEntry = ({
                 </div>
               )}
 
-              <button onClick={handlePersSubmit} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '44px', borderRadius: '12px', marginTop: '16px', fontWeight: '800' }}>
+              {/* Distinct Personal Reminder Banner (Placed above Submit Button for Maximum Visibility) */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(10,132,255,0.18), rgba(10,132,255,0.06))',
+                border: '1px solid rgba(10,132,255,0.3)',
+                borderRadius: '14px',
+                padding: '12px 14px',
+                marginTop: '16px',
+                marginBottom: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '1.4rem' }}>👤</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#0a84ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>【{loggedInUserName} 個人專屬支出】</span>
+                    <span style={{ fontSize: '0.62rem', background: '#0a84ff', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>私有</span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: '2px', lineHeight: '1.4' }}>
+                    💡 此為個人私有消費，僅從個人帳戶扣款，<strong>絕不計入公費對帳</strong>。
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={handlePersSubmit} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '44px', borderRadius: '12px', marginTop: '10px', fontWeight: '800' }}>
                 🚀 確定送出記帳
               </button>
             </div>
@@ -1340,29 +1341,6 @@ const ExpenseEntry = ({
           {/* Sub Tab: Joint Expense */}
           {activeTab === 'joint' && (
             <div className="glass-card expense-mode-glow-green" style={{ padding: '20px 18px' }}>
-              {/* Distinct Joint Header Banner with Strong Warning */}
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(48,209,88,0.18), rgba(48,209,88,0.06))',
-                border: '1px solid rgba(48,209,88,0.3)',
-                borderRadius: '14px',
-                padding: '12px 14px',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                <span style={{ fontSize: '1.4rem' }}>🏫</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#30d158', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>【兩人共同公費支出 · 會計對帳】</span>
-                    <span style={{ fontSize: '0.62rem', background: '#30d158', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>公費</span>
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)', marginTop: '2px', lineHeight: '1.4' }}>
-                    ⚠️ <strong>注意：</strong>此筆為兩人共同支出。若選擇個人帳戶支付將自動列為<strong>「個人代墊款」</strong>並納入結算對帳！
-                  </div>
-                </div>
-              </div>
-
               <div className="inset-group-card">
                 {/* Date */}
                 <div className="inset-group-row">
@@ -1524,7 +1502,31 @@ const ExpenseEntry = ({
                 </div>
               )}
 
-              <button onClick={handleJointSubmit} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '44px', borderRadius: '12px', marginTop: '16px', fontWeight: '800' }}>
+              {/* Distinct Joint Reminder Banner (Placed above Submit Button for Maximum Visibility) */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(48,209,88,0.18), rgba(48,209,88,0.06))',
+                border: '1px solid rgba(48,209,88,0.3)',
+                borderRadius: '14px',
+                padding: '12px 14px',
+                marginTop: '16px',
+                marginBottom: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '1.4rem' }}>🏫</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#30d158', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>【兩人共同公費支出 · 會計對帳】</span>
+                    <span style={{ fontSize: '0.62rem', background: '#30d158', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>公費</span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)', marginTop: '2px', lineHeight: '1.4' }}>
+                    ⚠️ <strong>注意：</strong>此筆為兩人共同支出。若選擇個人帳戶支付將自動列為<strong>「個人代墊款」</strong>並納入結算對帳！
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={handleJointSubmit} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '44px', borderRadius: '12px', marginTop: '10px', fontWeight: '800' }}>
                 🚀 確定送出記帳
               </button>
             </div>
