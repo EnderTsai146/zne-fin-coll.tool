@@ -14,8 +14,8 @@ const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 const formatDate = (date) => date.toISOString().split('T')[0];
 const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingArchive, setAssets, currentFxRate, setCurrentFxRate, hasNewUpdate, onOpenChangelog }) => {
     // ★ Fix: 將日期移入元件內，避免模組級別變數在跨日後過期
-    const today = new Date();
-    const lastYear = new Date(new Date().setFullYear(today.getFullYear() - 1));
+    const today = useMemo(() => new Date(), []);
+    const lastYear = useMemo(() => new Date(new Date().setFullYear(today.getFullYear() - 1)), [today]);
     const [chartDateRange, setChartDateRange] = useState({ start: formatDate(lastYear), end: formatDate(today) });
     const [activeHistory, setActiveHistory] = useState(null);
     const [selectedAuditTrail, setSelectedAuditTrail] = useState(null);
@@ -104,7 +104,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
         }, 3000);
 
         return () => clearTimeout(timer);
-    }, [todayStr, setAssets, assets.monthlyExpenses?.length, assets.lastBackupDate]);
+    }, [todayStr, setAssets, assets, assets.monthlyExpenses?.length, assets.lastBackupDate]);
 
     // ----------------------------------------------------
     // 1. 雙幣別資產計算 (直覺相加邏輯)
@@ -342,25 +342,45 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                 if (!res.ok) throw new Error('API 連線失敗');
                 const data = await res.json();
 
+                const newPrices = {};
+                let foundQuotes = false;
+
                 if (data?.quoteResponse?.result) {
+                    foundQuotes = true;
                     const quotes = data.quoteResponse.result;
-                    const fxQuote = quotes.find(q => q.symbol === 'TWD=X');
+                    const fxQuote = quotes.find(q => q.symbol === 'TWD=X' || q.symbol === 'USDTWD=X');
                     if (fxQuote) {
                         fxRate = fxQuote.regularMarketPrice || fxQuote.regularMarketPreviousClose || 31.5;
                         setCurrentFxRate(fxRate);
                     }
 
-                    const newPrices = {};
+                    quotes.forEach(q => {
+                        const price = q.regularMarketPrice || q.regularMarketPreviousClose || 0;
+                        newPrices[q.symbol] = price;
+                        newPrices[q.symbol.replace('.TW', '')] = price;
+                    });
+                } else if (data && typeof data === 'object' && !data.error) {
+                    foundQuotes = true;
+                    if (data['TWD=X'] || data['USDTWD=X']) {
+                        const item = data['TWD=X'] || data['USDTWD=X'];
+                        fxRate = (typeof item === 'object' && item !== null) ? (item.price || 31.5) : (Number(item) || 31.5);
+                        setCurrentFxRate(fxRate);
+                    }
+                    Object.keys(data).forEach(sym => {
+                        const item = data[sym];
+                        const price = (typeof item === 'object' && item !== null) ? (item.price || 0) : Number(item || 0);
+                        newPrices[sym] = price;
+                        newPrices[sym.replace('.TW', '')] = price;
+                    });
+                }
+
+                if (foundQuotes) {
                     let stockMarketValue = 0;
                     symbols.forEach(sym => {
                         const holding = stockHoldings[sym];
                         const querySym = holding.market === 'TW' ? (sym.includes('.') ? sym : `${sym}.TW`) : sym;
-                        
-                        const q = quotes.find(q => q.symbol === querySym || q.symbol === sym || q.symbol === sym.replace('.TW', ''));
-                        if (q) {
-                            const price = q.regularMarketPrice || q.regularMarketPreviousClose || 0;
-                            newPrices[sym] = price;
-                            newPrices[querySym] = price;
+                        const price = newPrices[querySym] !== undefined ? newPrices[querySym] : (newPrices[sym] || 0);
+                        if (price > 0) {
                             const val = price * holding.shares;
                             if (holding.market === 'TW') {
                                 const fee = Math.max(20, Math.floor(val * 0.001425 * 0.6));
@@ -586,7 +606,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
 
         const data = labels.map(d => chartDataPoints[d]);
         return { labels, data, categories: categoriesDataPoints };
-    }, [assets.monthlyExpenses, assets.dailyNetWorth, combinedHistory, totalAssets, chartDateRange, currentFxRate, currentLiveMarketNetWorth, totalTwdCash, totalUsdCash, assets.userInvestments, assets.jointInvestments]);
+    }, [assets.dailyNetWorth, combinedHistory, totalAssets, chartDateRange, currentFxRate, currentLiveMarketNetWorth, totalTwdCash, totalUsdCash, assets.userInvestments, assets.jointInvestments, assets.jointCash, assets.jointCash_usd, assets.userA, assets.userA_usd, assets.userB, assets.userB_usd, today]);
 
     const lineChartData = {
         labels: historyData.labels,
@@ -742,7 +762,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     // ----------------------------------------------------
     // 4. 精準科目的歷史軌跡
     // ----------------------------------------------------
-    const getAccountHistory = () => {
+    const getAccountHistory = useCallback(() => {
         if (!activeHistory) return [];
         let filtered = (combinedHistory || []);
 
@@ -777,14 +797,14 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             }
         }
         return patchedFiltered;
-    };
+    }, [activeHistory, combinedHistory, historyDateRange, assets]);
 
     const handleToggleHistory = (account) => {
         if (activeHistory === account) { setActiveHistory(null); }
         else { setActiveHistory(account); setHistoryDateRange({ start: '', end: '' }); }
     };
     // ★ Fix: 將 getAccountHistory 包裹在 useMemo 中，避免每次 render 都重新計算 O(n²)
-    const specificHistory = useMemo(() => getAccountHistory(), [activeHistory, combinedHistory, historyDateRange, assets]);
+    const specificHistory = useMemo(() => getAccountHistory(), [getAccountHistory]);
 
     // ----------------------------------------------------
     // 5. 繪製折線圖點擊後的「變動分析卡片」

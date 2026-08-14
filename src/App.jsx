@@ -13,7 +13,7 @@ import SettingsView from './components/SettingsView';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getBudgetForMonth } from './utils/budgetUtils';
 import { db, auth, getFcmToken, onFcmMessage } from './firebase';
-import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, query, orderBy, limit, getDocs, startAfter, runTransaction } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDoc, collection, addDoc, runTransaction } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { MY_GOOGLE_API_URL } from './config';
 import { logger } from './utils/logger';
@@ -53,7 +53,7 @@ const NAV_ITEMS = [
   { id: 'settings', icon: '⚙️', label: '設定' }
 ];
 
-export const getDeviceInfo = () => {
+const getDeviceInfo = () => {
   if (typeof navigator === 'undefined') return { deviceName: '未知裝置', icon: '📱', os: '未知', browser: 'Web' };
   const ua = navigator.userAgent || '';
   let os = '未知設備';
@@ -181,7 +181,7 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
     <div className="bottom-nav bottom-nav-mobile" ref={navRef}>
       {/* Liquid glass sliding pill */}
       <div className="nav-pill" style={pillStyle} />
-      {NAV_ITEMS.map((item, idx) => {
+      {NAV_ITEMS.map((item) => {
         if (item.id === 'center') {
           const isCenterActive = currentPage === 'overview' || currentPage === 'expense';
           const displayLabel = currentPage === 'expense' ? '記帳' : '總覽';
@@ -812,14 +812,12 @@ function App() {
 
   // ★ 追蹤實際載入狀態 → 驅動進度條衝刺
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!loading && !currentUser) setSplashPhase('done');
     if (!loading && currentUser && dataReady) dataReadyForSplash.current = true;
   }, [loading, currentUser, dataReady]);
 
   // ★ 進度到 100% → 觸發過場
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (loadProgress >= 100 && splashPhase === 'loading') setSplashPhase('filled');
   }, [loadProgress, splashPhase]);
 
@@ -851,7 +849,6 @@ function App() {
   // ★ 自動顯示更新日誌，且控制背景滾動鎖定
   useEffect(() => {
     if (hasNewUpdate) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowChangelog(true);
       if (CHANGELOG_DATA.length > 0) {
         localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
@@ -869,12 +866,9 @@ function App() {
     setHasNewUpdate(false);
   };
 
-  const [showLineSettings, setShowLineSettings] = useState(false);
-  const [tempLineCount, setTempLineCount] = useState('');
-
   // ★ 控制所有彈窗開啟時的背景滾動與彈性滾動鎖定
   useEffect(() => {
-    const shouldLock = showChangelog || !!modalConfig || showLineSettings || showTimeoutWarning;
+    const shouldLock = showChangelog || !!modalConfig || showTimeoutWarning;
     if (shouldLock) {
       document.documentElement.classList.add('modal-open');
       document.body.classList.add('modal-open');
@@ -886,7 +880,7 @@ function App() {
       document.documentElement.classList.remove('modal-open');
       document.body.classList.remove('modal-open');
     };
-  }, [showChangelog, modalConfig, showLineSettings, showTimeoutWarning]);
+  }, [showChangelog, modalConfig, showTimeoutWarning]);
 
   const [assets, setAssets] = useState({
     userA: 0,
@@ -985,7 +979,6 @@ function App() {
 
   useEffect(() => {
     if (window.location.hostname === 'localhost') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentUser({ email: 'ender.tsai@gmail.com' });
       setOperatorName('大狗狗🐕');
       return;
@@ -1035,7 +1028,6 @@ function App() {
     if (!currentUser) return;
     if (window.location.hostname === 'localhost') {
       // Mock local dev data
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAssets({
         userA: 150000,
         userB: 120000,
@@ -1477,7 +1469,7 @@ function App() {
     setCurrentPage(pageId);
   };
 
-  const handleNavigateWithGuide = ({ page, tab, mode, hint }) => {
+  const handleNavigateWithGuide = ({ page, tab, hint }) => {
     if (page) {
       if (page === 'overview' || page === 'expense') {
         setLastActiveCenterTab(page);
@@ -1611,7 +1603,7 @@ function App() {
     return newAssets;
   };
 
-  const handleRemoveBadToken = (badToken) => {
+  const handleRemoveBadToken = useCallback((badToken) => {
     if (!badToken) return;
     setAssets(prev => {
       const existingTokens = prev.fcmTokens || {};
@@ -1643,15 +1635,15 @@ function App() {
       }
       return prev;
     });
-  };
+  }, [currentUser]);
 
-  const isNotificationEnabledForUser = (userKey, notifCategory) => {
+  const isNotificationEnabledForUser = useCallback((userKey, notifCategory) => {
     const userSettings = assets?.notificationSettings?.[userKey];
     if (!userSettings) return true;
     if (userSettings.enabled === false) return false;
     if (notifCategory && userSettings[notifCategory] === false) return false;
     return true;
-  };
+  }, [assets?.notificationSettings]);
 
   const cleanTitle = (rawTitle) => {
     if (!rawTitle) return '';
@@ -1665,7 +1657,7 @@ function App() {
       .trim();
   };
 
-  const sendTransactionPush = async (title, body, isTest = false, targetScope = 'both', notifCategory = null) => {
+  const sendTransactionPush = useCallback(async (title, body, isTest = false, targetScope = 'both', notifCategory = null) => {
     try {
       const finalTitle = cleanTitle(title);
       const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
@@ -1753,7 +1745,7 @@ function App() {
               } else {
                 errorList.push(json?.message || text || 'GAS 廣播傳送回傳非成功狀態');
               }
-            } catch (e) {
+            } catch {
               if (res.status === 404 || text.includes('Not Found')) {
                 errorList.push(`Google Apps Script 部署網址回應 404 Not Found (請檢查 GAS Web App 是否重新發布為新版本)`);
               } else {
@@ -1784,10 +1776,10 @@ function App() {
       console.error("[Push] Send transaction push outer catch error:", e);
       return { success: false, targetCount: 0, error: e.message || String(e) };
     }
-  };
+  }, [assets, operatorName, handleRemoveBadToken, isNotificationEnabledForUser]);
 
   // 檢查常態帳單與信用卡帳單到期推播提醒
-  const checkAndTriggerBillReminders = (currentAssets) => {
+  const checkAndTriggerBillReminders = React.useCallback((currentAssets) => {
     if (!currentAssets) return;
     const todayStr = new Date().toISOString().split('T')[0];
     const today = new Date();
@@ -1834,13 +1826,13 @@ function App() {
         }
       }
     });
-  };
+  }, [sendTransactionPush]);
 
   useEffect(() => {
     if (assets) {
       checkAndTriggerBillReminders(assets);
     }
-  }, [assets]);
+  }, [assets, checkAndTriggerBillReminders]);
 
 
   const handleTransaction = (newAssets, historyRecordsInput) => {
@@ -1859,15 +1851,21 @@ function App() {
       jointCash_usd: accounts.length > 0 ? accounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0) : (newAssets.jointCash_usd || 0)
     };
 
+    // Determine base monthlyExpenses: prefer syncedNewAssets.monthlyExpenses if modified/provided, otherwise fallback to assets.monthlyExpenses
+    const baseExpenses = syncedNewAssets.monthlyExpenses || assets.monthlyExpenses || [];
+    
+    // Filter out records that are already present in baseExpenses (to prevent duplicate appends when caller already added them)
+    const newRecordsToAppend = records.filter(r => r && !baseExpenses.some(existing => (r.id && existing.id === r.id) || (r.timestamp && existing.timestamp === r.timestamp && existing.note === r.note)));
+
     const finalAssets = {
       ...syncedNewAssets,
       monthlyExpenses: [
-        ...(assets.monthlyExpenses || []),
-        ...records.map(r => ({
+        ...baseExpenses,
+        ...newRecordsToAppend.map(r => ({
           ...r,
-          operator: operatorName,
-          timestamp: timestamp,
-          auditTrail: { before: getSnapshot(assets), after: getSnapshot(syncedNewAssets) }
+          operator: r.operator || operatorName,
+          timestamp: r.timestamp || timestamp,
+          auditTrail: r.auditTrail || { before: getSnapshot(assets), after: getSnapshot(syncedNewAssets) }
         }))
       ]
     };
@@ -1923,8 +1921,7 @@ function App() {
         const advancedByText = firstRecord.advancedBy 
           ? `由 ${firstRecord.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`
           : '共同現金直付';
-        const pushMethodStr = firstRecord.advancedBy ? '代墊款' : '共同現金直付';
-        body = `${payerNameText} 登錄共同支出（${pushMethodStr}）：${firstRecord.note || firstRecord.category} - $${(Number(firstRecord.total) || 0).toLocaleString()}`;
+        body = `${payerNameText} 登錄共同支出（${advancedByText}）：${firstRecord.note || firstRecord.category} - $${(Number(firstRecord.total) || 0).toLocaleString()}`;
       }
       sendTransactionPush(title, body);
     }
@@ -1946,123 +1943,6 @@ function App() {
       setMonthlyViewSubTab('database');
       setCurrentPage('monthly');
     }
-  };
-
-  const handleAddExpense = async (date, expenseData, totalAmount, payer, note, updatedBills = null, updatedAccounts = null) => {
-    const payerKey = payer === 'userA' ? 'userA' : 'userB';
-    const payerName = payer === 'userA' ? '大狗狗🐕' : '阿陞🐶';
-
-    const finalNote = note || '日記帳';
-    let newAssetsTemp = { ...assets };
-    
-    if (updatedAccounts) {
-      newAssetsTemp.accounts = updatedAccounts;
-      newAssetsTemp.userA = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
-      newAssetsTemp.userB = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
-      newAssetsTemp.jointCash = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
-      newAssetsTemp.userA_usd = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
-      newAssetsTemp.userB_usd = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
-      newAssetsTemp.jointCash_usd = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
-    } else {
-      if (assets[payerKey] < totalAmount) {
-        await customAlert(`⚠️ ${payerName} 的個人餘額不足！`);
-        return;
-      }
-      newAssetsTemp[payerKey] = assets[payerKey] - totalAmount;
-    }
-
-    const targetTimestamp = new Date().toISOString();
-    const finalAssets = {
-      ...newAssetsTemp,
-      ...(updatedBills ? { bills: updatedBills } : {}),
-      monthlyExpenses: [
-        ...(assets.monthlyExpenses || []),
-        {
-          date, month: date.slice(0, 7), type: 'expense', category: '個人支出', details: expenseData,
-          total: totalAmount, payer: payerName, operator: operatorName, note: finalNote,
-          timestamp: targetTimestamp, auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssetsTemp) },
-          necessity: 'need'
-        }
-      ]
-    };
-
-    const logDetail = `新增個人支出 $${totalAmount.toLocaleString()} 於 ${payerName} (${finalNote})`;
-    const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
-
-    saveToCloud(finalAssetsWithLog);
-    sendTransactionPush("💰 個人支出異動", `${payerName} 登錄個人支出：${finalNote} - $${totalAmount.toLocaleString()}`, false, 'both', 'partnerExpense');
-    setNewlyAddedRecordTimestamp(targetTimestamp);
-    setMonthlyViewSubTab('database');
-    setCurrentPage('monthly');
-  };
-
-  const handleAddJointExpense = async (date, category, amount, advancedBy, note, updatedBills = null, updatedAccounts = null) => {
-    const val = Number(amount) || 0;
-    const newAssets = { ...assets };
-
-    let paymentMethodName = "共同帳戶直接付";
-    if (updatedAccounts) {
-      newAssets.accounts = updatedAccounts;
-      newAssets.userA = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
-      newAssets.userB = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
-      newAssets.jointCash = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
-      newAssets.userA_usd = updatedAccounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
-      newAssets.userB_usd = updatedAccounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
-      newAssets.jointCash_usd = updatedAccounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0);
-      paymentMethodName = advancedBy === 'jointCash' ? '共同直接付' : `${advancedBy === 'userA' ? '大狗狗' : '阿陞'}代墊`;
-    } else {
-      if (advancedBy === 'jointCash') {
-        if (newAssets.jointCash < val) {
-          await customAlert("❌ 共同現金不足！");
-          return;
-        }
-        newAssets.jointCash -= val;
-      } else if (advancedBy === 'userA') {
-        if (newAssets.userA < val) {
-          await customAlert("❌ 大狗狗🐕的個人餘額不足以代墊！");
-          return;
-        }
-        newAssets.userA -= val;
-        paymentMethodName = "大狗狗🐕先墊 (User A)";
-      } else if (advancedBy === 'userB') {
-        if (newAssets.userB < val) {
-          await customAlert("❌ 阿陞🐶的個人餘額不足以代墊！");
-          return;
-        }
-        newAssets.userB -= val;
-        paymentMethodName = "阿陞🐶先墊 (User B)";
-      }
-    }
-
-    const safeNote = note ? String(note).trim() : '';
-
-    const targetTimestamp = new Date().toISOString();
-    const finalAssets = {
-      ...newAssets,
-      ...(updatedBills ? { bills: updatedBills } : {}),
-      monthlyExpenses: [
-        ...(newAssets.monthlyExpenses || []),
-        {
-          date, month: date.slice(0, 7), type: 'spend', category: '共同支出', payer: '共同帳戶',
-          total: val, note: safeNote ? `${category} - ${safeNote}` : category,
-          operator: operatorName, advancedBy: advancedBy === 'jointCash' ? null : advancedBy,
-          isSettled: false, timestamp: targetTimestamp, auditTrail: { before: getSnapshot(assets), after: getSnapshot(newAssets) },
-          necessity: 'need', subCategory: category
-        }
-      ]
-    };
-
-    const methodStr = advancedBy === 'jointCash' ? '共同現金直付' : `由 ${advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`;
-    const logDetail = `新增共同支出 $${val.toLocaleString()} - 分類: ${category} [${methodStr}] (${safeNote || '無備註'})`;
-    const finalAssetsWithLog = logOperation(finalAssets, 'expense_add', logDetail);
-
-    saveToCloud(finalAssetsWithLog);
-    const payerNameText = operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶';
-    const pushMethodStr = advancedBy === 'jointCash' ? '共同現金直付' : '代墊款';
-    sendTransactionPush("🤝 共同支出異動", `${payerNameText} 登錄共同支出（${pushMethodStr}）：${category}${safeNote ? ' - ' + safeNote : ''} - $${val.toLocaleString()}`, false, 'both', 'jointExpense');
-    setNewlyAddedRecordTimestamp(targetTimestamp);
-    setMonthlyViewSubTab('database');
-    setCurrentPage('monthly');
   };
 
   // ★ 嚴格防護的修改功能：只准改文字與日期，金額絕不可動
@@ -2136,11 +2016,11 @@ function App() {
       }
     }
 
-    const logDetail = `修改交易紀錄【${record.date} ${record.category} $${record.total.toLocaleString()}】的內容 -> 新內容: 日期: ${mutatedRecord.date}, 分類: ${mutatedRecord.category}, 備註: ${mutatedRecord.note}`;
+    const logDetail = `修改交易紀錄【${targetRecord.date} ${targetRecord.category} $${(targetRecord.total || 0).toLocaleString()}】的內容 -> 新內容: 日期: ${mutatedRecord.date}, 分類: ${mutatedRecord.category}, 備註: ${mutatedRecord.note}`;
     const finalAssetsWithLog = logOperation(newAssets, 'edit', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    sendTransactionPush("✏️ 交易明細修改", `${operatorName} 修改了交易紀錄：${record.note || record.category} ➔ ${mutatedRecord.note}`);
+    sendTransactionPush("✏️ 交易明細修改", `${operatorName} 修改了交易紀錄：${targetRecord.note || targetRecord.category} ➔ ${mutatedRecord.note}`);
     await customAlert("✅ 紀錄修改成功！(金額與帳戶已受保護不可修改)", "修改成功");
   };
 
@@ -2763,7 +2643,7 @@ function App() {
             {currentPage === 'accounts' && <AccountsManager key="accounts" assets={assets} setAssets={handleAssetsUpdate} currentUser={currentUser} operatorName={operatorName} customAlert={customAlert} customConfirm={customConfirm} currentFxRate={currentFxRate} onTransaction={handleTransaction} />}
             {currentPage === 'expense' && (
               <ErrorBoundary title="✍️ 記帳與帳單模組載入異常">
-                <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onAddExpense={handleAddExpense} onAddJointExpense={handleAddJointExpense} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={operatorName} onNavigateTab={setCurrentPage} />
+                <ExpenseEntry key="expense" assets={assets} setAssets={handleAssetsUpdate} onTransaction={handleTransaction} customAlert={customAlert} customConfirm={customConfirm} customPrompt={customPrompt} getBudgetProgressText={getBudgetProgressText} currentUser={operatorName} onNavigateTab={setCurrentPage} />
               </ErrorBoundary>
             )}
             {currentPage === 'settings' && (
@@ -3010,7 +2890,6 @@ const CustomModal = ({ modalConfig, onConfirm, onCancel }) => {
   useEffect(() => {
     if (!modalConfig) return;
     const def = modalConfig.defaultValue || '';
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setInputValue(isNumericPrompt ? formatInputMoney(def) : def);
   }, [modalConfig, isNumericPrompt]);
 

@@ -1,9 +1,6 @@
-// src/components/AccountsManager.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import SegmentedControl from './SegmentedControl';
-
-const formatMoney = (num) => "$" + Math.round(Number(num)).toLocaleString();
 
 const formatInputMoney = (valStr) => {
   if (valStr === '' || valStr === undefined || valStr === null) return '';
@@ -31,7 +28,7 @@ const cleanIconInput = (val) => {
     const segmenter = new Intl.Segmenter();
     const segments = [...segmenter.segment(trimmed)];
     return segments.length > 0 ? segments[0].segment : '';
-  } catch (e) {
+  } catch {
     const chars = Array.from(trimmed);
     return chars.length > 0 ? chars[0] : '';
   }
@@ -40,7 +37,6 @@ const cleanIconInput = (val) => {
 const AccountsManager = ({
   assets,
   setAssets,
-  currentUser,
   operatorName,
   customAlert,
   customConfirm,
@@ -1214,7 +1210,7 @@ const AccountsManager = ({
                           const segmenter = new Intl.Segmenter();
                           const segments = [...segmenter.segment(val)].map(s => s.segment);
                           setAccIcon(segments.length > 0 ? segments[segments.length - 1] : '');
-                        } catch (err) {
+                        } catch {
                           const chars = Array.from(val);
                           setAccIcon(chars.length > 0 ? chars[chars.length - 1] : '');
                         }

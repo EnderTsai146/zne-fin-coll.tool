@@ -26,24 +26,28 @@ export const getBudgetForMonth = (assets, monthStr) => {
 };
 
 export const getRecordMainCategory = (r) => {
-  if (r.type === 'spend' || r.type === 'expense') {
-    let sub = r.subCategory || r.category || r.note || '其他';
-    if (sub.includes('固定') || sub.includes('帳單') || sub.includes('電信') || sub.includes('水電') || sub.includes('房租') || sub.includes('訂閱')) return '固定費用';
-    if (sub.includes('餐') || sub.includes('食') || sub.includes('喝')) return '餐費';
-    if (sub.includes('購') || sub.includes('用') || sub.includes('生')) return '購物';
-    if (sub.includes('玩') || sub.includes('樂') || sub.includes('娛')) return '娛樂';
-    return '其他';
-  } else if (r.type === 'expense' && r.details) {
+  if (r.type === 'expense' && r.details && (r.details.fixed || r.details.food || r.details.shopping || r.details.entertainment || r.details.other)) {
     const fixed = Number(r.details.fixed || 0);
     const food = Number(r.details.food || 0);
     const shopping = Number(r.details.shopping || 0);
     const entertainment = Number(r.details.entertainment || 0);
     const other = Number(r.details.other || 0);
     const maxVal = Math.max(fixed, food, shopping, entertainment, other);
-    if (maxVal === fixed) return '固定費用';
-    if (maxVal === food) return '餐費';
-    if (maxVal === shopping) return '購物';
-    if (maxVal === entertainment) return '娛樂';
+    if (maxVal > 0) {
+      if (maxVal === fixed) return '固定費用';
+      if (maxVal === food) return '餐費';
+      if (maxVal === shopping) return '購物';
+      if (maxVal === entertainment) return '娛樂';
+      return '其他';
+    }
+  }
+
+  if (r.type === 'spend' || r.type === 'expense') {
+    let sub = r.subCategory || r.category || r.note || '其他';
+    if (sub.includes('固定') || sub.includes('帳單') || sub.includes('電信') || sub.includes('水電') || sub.includes('房租') || sub.includes('訂閱')) return '固定費用';
+    if (sub.includes('餐') || sub.includes('食') || sub.includes('喝')) return '餐費';
+    if (sub.includes('購') || sub.includes('用') || sub.includes('生')) return '購物';
+    if (sub.includes('玩') || sub.includes('樂') || sub.includes('娛')) return '娛樂';
     return '其他';
   }
   return '其他';
@@ -86,7 +90,6 @@ export const computeDynamicNecessities = (records, assets) => {
     const m = r.month || r.date.slice(0, 7);
     
     let itemNeedTotal = 0;
-    let itemWantTotal = 0;
     
     const details = r.details || {};
     const catAmounts = [];
@@ -108,16 +111,10 @@ export const computeDynamicNecessities = (records, assets) => {
       const key = `${m}:${category}`;
       const spentNeedInMonth = monthlySpentNeed[key] || 0;
       
-      if (monthlyBudget <= 0) {
-        itemWantTotal += amount;
-      } else {
+      if (monthlyBudget > 0) {
         const allowedNeed = Math.max(0, monthlyBudget - spentNeedInMonth);
         const needAmt = Math.min(amount, allowedNeed);
-        const wantAmt = amount - needAmt;
-        
         itemNeedTotal += needAmt;
-        itemWantTotal += wantAmt;
-        
         monthlySpentNeed[key] = spentNeedInMonth + needAmt;
       }
     });

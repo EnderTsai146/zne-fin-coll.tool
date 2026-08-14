@@ -13,7 +13,7 @@ class SessionLogger {
     try {
       const stored = sessionStorage.getItem(SESSION_LOGS_KEY);
       return stored ? JSON.parse(stored) : [];
-    } catch (e) {
+    } catch {
       return [];
     }
   }

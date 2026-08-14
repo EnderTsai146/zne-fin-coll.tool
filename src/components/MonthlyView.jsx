@@ -35,11 +35,11 @@ const MonthlyView = ({
   loadArchiveMonth,
   onDelete,
   onEdit,
+  onTransaction,
   setAssets,
   currentUser,
   customAlert,
   customConfirm,
-  logOperation,
   newlyAddedRecordTimestamp
 }) => {
     const history = useMemo(() => combinedHistory || [], [combinedHistory]);
@@ -277,24 +277,6 @@ const MonthlyView = ({
         };
     }, [filteredHistory]);
 
-    // Payers distribution stats
-    const payerStats = useMemo(() => {
-        let dogTwd = 0;
-        let shengTwd = 0;
-        
-        filteredHistory.forEach(r => {
-            if (r.isDeleted) return;
-            if (r.type !== 'expense' && r.type !== 'spend') return;
-            const payer = r.payer || '';
-            if (payer.includes('大狗狗') || payer.includes('用戶1') || payer.includes('userA')) {
-                dogTwd += r.total;
-            } else if (payer.includes('阿陞') || payer.includes('用戶2') || payer.includes('userB')) {
-                shengTwd += r.total;
-            }
-        });
-        
-        return { dogTwd, shengTwd };
-    }, [filteredHistory]);
 
     // Debt lists calculation
     const getDebtList = (user) => {
@@ -351,8 +333,11 @@ const MonthlyView = ({
             ]
         };
 
-        setAssets(finalAssets);
-        onTransaction(finalAssets, settlementLog);
+        if (onTransaction) {
+            onTransaction(finalAssets, settlementLog);
+        } else if (setAssets) {
+            setAssets(finalAssets);
+        }
         await customAlert(`🎉 結清成功！已生成一筆結清紀錄。`);
     };
 

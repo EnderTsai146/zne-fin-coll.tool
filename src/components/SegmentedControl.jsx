@@ -40,7 +40,7 @@ const SegmentedControl = ({ options, value, onChange, disabledValue }) => {
       }
       return newStyle;
     });
-  }, [value, optionsKey]);
+  }, [value, optionsKey, options]);
 
   return (
     <div

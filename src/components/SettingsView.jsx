@@ -1,5 +1,4 @@
-// src/components/SettingsView.jsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -20,6 +19,52 @@ import { logger } from '../utils/logger';
 import HelpWizard from './HelpWizard';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
+const ToggleSwitch = ({ checked, onChange, disabled }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    disabled={disabled}
+    onClick={(e) => {
+      e.stopPropagation();
+      if (!disabled && onChange) onChange();
+    }}
+    style={{
+      position: 'relative',
+      display: 'inline-block',
+      width: '48px',
+      height: '28px',
+      padding: 0,
+      border: 'none',
+      outline: 'none',
+      background: checked ? '#30d158' : 'rgba(255,255,255,0.18)',
+      borderRadius: '28px',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      opacity: disabled ? 0.35 : 1,
+      flexShrink: 0,
+      transition: 'background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+      touchAction: 'manipulation',
+      WebkitTapHighlightColor: 'transparent',
+      boxShadow: checked ? '0 0 10px rgba(48, 209, 88, 0.4)' : 'none'
+    }}
+  >
+    <span
+      style={{
+        position: 'absolute',
+        top: '3px',
+        left: checked ? '23px' : '3px',
+        width: '22px',
+        height: '22px',
+        backgroundColor: '#ffffff',
+        borderRadius: '50%',
+        transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.35)',
+        pointerEvents: 'none'
+      }}
+    />
+  </button>
+);
 
 const SettingsView = ({
   assets,
@@ -203,8 +248,8 @@ const SettingsView = ({
   const [showAllHistory, setShowAllHistory] = useState(false);
   
   // Category inputs
-  const rawCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
-  const dynamicCategories = rawCategories.includes("固定費用") ? rawCategories : [...rawCategories.slice(0, 3), "固定費用", ...rawCategories.slice(3)];
+  const rawCategories = useMemo(() => assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"], [assets?.config?.categories]);
+  const dynamicCategories = useMemo(() => rawCategories.includes("固定費用") ? rawCategories : [...rawCategories.slice(0, 3), "固定費用", ...rawCategories.slice(3)], [rawCategories]);
   const [budgetInputs, setBudgetInputs] = useState({});
 
   const isConfiguredInDb = assets?.budgets && assets.budgets[selectedBudgetMonth] !== undefined;
@@ -441,7 +486,7 @@ const SettingsView = ({
     });
   }, [dbLogs, logSearchText, logFilterAction, logFilterOperator]);
 
-  const fetchLogs = async (isInitial = false) => {
+  const fetchLogs = useCallback(async (isInitial = false) => {
     if (loadingLogs) return;
     setLoadingLogs(true);
     try {
@@ -493,7 +538,7 @@ const SettingsView = ({
     } finally {
       setLoadingLogs(false);
     }
-  };
+  }, [loadingLogs, logStartDate, logEndDate, lastVisibleDoc]);
 
   useEffect(() => {
     if (activeSubTab === 'logs') {
@@ -508,7 +553,7 @@ const SettingsView = ({
       setLogStartDate('');
       setLogEndDate('');
     }
-  }, [activeSubTab, logStartDate, logEndDate]);
+  }, [activeSubTab, logStartDate, logEndDate, fetchLogs]);
 
   const formatTimestamp = (isoStr) => {
     if (!isoStr) return '';
@@ -653,7 +698,7 @@ const SettingsView = ({
 
   const currentNotifFromAssets = useMemo(() => {
     return { ...defaultNotifSettings, ...(dbNotifObj || {}) };
-  }, [JSON.stringify(dbNotifObj || {}), defaultNotifSettings]);
+  }, [dbNotifObj, defaultNotifSettings]);
 
   const [localNotifOverride, setLocalNotifOverride] = useState(null);
   const localNotifSettings = localNotifOverride || currentNotifFromAssets;
@@ -823,52 +868,6 @@ const SettingsView = ({
     saveToCloud(updatedAssets);
     await customAlert("🧹 已清理完畢，目前僅保留本機裝置。");
   };
-
-  const ToggleSwitch = ({ checked, onChange, disabled }) => (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled && onChange) onChange();
-      }}
-      style={{
-        position: 'relative',
-        display: 'inline-block',
-        width: '48px',
-        height: '28px',
-        padding: 0,
-        border: 'none',
-        outline: 'none',
-        background: checked ? '#30d158' : 'rgba(255,255,255,0.18)',
-        borderRadius: '28px',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.35 : 1,
-        flexShrink: 0,
-        transition: 'background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        touchAction: 'manipulation',
-        WebkitTapHighlightColor: 'transparent',
-        boxShadow: checked ? '0 0 10px rgba(48, 209, 88, 0.4)' : 'none'
-      }}
-    >
-      <span
-        style={{
-          position: 'absolute',
-          top: '3px',
-          left: checked ? '23px' : '3px',
-          width: '22px',
-          height: '22px',
-          backgroundColor: '#ffffff',
-          borderRadius: '50%',
-          transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: '0 2px 5px rgba(0,0,0,0.35)',
-          pointerEvents: 'none'
-        }}
-      />
-    </button>
-  );
 
   return (
     <div className="page-transition-enter" style={{ padding: '0 16px' }}>
@@ -1602,26 +1601,8 @@ const SettingsView = ({
         )}
 
         {/* === 6. 系統資訊 === */}
-        {activeSubTab === 'info' && (() => {
-          let statusText = '偵測中...';
-          let statusColor = 'var(--text-secondary)';
-          let showBtn = false;
-          if (notificationPermission === 'granted') {
-            statusText = '已開啟通知 系統運作中 ✅';
-            statusColor = 'var(--accent-green)';
-          } else if (notificationPermission === 'denied') {
-            statusText = '通知已遭封鎖 ❌ (請至瀏覽器設定允許)';
-            statusColor = 'var(--accent-red)';
-          } else if (notificationPermission === 'unsupported') {
-            statusText = '不支援通知 🚫';
-            statusColor = 'var(--text-tertiary)';
-          } else {
-            statusText = '尚未啟用通知 🔔';
-            statusColor = 'var(--accent-orange)';
-            showBtn = true;
-          }
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {activeSubTab === 'info' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
                   <span>系統版本</span>
@@ -1887,8 +1868,7 @@ const SettingsView = ({
                 </button>
               </div>
             </div>
-          );
-        })()}
+        )}
 
       </div>
 
@@ -1910,13 +1890,13 @@ const SettingsView = ({
 // --- Session Diagnostic Logs Modal Component ---
 const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
   const [copied, setCopied] = useState(false);
-  const [logs, setLogs] = useState([]);
+  const [clearVersion, setClearVersion] = useState(0);
 
-  useEffect(() => {
-    if (isOpen) {
-      setLogs([...logger.getLogs()].reverse());
-    }
-  }, [isOpen]);
+  const logs = useMemo(() => {
+    void clearVersion;
+    if (!isOpen) return [];
+    return [...logger.getLogs()].reverse();
+  }, [isOpen, clearVersion]);
 
   if (!isOpen) return null;
 
@@ -1945,7 +1925,7 @@ const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
 
   const handleClearLogs = () => {
     logger.clearSessionLogs();
-    setLogs([]);
+    setClearVersion(v => v + 1);
   };
 
   return (

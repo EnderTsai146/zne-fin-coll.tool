@@ -26,14 +26,11 @@ const parseMoney = (valStr) => {
 
 const InvestmentView = ({
   assets,
-  setAssets,
   isFetchingArchive,
-  newlyAddedInvestSymbol,
   newlyAddedInvestPayer,
   operatorName,
   customAlert,
   customConfirm,
-  customPrompt,
   currentFxRate,
   onTransaction
 }) => {
@@ -77,7 +74,7 @@ const InvestmentView = ({
   // Account binding
   const [selectedAccountId, setSelectedAccountId] = useState('');
   
-  const accounts = assets?.accounts || [];
+  const accounts = useMemo(() => assets?.accounts || [], [assets?.accounts]);
   const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
 
   // Search suggest states
@@ -100,19 +97,7 @@ const InvestmentView = ({
     }
   }, [stockShares, stockPrice, stockMarket, currentFxRate, liveFx]);
 
-  // Handle symbol search
-  useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-      if (stockSymbol && stockSymbol.length >= 2) {
-        performSearch(stockSymbol);
-      } else {
-        setSearchResults([]);
-      }
-    }, 400);
-    return () => clearTimeout(delayDebounce);
-  }, [stockSymbol]);
-
-  const performSearch = async (val) => {
+  const performSearch = React.useCallback(async (val) => {
     setIsSearching(true);
     try {
       const response = await fetch(`${MY_GOOGLE_API_URL}?search=${encodeURIComponent(val)}`);
@@ -125,7 +110,19 @@ const InvestmentView = ({
     } finally {
       setIsSearching(false);
     }
-  };
+  }, []);
+
+  // Handle symbol search
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      if (stockSymbol && stockSymbol.length >= 2) {
+        performSearch(stockSymbol);
+      } else {
+        setSearchResults([]);
+      }
+    }, 400);
+    return () => clearTimeout(delayDebounce);
+  }, [stockSymbol, performSearch]);
 
   // Invest Cart state
   const [investCart, setInvestCart] = useState([]);
@@ -152,15 +149,14 @@ const InvestmentView = ({
   const safeUserB = assets.userInvestments?.userB || { stock: 0, fund: 0, deposit: 0, other: 0 };
 
   const currentData = activeTab === 'jointCash' ? safeJoint : (activeTab === 'userA' ? safeUserA : safeUserB);
-  const currentHistoryFilter = activeTab === 'jointCash' ? '共同' : (activeTab === 'userA' ? '大狗狗' : '阿陞');
   
-  const matchesPayer = (payer) => {
+  const matchesPayer = React.useCallback((payer) => {
     if (!payer) return false;
     if (activeTab === 'jointCash') return payer.includes('共同');
     if (activeTab === 'userA') return payer.includes('大狗狗');
     if (activeTab === 'userB') return payer.includes('阿陞');
     return false;
-  };
+  }, [activeTab]);
 
   const stockHoldings = useMemo(() => {
     const holdings = {};
@@ -225,7 +221,7 @@ const InvestmentView = ({
         });
       } else if (r.type?.includes('sell')) {
         let sellQty = Number(r.shares);
-        let revenueTwd = Number(r.total);
+        let revenueTwd = Number(r.total) || (r.usdAmount ? Math.round(Number(r.usdAmount) * (r.fxRate || currentFxRate || 31.5)) : 0);
         let revenueUsd = Number(r.usdAmount || 0);
         let totalCostTwd = 0;
         let totalCostUsd = 0;
@@ -258,12 +254,12 @@ const InvestmentView = ({
     });
 
     return holdings;
-  }, [history, assets.currentStockHoldings, activeTab]);
+  }, [history, assets.currentStockHoldings, activeTab, matchesPayer, currentFxRate]);
 
   const hasHoldings = Object.keys(stockHoldings).length > 0;
 
   // Sync quotes
-  const fetchQuotes = async () => {
+  const fetchQuotes = React.useCallback(async () => {
     if (!hasHoldings) return;
     setIsFetching(true);
     try {
@@ -280,16 +276,33 @@ const InvestmentView = ({
       const res = await fetch(`${MY_GOOGLE_API_URL}?symbols=${encodeURIComponent(allSymbols)}`, { redirect: 'follow' });
       const data = await res.json();
 
+      const prices = {};
+      let usdFx = currentFxRate || 31.5;
+
       if (data?.quoteResponse?.result) {
-        const prices = {};
-        let usdFx = 31.5;
         data.quoteResponse.result.forEach(item => {
           const sym = item.symbol;
           const cleanSym = sym.replace('.TW', '');
-          prices[sym] = item.regularMarketPrice || item.regularMarketPreviousClose || 0;
-          prices[cleanSym] = item.regularMarketPrice || item.regularMarketPreviousClose || 0;
+          const p = item.regularMarketPrice || item.regularMarketPreviousClose || 0;
+          prices[sym] = p;
+          prices[cleanSym] = p;
           if (sym === 'TWD=X' || sym === 'USDTWD=X') {
             usdFx = item.regularMarketPrice || item.regularMarketPreviousClose || 31.5;
+          }
+        });
+        setLivePrices(prices);
+        setLiveFx(usdFx);
+        setLastUpdated(new Date().toLocaleTimeString());
+      } else if (data && typeof data === 'object' && !data.error) {
+        // Support GAS backend dictionary format: { [symbol]: { price: number, currency: string } | number }
+        Object.keys(data).forEach(sym => {
+          const item = data[sym];
+          const p = (typeof item === 'object' && item !== null) ? (item.price || 0) : Number(item || 0);
+          const cleanSym = sym.replace('.TW', '');
+          prices[sym] = p;
+          prices[cleanSym] = p;
+          if (sym === 'TWD=X' || sym === 'USDTWD=X') {
+            usdFx = p || 31.5;
           }
         });
         setLivePrices(prices);
@@ -301,11 +314,11 @@ const InvestmentView = ({
     } finally {
       setIsFetching(false);
     }
-  };
+  }, [hasHoldings, stockHoldings, currentFxRate]);
 
   useEffect(() => {
     fetchQuotes();
-  }, [refreshKey, hasHoldings]);
+  }, [refreshKey, fetchQuotes]);
 
   // Calculate Net Worth & Profits
   const holdingList = useMemo(() => {
@@ -358,7 +371,7 @@ const InvestmentView = ({
         return true;
       })
       .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.timestamp || '').localeCompare(a.timestamp || ''));
-  }, [history, dateRange, activeTab]);
+  }, [history, dateRange, matchesPayer]);
 
   // Trade Cart Handlers
   const handleAddInvestCart = async () => {
@@ -509,6 +522,9 @@ const InvestmentView = ({
           newAssets.userInvestments[ownerKey][invTypeKey] = Math.max(0, (newAssets.userInvestments[ownerKey][invTypeKey] || 0) - principalTwd);
         }
 
+        const revenueTwd = item.stockMarket === 'US' && item.settleCurrency === 'USD' ? Math.round(item.usTotalUsd * item.usFxRate) : item.investAmount;
+        record.total = revenueTwd;
+        record.fxRate = item.usFxRate || currentFxRate || 31.5;
         record.note = `${item.stockMarket === 'US' ? '美股' : '台股'}賣出 (代碼: ${item.stockSymbol || '無'}, 帳戶: ${item.accountNickname})`;
       } else if (item.investAction === 'day_trade') {
         const isProfit = item.dayTradeResult === 'profit';
@@ -531,52 +547,6 @@ const InvestmentView = ({
     setInvestCart([]);
     setViewTab('dashboard');
     await customAlert("🎉 投資交易執行成功，帳戶餘額已自動更新！");
-  };
-
-  // Render Subcomponent StockCard
-  const StockCard = ({ h }) => {
-    const isExpanded = expandedSymbol === h.sym;
-    const isUs = h.market === 'US';
-    const profitColor = h.profitTwd >= 0 ? '#34c759' : '#ff453a';
-    const profitSign = h.profitTwd >= 0 ? '+' : '';
-
-    return (
-      <div className="glass-card" style={{ padding: '12px 14px', marginBottom: '8px', cursor: 'pointer' }} onClick={() => setExpandedSymbol(isExpanded ? null : h.sym)}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '12px', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontWeight: '800', fontSize: '0.9rem', color: '#fff' }}>{h.sym}</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{isUs ? '🇺🇸 美股複委託' : '🇹🇼 台灣股市'}</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: '600', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
-              {isUs ? formatUsd(h.curPrice) : formatMoney(h.curPrice)}
-            </div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
-              均價: {isUs ? formatUsd(h.avgCost) : formatMoney(h.avgCost)}
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontWeight: '750', fontSize: '0.82rem', color: 'var(--text-primary)' }}>{h.shares.toLocaleString()} 股</div>
-            <div style={{ fontWeight: '700', fontSize: '0.74rem', color: profitColor }}>
-              {profitSign}{h.profitTwd.toLocaleString()} ({profitSign}{h.profitRate.toFixed(2)}%)
-            </div>
-          </div>
-        </div>
-
-        {isExpanded && (
-          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.06)', fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>投入台幣本金:</span>
-              <span style={{ fontWeight: '600' }}>${Math.round(h.totalCostTwd).toLocaleString()} TWD</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>目前市值估算:</span>
-              <span style={{ fontWeight: '600', color: 'var(--accent-blue)' }}>${Math.round(h.marketValue).toLocaleString()} TWD</span>
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -706,7 +676,14 @@ const InvestmentView = ({
                   <div style={{ textAlign: 'center' }}>市價 / 均價</div>
                   <div style={{ textAlign: 'right' }}>股數 / 損益</div>
                 </div>
-                {holdingList.map(h => <StockCard key={h.sym} h={h} />)}
+                {holdingList.map(h => (
+                  <StockCard
+                    key={h.sym}
+                    h={h}
+                    isExpanded={expandedSymbol === h.sym}
+                    onToggleExpand={() => setExpandedSymbol(expandedSymbol === h.sym ? null : h.sym)}
+                  />
+                ))}
               </>
             )}
 
@@ -1102,6 +1079,51 @@ const InvestmentView = ({
         </div>
       )}
 
+    </div>
+  );
+};
+
+// Render Subcomponent StockCard (Module Scope)
+const StockCard = ({ h, isExpanded, onToggleExpand }) => {
+  const isUs = h.market === 'US';
+  const profitColor = h.profitTwd >= 0 ? '#34c759' : '#ff453a';
+  const profitSign = h.profitTwd >= 0 ? '+' : '';
+
+  return (
+    <div className="glass-card" style={{ padding: '12px 14px', marginBottom: '8px', cursor: 'pointer' }} onClick={onToggleExpand}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '12px', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontWeight: '800', fontSize: '0.9rem', color: '#fff' }}>{h.sym}</div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{isUs ? '🇺🇸 美股複委託' : '🇹🇼 台灣股市'}</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontWeight: '600', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+            {isUs ? formatUsd(h.curPrice) : formatMoney(h.curPrice)}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+            均價: {isUs ? formatUsd(h.avgCost) : formatMoney(h.avgCost)}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontWeight: '750', fontSize: '0.82rem', color: 'var(--text-primary)' }}>{h.shares.toLocaleString()} 股</div>
+          <div style={{ fontWeight: '700', fontSize: '0.74rem', color: profitColor }}>
+            {profitSign}{h.profitTwd.toLocaleString()} ({profitSign}{h.profitRate.toFixed(2)}%)
+          </div>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.06)', fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>投入台幣本金:</span>
+            <span style={{ fontWeight: '600' }}>${Math.round(h.totalCostTwd).toLocaleString()} TWD</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>目前市值估算:</span>
+            <span style={{ fontWeight: '600', color: 'var(--accent-blue)' }}>${Math.round(h.marketValue).toLocaleString()} TWD</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

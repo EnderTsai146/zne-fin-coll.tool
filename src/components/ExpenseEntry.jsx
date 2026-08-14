@@ -25,8 +25,6 @@ const parseMoney = (valStr) => {
 const ExpenseEntry = ({
   assets,
   setAssets,
-  onAddExpense,
-  onAddJointExpense,
   onTransaction,
   currentUser,
   customAlert,
@@ -34,15 +32,11 @@ const ExpenseEntry = ({
   getBudgetProgressText,
   onNavigateTab
 }) => {
-  const accounts = assets?.accounts || [];
+  const accounts = useMemo(() => assets?.accounts || [], [assets?.accounts]);
   const loggedInUserName = currentUser || "系統";
   const userKey = loggedInUserName.includes('大狗狗') ? 'userA' : 'userB';
   const partnerKey = userKey === 'userA' ? 'userB' : 'userA';
-
-  const defaultExpenseAccount = accounts.find(a => a.owner === userKey && a.isDefaultExpense) || accounts.find(a => a.owner === 'joint' && a.isDefaultExpense) || accounts[0];
-  const defaultIncomeAccount = accounts.find(a => a.owner === userKey && a.isDefaultIncome) || accounts.find(a => a.owner === 'joint' && a.isDefaultIncome) || accounts[0];
-
-  const expenseCategories = assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"];
+  const expenseCategories = useMemo(() => assets?.config?.categories || ["餐費", "購物", "娛樂", "其他"], [assets?.config?.categories]);
   const incomeCategories = ["薪資", "獎金", "投資", "其他"];
 
   const categoryOptions = useMemo(() => expenseCategories.map(cat => ({ label: cat, value: cat })), [expenseCategories]);
@@ -93,7 +87,7 @@ const ExpenseEntry = ({
     if (defaultJoint && !jointAccountId) {
       setJointAccountId(defaultJoint.id);
     }
-  }, [accounts]);
+  }, [accounts, jointAccountId]);
 
   // ==========================================
   // 3. Income States
@@ -218,8 +212,11 @@ const ExpenseEntry = ({
     }
 
     const finalAssets = { ...assets, bills: updatedBills };
-    setAssets(finalAssets);
-    onTransaction(finalAssets, []);
+    if (onTransaction) {
+      onTransaction(finalAssets, []);
+    } else if (setAssets) {
+      setAssets(finalAssets);
+    }
     setShowEditBillModal(false);
     setShowBillPayModal(false);
     setEditingBill(null);
@@ -231,8 +228,11 @@ const ExpenseEntry = ({
     if (!await customConfirm(`⚠️ 確定要刪除常態帳單【${billToDelete.note || billToDelete.category || billToDelete.name}】嗎？`)) return;
     const updatedBills = safeBills.filter(b => b.id !== billToDelete.id);
     const finalAssets = { ...assets, bills: updatedBills };
-    setAssets(finalAssets);
-    onTransaction(finalAssets, []);
+    if (onTransaction) {
+      onTransaction(finalAssets, []);
+    } else if (setAssets) {
+      setAssets(finalAssets);
+    }
     setShowBillPayModal(false);
     setShowEditBillModal(false);
     setSelectedBill(null);
@@ -299,7 +299,7 @@ const ExpenseEntry = ({
   const [accountModalConfig, setAccountModalConfig] = useState(null);
 
   // Custom visual grid account picker (Grouped by Owner & 4 Account Types)
-  const renderAccountSelector = (selectedValue, onChange, filterFn = () => true, defaultAccField = 'isDefaultExpense') => {
+  const renderAccountSelector = (selectedValue, onChange, filterFn = () => true) => {
     const list = accounts.filter(filterFn);
     if (list.length === 0) {
       return <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '6px' }}>無相符帳戶</div>;
@@ -932,8 +932,11 @@ const ExpenseEntry = ({
       ]
     };
 
-    setAssets(finalAssets);
-    onTransaction(finalAssets, []); // Trigger cloud save
+    if (onTransaction) {
+      onTransaction(finalAssets, []); // Trigger cloud save
+    } else if (setAssets) {
+      setAssets(finalAssets);
+    }
     setShowBillPayModal(false);
     await customAlert(`✅ 帳單【${selectedBill.note || selectedBill.category || selectedBill.name}】繳費成功！\n由帳戶【${acc.nickname}】支付 $${amount.toLocaleString()}`);
   };
