@@ -1,16 +1,16 @@
-# React + Vite
+# 🥔 馬鈴薯管家 (Financial Tracker)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Apple Liquid Glass 設計風格之情侶/伴侶雙人財務管理 PWA 應用程式。
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## ☁️ Google Apps Script (GAS) 後端中繼站
 
-## React Compiler
+本專案於根目錄提供了 [google-apps-script-backend.js](file:///Users/endertsai/financial-tracker阿陞修改前備份/google-apps-script-backend.js)，此檔案為 Google Apps Script (`script.google.com`) 的完整後端服務代碼備份，負責三大核心功能：
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **台美股與外幣行情查詢 (`doGet`)**：Yahoo Finance 報價與搜尋代理。
+2. **FCM 背景推播發送 (`doPost -> action: 'push'`)**：向 Firebase Cloud Messaging 轉發推播，確保 App 關閉時手機依然能接收通知。
+3. **Google 雲端硬碟自動備份 (`doPost -> action: 'backup'`)**：每日自動將最新財務資料保存為 JSON 檔至 Google Drive。
 
-## Expanding the ESLint configuration
+> **⚠️ 注意事項**：未來任何 AI 或開發者進行推播或行情修改時，請同步維護 [google-apps-script-backend.js](file:///Users/endertsai/financial-tracker阿陞修改前備份/google-apps-script-backend.js) 檔案，避免任何功能遺漏。
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
