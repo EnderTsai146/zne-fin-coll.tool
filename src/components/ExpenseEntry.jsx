@@ -66,11 +66,11 @@ const ExpenseEntry = ({
     const isUserChanged = lastUserKeyRef.current !== userKey;
     lastUserKeyRef.current = userKey;
 
-    const myDefault = accounts.find(a => a.owner === userKey && a.isDefaultExpense) || 
-                      accounts.find(a => a.owner === 'joint' && a.isDefaultExpense) || 
-                      accounts.find(a => a.owner === userKey) || 
-                      accounts.find(a => a.owner === 'joint') || 
-                      accounts[0];
+    const myDefault = accounts.find(a => a.owner === userKey && a.isDefaultExpense) ||
+      accounts.find(a => a.owner === 'joint' && a.isDefaultExpense) ||
+      accounts.find(a => a.owner === userKey) ||
+      accounts.find(a => a.owner === 'joint') ||
+      accounts[0];
     if (myDefault && (!persAccountId || isUserChanged)) {
       setPersAccountId(myDefault.id);
     }
@@ -104,20 +104,31 @@ const ExpenseEntry = ({
 
   const lastUserKeyIncRef = useRef(userKey);
 
-  // Auto pre-select default account for income
+  // Auto pre-select default account for income (Option A: Strict personal vs joint separation)
   useEffect(() => {
     const isUserChanged = lastUserKeyIncRef.current !== userKey;
     lastUserKeyIncRef.current = userKey;
 
-    const defaultInc = accounts.find(a => a.owner === userKey && a.isDefaultIncome) || 
-                       accounts.find(a => a.owner === 'joint' && a.isDefaultIncome) || 
-                       accounts.find(a => a.owner === userKey) || 
-                       accounts.find(a => a.owner === 'joint') || 
-                       accounts[0];
-    if (defaultInc && (!incAccountId || isUserChanged)) {
-      setIncAccountId(defaultInc.id);
+    if (incomeTab === 'joint') {
+      const currentAcc = accounts.find(a => a.id === incAccountId);
+      if (!currentAcc || currentAcc.owner !== 'joint' || currentAcc.type === 'credit') {
+        const jointAcc = accounts.find(a => a.owner === 'joint' && a.type !== 'credit' && a.isDefaultIncome) ||
+          accounts.find(a => a.owner === 'joint' && a.type !== 'credit');
+        if (jointAcc) {
+          setIncAccountId(jointAcc.id);
+        }
+      }
+    } else {
+      const currentAcc = accounts.find(a => a.id === incAccountId);
+      if (!currentAcc || currentAcc.owner !== userKey || currentAcc.type === 'credit' || isUserChanged) {
+        const defaultInc = accounts.find(a => a.owner === userKey && a.type !== 'credit' && a.isDefaultIncome) ||
+          accounts.find(a => a.owner === userKey && a.type !== 'credit');
+        if (defaultInc) {
+          setIncAccountId(defaultInc.id);
+        }
+      }
     }
-  }, [accounts, userKey, incAccountId]);
+  }, [accounts, userKey, incomeTab, incAccountId]);
 
   // ==========================================
   // 4. Transfer (劃撥) States
@@ -315,10 +326,10 @@ const ExpenseEntry = ({
     const isUserChanged = lastUserKeyBillRef.current !== userKey;
     lastUserKeyBillRef.current = userKey;
 
-    const defaultBillPay = accounts.find(a => a.owner === userKey && a.isDefaultExpense) || 
-                           accounts.find(a => a.owner === 'joint' && a.isDefaultExpense) || 
-                           accounts.find(a => a.owner === 'joint') || 
-                           accounts[0];
+    const defaultBillPay = accounts.find(a => a.owner === userKey && a.isDefaultExpense) ||
+      accounts.find(a => a.owner === 'joint' && a.isDefaultExpense) ||
+      accounts.find(a => a.owner === 'joint') ||
+      accounts[0];
     if (defaultBillPay && (!billPayAccountId || isUserChanged)) {
       setBillPayAccountId(defaultBillPay.id);
     }
@@ -353,7 +364,7 @@ const ExpenseEntry = ({
       return;
     }
     const acc = accounts.find(a => a.id === persAccountId);
-    
+
     if (acc.type !== 'credit' && acc.balance < parsedAmount) {
       await customAlert(`⚠️ 帳戶【${acc.nickname}】餘額不足！ (餘額: $${acc.balance.toLocaleString()})`);
       return;
@@ -512,7 +523,7 @@ const ExpenseEntry = ({
       return;
     }
     const acc = accounts.find(a => a.id === jointAccountId);
-    
+
     if (acc.type !== 'credit' && acc.balance < parsedAmount) {
       await customAlert(`⚠️ 帳戶【${acc.nickname}】餘額不足！ (餘額: $${acc.balance.toLocaleString()})`);
       return;
@@ -661,6 +672,18 @@ const ExpenseEntry = ({
       return;
     }
     const acc = accounts.find(a => a.id === incAccountId);
+    if (!acc) {
+      await customAlert("找不到指定的存入帳戶！");
+      return;
+    }
+    if (incomeTab === 'joint' && acc.owner !== 'joint') {
+      await customAlert("⚠️ 共同公費入帳必須存入【共同公費帳戶】！");
+      return;
+    }
+    if (incomeTab === 'personal' && acc.owner !== userKey) {
+      await customAlert("⚠️ 個人收入請存入您的【個人專屬帳戶】！");
+      return;
+    }
 
     const payload = {
       id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
@@ -669,6 +692,7 @@ const ExpenseEntry = ({
       note: incNote.trim(),
       accountId: incAccountId,
       accountNickname: acc.nickname,
+      incomeScope: incomeTab,
       date: txDate
     };
 
@@ -687,6 +711,18 @@ const ExpenseEntry = ({
         return;
       }
       const acc = accounts.find(a => a.id === incAccountId);
+      if (!acc) {
+        await customAlert("找不到指定的存入帳戶！");
+        return;
+      }
+      if (incomeTab === 'joint' && acc.owner !== 'joint') {
+        await customAlert("⚠️ 共同公費入帳必須存入【共同公費帳戶】！");
+        return;
+      }
+      if (incomeTab === 'personal' && acc.owner !== userKey) {
+        await customAlert("⚠️ 個人收入請存入您的【個人專屬帳戶】！");
+        return;
+      }
       finalItems.push({
         id: Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         cat: incCat,
@@ -694,6 +730,7 @@ const ExpenseEntry = ({
         note: incNote.trim(),
         accountId: incAccountId,
         accountNickname: acc.nickname,
+        incomeScope: incomeTab,
         date: txDate
       });
     }
@@ -738,10 +775,11 @@ const ExpenseEntry = ({
       type: 'income',
       category: item.cat,
       total: item.amount,
-      payer: loggedInUserName,
+      payer: (item.incomeScope || incomeTab) === 'joint' ? '共同帳戶' : loggedInUserName,
       accountId: item.accountId,
       operator: loggedInUserName,
       note: item.note || item.cat,
+      incomeScope: item.incomeScope || incomeTab,
       timestamp: new Date().toISOString(),
       batchId,
       batchCount: isBatch ? finalItems.length : undefined,
@@ -1030,11 +1068,11 @@ const ExpenseEntry = ({
         const diffDays = Math.ceil((dueDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         const unpaidAmount = Math.abs(card.balance || 0);
 
-        const linkedBank = card.linkedBankAccountId 
+        const linkedBank = card.linkedBankAccountId
           ? (assets?.accounts || []).find(a => a && a.id === card.linkedBankAccountId)
           : null;
-        
-        let linkedBankName = linkedBank 
+
+        let linkedBankName = linkedBank
           ? `${linkedBank.owner === 'joint' ? '共同' : (linkedBank.owner === 'userA' ? '大狗狗' : '阿陞')}${linkedBank.nickname}`
           : '未綁定活儲';
 
@@ -1090,7 +1128,7 @@ const ExpenseEntry = ({
 
   return (
     <div className="overview-container" style={{ paddingBottom: '90px' }}>
-      
+
       {/* Aurora Header Banner */}
       <div className="header-glass-banner" style={{ marginBottom: '20px' }}>
         <div className="banner-glow-spot" />
@@ -1323,11 +1361,11 @@ const ExpenseEntry = ({
                 <span style={{ fontSize: '1.4rem' }}>👤</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#0a84ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>【{loggedInUserName} 個人專屬支出】</span>
+                    <span>【個人支出】</span>
                     <span style={{ fontSize: '0.62rem', background: '#0a84ff', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>私有</span>
                   </div>
                   <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: '2px', lineHeight: '1.4' }}>
-                    💡 此為個人私有消費，僅從個人帳戶扣款，<strong>絕不計入公費對帳</strong>。
+                    此為個人私有支出，僅從個人帳戶扣款。
                   </div>
                 </div>
               </div>
@@ -1517,11 +1555,11 @@ const ExpenseEntry = ({
                 <span style={{ fontSize: '1.4rem' }}>🏫</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#30d158', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>【兩人共同公費支出 · 會計對帳】</span>
+                    <span>【共同公費支出】</span>
                     <span style={{ fontSize: '0.62rem', background: '#30d158', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>公費</span>
                   </div>
                   <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)', marginTop: '2px', lineHeight: '1.4' }}>
-                    ⚠️ <strong>注意：</strong>此筆為兩人共同支出。若選擇個人帳戶支付將自動列為<strong>「個人代墊款」</strong>並納入結算對帳！
+                    ⚠️ <strong>注意：</strong>正在紀錄共同支出。若選擇個人帳戶支付將列為<strong>「個人代墊款」</strong>並計入代墊未結。
                   </div>
                 </div>
               </div>
@@ -1783,15 +1821,26 @@ const ExpenseEntry = ({
           <div style={{ padding: '0 4px', marginBottom: '16px' }}>
             <SegmentedControl
               options={[
-                { label: '👤 個人收入', value: 'personal', activeColor: '#30d158' },
+                { label: '👤 個人收入', value: 'personal', activeColor: '#0a84ff' },
                 { label: '🤝 共同入帳', value: 'joint', activeColor: '#30d158' },
               ]}
               value={incomeTab}
-              onChange={setIncomeTab}
+              onChange={(newTab) => {
+                setIncomeTab(newTab);
+                if (newTab === 'joint') {
+                  const jointAcc = accounts.find(a => a.owner === 'joint' && a.type !== 'credit' && a.isDefaultIncome) ||
+                    accounts.find(a => a.owner === 'joint' && a.type !== 'credit');
+                  if (jointAcc) setIncAccountId(jointAcc.id);
+                } else {
+                  const persAcc = accounts.find(a => a.owner === userKey && a.type !== 'credit' && a.isDefaultIncome) ||
+                    accounts.find(a => a.owner === userKey && a.type !== 'credit');
+                  if (persAcc) setIncAccountId(persAcc.id);
+                }
+              }}
             />
           </div>
 
-          <div className="glass-card expense-mode-glow-green" style={{ padding: '20px 18px' }}>
+          <div className={`glass-card ${incomeTab === 'joint' ? 'expense-mode-glow-green' : 'expense-mode-glow-blue'}`} style={{ padding: '20px 18px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span>💰 {incomeTab === 'personal' ? '個人收入入帳' : '共同公費入帳'}</span>
             </h3>
@@ -1812,21 +1861,21 @@ const ExpenseEntry = ({
                   options={incomeCategories.map(c => ({ label: c, value: c }))}
                   value={incCat}
                   onChange={setIncCat}
-                  activeColor="#30d158"
+                  activeColor={incomeTab === 'joint' ? '#30d158' : '#0a84ff'}
                 />
               </div>
 
-              {/* Account (iOS UIMenu Context Menu Picker) */}
+              {/* Account (iOS UIMenu Context Menu Picker - Filtered strictly by incomeTab) */}
               <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                 <IOSAccountMenuPicker
-                  label="💳 存入帳戶"
+                  label={incomeTab === 'joint' ? "🏫 存入帳戶 (限共同公費帳戶)" : `💳 存入帳戶 (${loggedInUserName} 個人專屬)`}
                   accounts={accounts}
                   selectedValue={incAccountId}
                   onChange={setIncAccountId}
-                  filterFn={a => a.type !== 'credit'}
+                  filterFn={a => a.type !== 'credit' && (incomeTab === 'joint' ? a.owner === 'joint' : a.owner === userKey)}
                   currentUser={loggedInUserName}
-                  themeColor="#30d158"
-                  modalTitle="選擇存入帳戶"
+                  themeColor={incomeTab === 'joint' ? '#30d158' : '#0a84ff'}
+                  modalTitle={incomeTab === 'joint' ? "選擇共同公費存入帳戶" : "選擇個人存入帳戶"}
                 />
               </div>
 
@@ -1963,7 +2012,39 @@ const ExpenseEntry = ({
               </div>
             )}
 
-            <button onClick={handleIncomeSubmit} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '44px', borderRadius: '12px', marginTop: '16px', fontWeight: '800' }}>
+            {/* Distinct Income Reminder Banner */}
+            <div style={{
+              background: incomeTab === 'joint'
+                ? 'linear-gradient(135deg, rgba(48,209,88,0.18), rgba(48,209,88,0.06))'
+                : 'linear-gradient(135deg, rgba(10,132,255,0.18), rgba(10,132,255,0.06))',
+              border: incomeTab === 'joint'
+                ? '1px solid rgba(48,209,88,0.3)'
+                : '1px solid rgba(10,132,255,0.3)',
+              borderRadius: '14px',
+              padding: '12px 14px',
+              marginTop: '16px',
+              marginBottom: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '1.4rem' }}>{incomeTab === 'joint' ? '🏫' : '👤'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: '850', fontSize: '0.92rem', color: incomeTab === 'joint' ? '#30d158' : '#0a84ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{incomeTab === 'joint' ? '【共同公費入帳】' : `【${loggedInUserName} 個人專屬收入】`}</span>
+                  <span style={{ fontSize: '0.62rem', background: incomeTab === 'joint' ? '#30d158' : '#0a84ff', color: incomeTab === 'joint' ? '#000' : '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                    {incomeTab === 'joint' ? '公費' : '私有'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', marginTop: '2px', lineHeight: '1.4' }}>
+                  {incomeTab === 'joint'
+                    ? '💡 此款項將直接存入「共同公費帳戶」，作為兩人共同公積金與開銷儲備。'
+                    : '💡 此為個人私有收入，僅存入個人私有帳戶，作為個人資產。'}
+                </div>
+              </div>
+            </div>
+
+            <button onClick={handleIncomeSubmit} className="glass-btn primary-gradient-btn" style={{ width: '100%', height: '44px', borderRadius: '12px', marginTop: '10px', fontWeight: '800' }}>
               🚀 確定送出記帳
             </button>
           </div>
@@ -2220,7 +2301,7 @@ const ExpenseEntry = ({
       {showBillPayModal && selectedBill && createPortal(
         <div className="liquid-modal-overlay" onClick={() => setShowBillPayModal(false)} style={{ zIndex: 9999 }}>
           <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: '20px 16px', boxSizing: 'border-box' }}>
-            
+
             {/* Modal Header (Fixed) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexShrink: 0 }}>
               <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2232,7 +2313,7 @@ const ExpenseEntry = ({
 
             {/* Modal Body (Scrollable) */}
             <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '14px', touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
-              
+
               <div style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
                 您正準備繳納帳單【<strong>{selectedBill.note || selectedBill.category || selectedBill.name || '帳單'}</strong>】，應繳金額為 <strong style={{ color: '#fff' }}>${(selectedBill.amount || 0).toLocaleString()} {selectedBill.currency || 'TWD'}</strong>。
               </div>
@@ -2502,7 +2583,7 @@ const ExpenseEntry = ({
       {showCreditCardModal && selectedCcBill && createPortal(
         <div className="liquid-modal-overlay" onClick={() => setShowCreditCardModal(false)} style={{ zIndex: 9999 }}>
           <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto', padding: '20px 16px', boxSizing: 'border-box' }}>
-            
+
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2641,7 +2722,7 @@ const ExpenseEntry = ({
       {pendingSubmitConfig && createPortal(
         <div className="liquid-modal-overlay" onClick={() => setPendingSubmitConfig(null)} style={{ zIndex: 10000, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
           <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px', width: '92%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: '20px 18px', boxSizing: 'border-box', background: 'rgba(28,28,30,0.96)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)', borderRadius: '20px' }}>
-            
+
             {/* Modal Header (Fixed) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexShrink: 0 }}>
               <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2653,7 +2734,7 @@ const ExpenseEntry = ({
 
             {/* Modal Body (Scrollable) */}
             <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '14px', touchAction: 'pan-y' }}>
-              
+
               {/* Operator & Date Info Card */}
               <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 <div>👤 記帳操作者：<strong style={{ color: '#fff' }}>{pendingSubmitConfig.operator}</strong></div>
