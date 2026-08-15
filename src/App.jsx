@@ -129,18 +129,26 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
 
   useLayoutEffect(() => {
     if (!navRef.current) return;
+    const isCenter = currentPage === 'overview' || currentPage === 'expense';
+    if (isCenter) {
+      setPillStyle({
+        opacity: 0,
+        display: 'none',
+        transition: 'none'
+      });
+      return;
+    }
     const idx = getNavIndex(currentPage);
     if (idx < 0) return;
     const child = navRef.current.children[idx + 1];
     if (!child) return;
     
-    const isCenter = currentPage === 'overview' || currentPage === 'expense';
-    
     setPillStyle({
       width: child.offsetWidth,
       height: child.offsetHeight,
       transform: `translateX(${child.offsetLeft}px)`,
-      opacity: isCenter ? 0 : 1, // Fade out the pill if the center button is active to prevent double overlap
+      opacity: 1,
+      display: 'block',
       borderRadius: '16px',
     });
   }, [currentPage]);
@@ -465,6 +473,11 @@ function App() {
     error: null,
     status: 'checking' // 'checking', 'unsupported', 'permission_denied', 'ready', 'failed'
   });
+
+  // Scroll to top automatically when changing pages (Fix Scroll Jump)
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [currentPage]);
 
   const sanitizeMessage = (msg) => {
     if (!msg) return '';

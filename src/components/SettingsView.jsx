@@ -870,7 +870,7 @@ const SettingsView = ({
   };
 
   return (
-    <div className="page-transition-enter" style={{ padding: '0 16px' }}>
+    <div style={{ padding: '0 16px' }}>
       <h1 className="page-title">管家設定</h1>
 
       {/* Settings Navigation Sub-Tabs */}

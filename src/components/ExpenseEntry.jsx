@@ -1184,7 +1184,7 @@ const ExpenseEntry = ({
 
           {/* Sub Tab: Personal Expense */}
           {activeTab === 'personal' && (
-            <div className="glass-card expense-mode-glow-blue" style={{ padding: '20px 18px' }}>
+            <div className={`glass-card ${userKey === 'userA' ? 'expense-mode-glow-purple' : 'expense-mode-glow-green'}`} style={{ padding: '20px 18px' }}>
               <div className="inset-group-card">
                 {/* Date */}
                 <div className="inset-group-row">
@@ -1197,7 +1197,7 @@ const ExpenseEntry = ({
                 {/* Category */}
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>🏷️ 分類</span>
-                  <SegmentedControl options={categoryOptions} value={persCat} onChange={setPersCat} activeColor="#0a84ff" />
+                  <SegmentedControl options={categoryOptions} value={persCat} onChange={setPersCat} activeColor={userKey === 'userA' ? '#AF52DE' : '#30D158'} />
                 </div>
 
                 {/* Account (iOS UIMenu Context Menu Picker) */}
@@ -1378,7 +1378,7 @@ const ExpenseEntry = ({
 
           {/* Sub Tab: Joint Expense */}
           {activeTab === 'joint' && (
-            <div className="glass-card expense-mode-glow-green" style={{ padding: '20px 18px' }}>
+            <div className="glass-card expense-mode-glow-blue" style={{ padding: '20px 18px' }}>
               <div className="inset-group-card">
                 {/* Date */}
                 <div className="inset-group-row">
@@ -1391,7 +1391,7 @@ const ExpenseEntry = ({
                 {/* Category */}
                 <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
                   <span className="inset-group-label" style={{ alignSelf: 'flex-start' }}>🏷️ 分類</span>
-                  <SegmentedControl options={categoryOptions} value={jointCat} onChange={setJointCat} activeColor="#30d158" />
+                  <SegmentedControl options={categoryOptions} value={jointCat} onChange={setJointCat} activeColor="#007AFF" />
                 </div>
 
                 {/* Account (iOS UIMenu Context Menu Picker) */}
@@ -1840,7 +1840,7 @@ const ExpenseEntry = ({
             />
           </div>
 
-          <div className={`glass-card ${incomeTab === 'joint' ? 'expense-mode-glow-green' : 'expense-mode-glow-blue'}`} style={{ padding: '20px 18px' }}>
+          <div className={`glass-card ${incomeTab === 'joint' ? 'expense-mode-glow-blue' : (userKey === 'userA' ? 'expense-mode-glow-purple' : 'expense-mode-glow-green')}`} style={{ padding: '20px 18px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span>💰 {incomeTab === 'personal' ? '個人收入入帳' : '共同公費入帳'}</span>
             </h3>

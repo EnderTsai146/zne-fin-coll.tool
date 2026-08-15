@@ -552,8 +552,16 @@ const MonthlyView = ({
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
                                                     <span style={{
                                                         fontSize: '0.64rem',
-                                                        background: record.type === 'income' ? 'rgba(48,209,88,0.12)' : (record.type === 'expense' ? 'rgba(10,132,255,0.12)' : 'rgba(255,255,255,0.08)'),
-                                                        color: record.type === 'income' ? '#30d158' : (record.type === 'expense' ? '#0a84ff' : 'var(--text-secondary)'),
+                                                        background: record.type === 'income'
+                                                            ? 'rgba(48,209,88,0.12)'
+                                                            : (record.type === 'expense'
+                                                                ? ((record.payer || '').includes('大狗') ? 'rgba(175,82,222,0.12)' : 'rgba(48,209,88,0.12)')
+                                                                : (record.type === 'spend' ? 'rgba(0,122,255,0.12)' : 'rgba(255,255,255,0.08)')),
+                                                        color: record.type === 'income'
+                                                            ? '#30D158'
+                                                            : (record.type === 'expense'
+                                                                ? ((record.payer || '').includes('大狗') ? '#AF52DE' : '#30D158')
+                                                                : (record.type === 'spend' ? '#007AFF' : 'var(--text-secondary)')),
                                                         padding: '1px 6px',
                                                         borderRadius: '4px',
                                                         fontWeight: '700'

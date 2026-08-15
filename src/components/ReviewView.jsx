@@ -546,9 +546,9 @@ const ReviewView = ({ assets, combinedHistory, loadArchiveMonth }) => {
         <div className="glass-card">
           <h3 style={{ margin: '0 0 16px 0', fontWeight: 700, fontSize: '1.05rem' }}>👥 雙人帳戶消費分析</h3>
           {[
-            { label: '大狗狗 🐕', total: stats.expenseUserA, items: stats.topUserA, color: 'var(--accent-pink)', borderColor: 'rgba(255,45,85,0.25)' },
-            { label: '阿陞 🐶', total: stats.expenseUserB, items: stats.topUserB, color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.25)' },
-            { label: '共同帳戶 🏫', total: stats.expenseJoint, items: stats.topJoint, color: 'var(--accent-orange)', borderColor: 'rgba(255,149,0,0.25)' },
+            { label: '大狗狗 🐕', total: stats.expenseUserA, items: stats.topUserA, color: 'var(--color-userA)', borderColor: 'rgba(175,82,222,0.25)' },
+            { label: '阿陞 🐶', total: stats.expenseUserB, items: stats.topUserB, color: 'var(--color-userB)', borderColor: 'rgba(48,209,88,0.25)' },
+            { label: '共同帳戶 🏫', total: stats.expenseJoint, items: stats.topJoint, color: 'var(--color-joint)', borderColor: 'rgba(0,122,255,0.25)' },
           ].map((acc, idx) => (
             <div key={idx} className="review-account-block" style={{ borderColor: acc.borderColor }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>

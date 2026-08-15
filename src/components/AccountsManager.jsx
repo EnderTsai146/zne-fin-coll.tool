@@ -684,21 +684,21 @@ const AccountsManager = ({
           {renderOwnerSection(
             userKey,
             userKey === 'userA' ? "🐕 大狗狗的個人帳戶 (主要帳戶)" : "🐶 阿陞的個人帳戶 (主要帳戶)",
-            '#0a84ff'
+            userKey === 'userA' ? '#AF52DE' : '#30D158'
           )}
 
           {/* Section 2: JOINT ACCOUNTS */}
           {renderOwnerSection(
             'joint',
             "🏫 共同公費帳戶 (雙方可編輯)",
-            '#30d158'
+            '#007AFF'
           )}
 
           {/* Section 3: PARTNER ACCOUNTS */}
           {renderOwnerSection(
             partnerKey,
             partnerKey === 'userA' ? "🐕 大狗狗的個人帳戶 (伴侶唯讀)" : "🐶 阿陞的個人帳戶 (伴侶唯讀)",
-            'rgba(255, 255, 255, 0.4)'
+            partnerKey === 'userA' ? '#AF52DE' : '#30D158'
           )}
         </div>
       )}
@@ -719,7 +719,7 @@ const AccountsManager = ({
                 selectedValue={calAcc}
                 onChange={setCalAcc}
                 currentUser={operatorName}
-                themeColor="#bf5af2"
+                themeColor="#AF52DE"
                 modalTitle="選擇要校正的帳戶"
               />
             </div>

@@ -600,9 +600,9 @@ const InvestmentView = ({
           <div style={{ marginBottom: '15px' }}>
             <SegmentedControl
               options={[
-                { label: '共同 🏫', value: 'jointCash' },
-                { label: '大狗狗 🐕', value: 'userA' },
-                { label: '阿陞 🐶', value: 'userB' }
+                { label: '阿陞 🐶', value: 'userB', activeColor: '#30D158' },
+                { label: '共同 🏫', value: 'jointCash', activeColor: '#007AFF' },
+                { label: '大狗狗 🐕', value: 'userA', activeColor: '#AF52DE' }
               ]}
               value={activeTab}
               onChange={setActiveTab}

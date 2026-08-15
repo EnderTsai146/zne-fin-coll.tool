@@ -270,12 +270,12 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const totalAssets = totalCashConverted + totalInvest;
 
     const assetTypes = [
-        { key: 'cash', label: '台幣現金', color: '#2ecc71', val: totalTwdCash },
-        { key: 'usd', label: '美金現鈔', color: '#f1c40f', val: Math.round(totalUsdCash * currentFxRate) },
-        { key: 'stock', label: '股票', color: '#ff9f43', val: totalStockMarketValue },
-        { key: 'fund', label: '基金', color: '#54a0ff', val: (assets.userInvestments?.userA?.fund || 0) + (assets.userInvestments?.userB?.fund || 0) + (assets.jointInvestments?.fund || 0) },
-        { key: 'deposit', label: '定存', color: '#9b59b6', val: (assets.userInvestments?.userA?.deposit || 0) + (assets.userInvestments?.userB?.deposit || 0) + (assets.jointInvestments?.deposit || 0) },
-        { key: 'other', label: '其他', color: '#c8d6e5', val: (assets.userInvestments?.userA?.other || 0) + (assets.userInvestments?.userB?.other || 0) + (assets.jointInvestments?.other || 0) }
+        { key: 'cash', label: '台幣現金', color: '#30D158', val: totalTwdCash },
+        { key: 'usd', label: '美金現鈔', color: '#FFD60A', val: Math.round(totalUsdCash * currentFxRate) },
+        { key: 'stock', label: '股票', color: '#5E5CE6', val: totalStockMarketValue },
+        { key: 'fund', label: '基金', color: '#007AFF', val: (assets.userInvestments?.userA?.fund || 0) + (assets.userInvestments?.userB?.fund || 0) + (assets.jointInvestments?.fund || 0) },
+        { key: 'deposit', label: '定存', color: '#AF52DE', val: (assets.userInvestments?.userA?.deposit || 0) + (assets.userInvestments?.userB?.deposit || 0) + (assets.jointInvestments?.deposit || 0) },
+        { key: 'other', label: '其他', color: '#5AC8FA', val: (assets.userInvestments?.userA?.other || 0) + (assets.userInvestments?.userB?.other || 0) + (assets.jointInvestments?.other || 0) }
     ];
 
     const activeAssets = assetTypes.filter(a => a.val > 0);
@@ -630,8 +630,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {
                 label: '台幣現金',
                 data: historyData.labels.map(d => historyData.categories.cash[d] || 0),
-                borderColor: '#2ecc71',
-                backgroundColor: 'rgba(46, 204, 113, 0.45)',
+                borderColor: '#30D158',
+                backgroundColor: 'rgba(48, 209, 88, 0.45)',
                 fill: 'origin',
                 tension: 0.3,
                 pointRadius: 2
@@ -639,8 +639,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {
                 label: '美金現鈔',
                 data: historyData.labels.map(d => historyData.categories.usd[d] || 0),
-                borderColor: '#f1c40f',
-                backgroundColor: 'rgba(241, 196, 15, 0.45)',
+                borderColor: '#FFD60A',
+                backgroundColor: 'rgba(255, 214, 10, 0.45)',
                 fill: 'origin',
                 tension: 0.3,
                 pointRadius: 2
@@ -648,8 +648,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {
                 label: '股票',
                 data: historyData.labels.map(d => historyData.categories.stock[d] || 0),
-                borderColor: '#ff9f43',
-                backgroundColor: 'rgba(255, 159, 67, 0.45)',
+                borderColor: '#5E5CE6',
+                backgroundColor: 'rgba(94, 92, 230, 0.45)',
                 fill: 'origin',
                 tension: 0.3,
                 pointRadius: 2
@@ -657,8 +657,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {
                 label: '基金',
                 data: historyData.labels.map(d => historyData.categories.fund[d] || 0),
-                borderColor: '#54a0ff',
-                backgroundColor: 'rgba(84, 160, 255, 0.45)',
+                borderColor: '#007AFF',
+                backgroundColor: 'rgba(0, 122, 255, 0.45)',
                 fill: 'origin',
                 tension: 0.3,
                 pointRadius: 2
@@ -666,8 +666,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {
                 label: '定存',
                 data: historyData.labels.map(d => historyData.categories.deposit[d] || 0),
-                borderColor: '#9b59b6',
-                backgroundColor: 'rgba(155, 89, 182, 0.45)',
+                borderColor: '#AF52DE',
+                backgroundColor: 'rgba(175, 82, 222, 0.45)',
                 fill: 'origin',
                 tension: 0.3,
                 pointRadius: 2
@@ -675,8 +675,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
             {
                 label: '其他',
                 data: historyData.labels.map(d => historyData.categories.other[d] || 0),
-                borderColor: '#c8d6e5',
-                backgroundColor: 'rgba(200, 214, 229, 0.45)',
+                borderColor: '#5AC8FA',
+                backgroundColor: 'rgba(90, 200, 250, 0.45)',
                 fill: 'origin',
                 tension: 0.3,
                 pointRadius: 2
@@ -901,7 +901,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     };
 
     return (
-        <div className="page-transition-enter">
+        <div>
             {backupWarning && (
                 <div style={{ background: 'var(--accent-red)', color: 'white', padding: '10px 15px', borderRadius: 'var(--radius-sm)', marginBottom: '15px', fontSize: '0.88rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>⚠️ 警告：無法連線至 Google 雲端備份伺服器。請手動備份。</span>

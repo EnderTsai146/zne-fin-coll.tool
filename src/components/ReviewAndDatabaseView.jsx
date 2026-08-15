@@ -24,7 +24,7 @@ const ReviewAndDatabaseView = ({
   logOperation
 }) => {
   return (
-    <div className="page-transition-enter">
+    <div>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '18px', padding: '0 16px' }}>
         <SegmentedControl
           options={[

@@ -59,9 +59,9 @@ const IOSAccountMenuPicker = ({
 
   // 3 Owner Definitions: Ordered strictly Left-to-Right: 阿陞 (userB) / 共同 (joint) / 大狗 (userA)
   const ownerConfigs = [
-    { key: 'userB', label: '阿陞', icon: '🐶', accent: '#30d158' },
-    { key: 'joint', label: '共同', icon: '🏫', accent: '#0a84ff' },
-    { key: 'userA', label: '大狗', icon: '🐕', accent: '#bf5af2' }
+    { key: 'userB', label: '阿陞', icon: '🐶', accent: '#30D158' },
+    { key: 'joint', label: '共同', icon: '🏫', accent: '#007AFF' },
+    { key: 'userA', label: '大狗', icon: '🐕', accent: '#AF52DE' }
   ];
 
   // Accounts belonging strictly to the selected owner
