@@ -474,11 +474,6 @@ function App() {
     status: 'checking' // 'checking', 'unsupported', 'permission_denied', 'ready', 'failed'
   });
 
-  // Scroll to top automatically when changing pages (Fix Scroll Jump)
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [currentPage]);
-
   const sanitizeMessage = (msg) => {
     if (!msg) return '';
     const str = String(msg);
@@ -545,6 +540,11 @@ function App() {
   };
 
   const [currentPage, setCurrentPage] = useState('overview');
+
+  // Scroll to top automatically when changing pages (Fix Scroll Jump)
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [currentPage]);
   const [lastActiveCenterTab, setLastActiveCenterTab] = useState('overview');
   const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('database');
   const [settingsSubTab, setSettingsSubTab] = useState('budget');
@@ -2446,7 +2446,11 @@ function App() {
       {splashPhase === 'exit' && <div className="splash-flash-overlay" />}
     </div>
   );
-  if (!currentUser) return <Login autoLogoutReason={autoLogoutReason} clearAutoLogoutReason={() => setAutoLogoutReason('')} />;
+  if (!currentUser) return (
+    <ErrorBoundary title="登入模組載入異常">
+      <Login autoLogoutReason={autoLogoutReason} clearAutoLogoutReason={() => setAutoLogoutReason('')} />
+    </ErrorBoundary>
+  );
 
 
 
