@@ -1662,12 +1662,14 @@ function App() {
   const cleanTitle = (rawTitle) => {
     if (!rawTitle) return '';
     return String(rawTitle)
+      .replace(/\s*[[(（【]?(from|drom)?馬鈴薯管家[\])）】]?/gi, '')
       .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
       .replace(/\s*-\s*馬鈴薯管家/gi, '')
       .replace(/【(from|drom)馬鈴薯管家】/gi, '')
       .replace(/【馬鈴薯管家】/gi, '')
       .replace(/(from|drom)馬鈴薯管家/gi, '')
       .replace(/馬鈴薯管家/gi, '')
+      .replace(/\s*(from|drom)\s*/gi, '')
       .trim();
   };
 
@@ -1891,52 +1893,78 @@ function App() {
     saveToCloud(finalAssetsWithLog);
     
     if (records.length > 0) {
-      const firstRecord = records[0];
-      const type = firstRecord.type;
       let title = "🔄 帳務變動通知";
       let body = `${operatorName} 執行了操作`;
-      
-      if (type === 'transfer') {
-        title = "🔄 資金轉帳劃撥";
-        body = `${operatorName} 劃撥資金：${firstRecord.note || '資產劃撥'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'exchange') {
-        title = "💱 貨幣換匯異動";
-        body = `${operatorName} 貨幣換匯：${firstRecord.note || '換匯'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'calibrate') {
-        title = "⚖️ 餘額手動校正";
-        body = `${operatorName} 餘額校正：${firstRecord.note || '校正'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'settle') {
-        title = "🤝 帳務結算通知";
-        body = `${operatorName} 結算帳務：${firstRecord.note || '結清'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'income') {
-        title = "💵 登錄個人收入";
-        body = `${operatorName} 登錄收入：${firstRecord.note || '個人收入'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'liquidate') {
-        title = "💰 贖回投資商品";
-        body = `${operatorName} 贖回商品：${firstRecord.note || '投資贖回'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'personal_invest_profit') {
-        title = "💹 投資實現損益 (獲利)";
-        body = `${operatorName} 實現投資獲利：${firstRecord.note || '投資獲利'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'personal_invest_loss') {
-        title = "📉 投資實現損益 (虧損)";
-        body = `${operatorName} 實現投資虧損：${firstRecord.note || '投資虧損'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type && type.includes('buy')) {
-        title = "📈 買入投資商品";
-        body = `${operatorName} 買入商品：${firstRecord.note || '投資買入'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type && type.includes('sell')) {
-        title = "📉 賣出投資商品";
-        body = `${operatorName} 賣出商品：${firstRecord.note || '投資賣出'} - $${firstRecord.total.toLocaleString()}`;
-      } else if (type === 'expense') {
-        title = "💰 個人支出異動";
-        body = `${firstRecord.payer} 登錄個人支出：${firstRecord.note || '日記帳'} - $${(Number(firstRecord.total) || 0).toLocaleString()}`;
-      } else if (type === 'spend') {
-        title = "🤝 共同支出異動";
-        const payerNameText = operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶';
-        const advancedByText = firstRecord.advancedBy 
-          ? `由 ${firstRecord.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`
-          : '共同現金直付';
-        body = `${payerNameText} 登錄共同支出（${advancedByText}）：${firstRecord.note || firstRecord.category} - $${(Number(firstRecord.total) || 0).toLocaleString()}`;
+
+      if (records.length > 1) {
+        // Multi-record batch (e.g. Shopping Cart multiple entries submitted together)
+        const batchCount = records.length;
+        const batchTotal = records.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+        const allTypes = new Set(records.map(r => r.type));
+
+        if (allTypes.size === 1 && allTypes.has('expense')) {
+          title = "🛒 登錄個人支出";
+          const payerName = records[0].payer || operatorName;
+          body = `${payerName} 登錄個人支出共 ${batchCount} 筆，合計 $${batchTotal.toLocaleString()} 元。請登入 App 查看詳情。`;
+        } else if (allTypes.size === 1 && allTypes.has('spend')) {
+          title = "🛒 登錄共同支出";
+          body = `${operatorName} 登錄共同支出共 ${batchCount} 筆，合計 $${batchTotal.toLocaleString()} 元。請登入 App 查看詳情。`;
+        } else if (allTypes.size === 1 && allTypes.has('income')) {
+          title = "💰 登錄收入入帳";
+          body = `${operatorName} 登錄收入共 ${batchCount} 筆，合計 $${batchTotal.toLocaleString()} 元。請登入 App 查看詳情。`;
+        } else {
+          title = "🛒 合併記帳交易";
+          body = `${operatorName} 登錄帳務共 ${batchCount} 筆，合計 $${batchTotal.toLocaleString()} 元。請登入 App 查看詳情。`;
+        }
+      } else {
+        // Single record
+        const firstRecord = records[0];
+        const type = firstRecord.type;
+        const recordAmount = (Number(firstRecord.total) || 0).toLocaleString();
+
+        if (type === 'transfer') {
+          title = "🔄 資金轉帳劃撥";
+          body = `${operatorName} 劃撥資金：${firstRecord.note || '資產劃撥'} - $${recordAmount}`;
+        } else if (type === 'exchange') {
+          title = "💱 貨幣換匯異動";
+          body = `${operatorName} 貨幣換匯：${firstRecord.note || '換匯'} - $${recordAmount}`;
+        } else if (type === 'calibrate') {
+          title = "⚖️ 餘額手動校正";
+          body = `${operatorName} 餘額校正：${firstRecord.note || '校正'} - $${recordAmount}`;
+        } else if (type === 'settle') {
+          title = "🤝 帳務結算通知";
+          body = `${operatorName} 結算帳務：${firstRecord.note || '結清'} - $${recordAmount}`;
+        } else if (type === 'income') {
+          title = "💵 登錄個人收入";
+          body = `${operatorName} 登錄收入：${firstRecord.note || '個人收入'} - $${recordAmount}`;
+        } else if (type === 'liquidate') {
+          title = "💰 贖回投資商品";
+          body = `${operatorName} 贖回商品：${firstRecord.note || '投資贖回'} - $${recordAmount}`;
+        } else if (type === 'personal_invest_profit') {
+          title = "💹 投資實現損益 (獲利)";
+          body = `${operatorName} 實現投資獲利：${firstRecord.note || '投資獲利'} - $${recordAmount}`;
+        } else if (type === 'personal_invest_loss') {
+          title = "📉 投資實現損益 (虧損)";
+          body = `${operatorName} 實現投資虧損：${firstRecord.note || '投資虧損'} - $${recordAmount}`;
+        } else if (type && type.includes('buy')) {
+          title = "📈 買入投資商品";
+          body = `${operatorName} 買入商品：${firstRecord.note || '投資買入'} - $${recordAmount}`;
+        } else if (type && type.includes('sell')) {
+          title = "📉 賣出投資商品";
+          body = `${operatorName} 賣出商品：${firstRecord.note || '投資賣出'} - $${recordAmount}`;
+        } else if (type === 'expense') {
+          title = "💰 個人支出異動";
+          body = `${firstRecord.payer || operatorName} 登錄個人支出：${firstRecord.note || '日記帳'} - $${recordAmount}`;
+        } else if (type === 'spend') {
+          title = "🤝 共同支出異動";
+          const payerNameText = operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶';
+          const advancedByText = firstRecord.advancedBy 
+            ? `由 ${firstRecord.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`
+            : '共同現金直付';
+          body = `${payerNameText} 登錄共同支出（${advancedByText}）：${firstRecord.note || firstRecord.category} - $${recordAmount}`;
+        }
       }
+
       sendTransactionPush(title, body);
     }
     

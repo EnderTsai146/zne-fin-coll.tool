@@ -106,7 +106,15 @@ function doPost(e) {
     // === 功能 A：FCM HTTP v1 背景推播 (支援 PWA/iOS/Android 喚醒手機) ===
     if (action === 'push') {
       var token = postData.token;
-      var title = postData.title || "財務管家通知";
+      var rawTitle = postData.title || "系統通知";
+      var title = String(rawTitle)
+        .replace(/\s*[[(（【]?(from|drom)?馬鈴薯管家[\])）】]?/gi, '')
+        .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
+        .replace(/\s*-\s*馬鈴薯管家/gi, '')
+        .replace(/【(from|drom)?馬鈴薯管家】/gi, '')
+        .replace(/馬鈴薯管家/gi, '')
+        .replace(/\s*(from|drom)\s*/gi, '')
+        .trim() || "系統通知";
       var body = postData.body || "";
 
       if (!token) {
