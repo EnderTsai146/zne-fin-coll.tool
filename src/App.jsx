@@ -38,6 +38,25 @@ const parseMoney = (valStr) => {
   return Number(clean) || 0;
 };
 
+const cleanFirestoreData = (obj) => {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== 'object') return obj;
+
+  if (Array.isArray(obj)) {
+    return obj
+      .filter(item => item !== undefined)
+      .map(item => cleanFirestoreData(item));
+  }
+
+  const cleaned = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleaned[key] = cleanFirestoreData(value);
+    }
+  }
+  return cleaned;
+};
+
 const USER_MAPPING = {
   "ender.tsai@gmail.com": "大狗狗🐕",
   "r5213467254@icloud.com": "阿陞🐶",
@@ -591,13 +610,14 @@ function App() {
 
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
-    setAssets(newAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
+    const cleanAssets = cleanFirestoreData(newAssets);
+    setAssets(cleanAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
     if (window.location.hostname === 'localhost') {
-      console.log("[DEV MOCK] saveToCloud:", newAssets);
+      console.log("[DEV MOCK] saveToCloud:", cleanAssets);
       return;
     }
     const docRef = doc(db, "finance", "data");
-    setDoc(docRef, newAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
+    setDoc(docRef, cleanAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
   };
 
   // ★ 自動顯示更新日誌，且控制背景滾動鎖定
@@ -1299,11 +1319,13 @@ function App() {
                       archivedTimestamps.add(r.timestamp);
                     });
 
-                    await setDoc(archiveDocRef, {
+                    const mergedRecords = Array.from(existingMap.values()).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+                    await setDoc(archiveDocRef, cleanFirestoreData({
                       month: month,
                       archivedAt: new Date().toISOString(),
-                      records: Array.from(existingMap.values())
-                    });
+                      records: mergedRecords
+                    }));
                     console.log(`✅ 已安全合併歸檔 ${month}，共儲存 ${existingMap.size} 筆`);
                   }
 
@@ -1353,11 +1375,11 @@ function App() {
 
                       Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
 
-                      transaction.update(mainDocRef, {
+                      transaction.update(mainDocRef, cleanFirestoreData({
                         monthlyExpenses: safeMonthly,
                         dailyNetWorth: newSnapshots,
                         currentStockHoldings: holdingsBase
-                      });
+                      }));
                       console.log(`🚀 主檔案已成功清理完成，系統永續優化成功`);
                     }
                   });
@@ -1375,7 +1397,10 @@ function App() {
           }
         }
 
-        if (needsUpdate) setDoc(docRef, data);
+        if (needsUpdate) {
+          const cleanData = cleanFirestoreData(data);
+          setDoc(docRef, cleanData).catch(err => console.error("Auto-migration setDoc error:", err));
+        }
 
         // --- Real-time Cross-Device Notification Trigger ---
         if (data.monthlyExpenses && data.monthlyExpenses.length > 0) {
@@ -1407,7 +1432,8 @@ function App() {
         setDataReady(true);
         setLoading(false);
       } else {
-        setDoc(docRef, assets);
+        const cleanInitial = cleanFirestoreData(assets);
+        setDoc(docRef, cleanInitial).catch(err => console.error("Initial setDoc error:", err));
         setDataReady(true);
         setLoading(false);
       }
@@ -1467,7 +1493,7 @@ function App() {
           }
         }
         if (changed) {
-          await setDoc(doc(db, "finance", "data"), { currentStockHoldings: updated }, { merge: true });
+          await setDoc(doc(db, "finance", "data"), cleanFirestoreData({ currentStockHoldings: updated }), { merge: true });
           console.log('[自動修復] 持股成本修復完成');
         }
       } catch (err) { console.error('[自動修復] 修復失敗:', err); }
@@ -1606,7 +1632,7 @@ function App() {
     };
     try {
       const logsRef = collection(db, "finance", "data", "operationsLog");
-      addDoc(logsRef, logEntry).catch(err => console.error("Firestore Log Fail:", err));
+      addDoc(logsRef, cleanFirestoreData(logEntry)).catch(err => console.error("Firestore Log Fail:", err));
       logger.addLog('CLOUD', `操作紀錄: ${actionType} - ${detail}`);
     } catch (e) {
       console.error("Log error:", e);
@@ -1643,7 +1669,7 @@ function App() {
         const nextAssets = { ...prev, fcmTokens: newTokens };
         if (currentUser && window.location.hostname !== 'localhost') {
           const docRef = doc(db, "finance", "data");
-          setDoc(docRef, nextAssets).catch(err => console.error("Error removing bad token:", err));
+          setDoc(docRef, cleanFirestoreData(nextAssets)).catch(err => console.error("Error removing bad token:", err));
         }
         return nextAssets;
       }
@@ -2039,22 +2065,22 @@ function App() {
         // ★ 跨月修復機制：若修改的日期跨越當前所屬月份，從舊歸檔庫中拔除，遣返回主區。
         list.splice(context.index, 1);
         setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
-        setDoc(doc(db, "finance", `arc_${context.month}`), {
+        setDoc(doc(db, "finance", `arc_${context.month}`), cleanFirestoreData({
           month: context.month,
           archivedAt: new Date().toISOString(),
           records: list
-        }).catch(async e => await customAlert("歷史庫舊紀錄移除失敗：" + e.message, "同步失敗"));
+        })).catch(async e => await customAlert("歷史庫舊紀錄移除失敗：" + e.message, "同步失敗"));
 
         // 遣送回主動區，讓安全的 Archival Engine 等等把它接走重新安置。
         newAssets.monthlyExpenses = [...(newAssets.monthlyExpenses || []), mutatedRecord];
       } else {
         list[context.index] = mutatedRecord;
         setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
-        setDoc(doc(db, "finance", `arc_${context.month}`), {
+        setDoc(doc(db, "finance", `arc_${context.month}`), cleanFirestoreData({
           month: context.month,
           archivedAt: new Date().toISOString(),
           records: list
-        }).catch(async e => await customAlert("歸檔紀錄唯讀同步失敗：" + e.message, "同步失敗"));
+        })).catch(async e => await customAlert("歸檔紀錄唯讀同步失敗：" + e.message, "同步失敗"));
       }
     }
 
@@ -2386,11 +2412,11 @@ function App() {
 
     if (context.source === 'archive') {
       setArchivedRecords(prev => ({ ...prev, [context.month]: list }));
-      setDoc(doc(db, "finance", `arc_${context.month}`), {
+      setDoc(doc(db, "finance", `arc_${context.month}`), cleanFirestoreData({
         month: context.month,
         archivedAt: new Date().toISOString(),
         records: list
-      }).catch(async (e) => await customAlert("歸檔紀錄同步失敗：" + e.message));
+      })).catch(async (e) => await customAlert("歸檔紀錄同步失敗：" + e.message));
     }
 
     newAssets.monthlyExpenses = mainList;
@@ -2406,15 +2432,16 @@ function App() {
   const handleAssetsUpdate = (updater) => {
     setAssets(prev => {
       const nextAssets = typeof updater === 'function' ? updater(prev) : updater;
+      const cleanAssets = cleanFirestoreData(nextAssets);
       if (currentUser) {
         if (window.location.hostname === 'localhost') {
-          console.log("[DEV MOCK] saveToCloud:", nextAssets);
+          console.log("[DEV MOCK] saveToCloud:", cleanAssets);
         } else {
           const docRef = doc(db, "finance", "data");
-          setDoc(docRef, nextAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
+          setDoc(docRef, cleanAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
         }
       }
-      return nextAssets;
+      return cleanAssets;
     });
   };
 
