@@ -468,11 +468,61 @@ function App() {
   const [newlyAddedRecordTimestamp, setNewlyAddedRecordTimestamp] = useState(null);
   const [newlyAddedInvestSymbol, setNewlyAddedInvestSymbol] = useState(null);
   const [newlyAddedInvestPayer, setNewlyAddedInvestPayer] = useState(null);
+  const [currentPage, setCurrentPage] = useState('overview');
+  const [lastActiveCenterTab, setLastActiveCenterTab] = useState('overview');
+  const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('database');
+  const [settingsSubTab, setSettingsSubTab] = useState('budget');
+  const [currentFxRate, setCurrentFxRate] = useState(31.5);
+  const [guidedHint, setGuidedHint] = useState(null);
+
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
+  const [timeoutCountdown, setTimeoutCountdown] = useState(15);
+  const [autoLogoutReason, setAutoLogoutReason] = useState('');
+  const inactivityTimerRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
+  const lastActiveTimeRef = useRef(Date.now());
+  const prevExpensesCountRef = useRef(null);
+
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [changelogTab, setChangelogTab] = useState('whatsnew');
+  const [hasNewUpdate, setHasNewUpdate] = useState(() => {
+    const lastSeen = localStorage.getItem('potato_last_seen_version');
+    return CHANGELOG_DATA.length > 0 && lastSeen !== CHANGELOG_DATA[0].version;
+  });
+
+  const [assets, setAssets] = useState({
+    userA: 0,
+    userB: 0,
+    userA_usd: 0,
+    userB_usd: 0,
+    jointCash: 0,
+    jointCash_usd: 0,
+    jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
+    userInvestments: {
+      userA: { stock: 0, fund: 0, deposit: 0, other: 0 },
+      userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
+    },
+    roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
+    monthlyExpenses: [],
+    bills: []
+  });
+
+  const [archivedRecords, setArchivedRecords] = useState({});
+  const archivedRecordsRef = useRef({});
+  const [isFetchingArchive, setIsFetchingArchive] = useState(false);
+  const archivingInProgress = useRef(false);
+  const repairAttempted = useRef(false);
+
   const [fcmDiagnostic, setFcmDiagnostic] = useState({
     token: null,
     error: null,
     status: 'checking' // 'checking', 'unsupported', 'permission_denied', 'ready', 'failed'
   });
+
+  // Scroll to top automatically when changing pages (Fix Scroll Jump)
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [currentPage]);
 
   const sanitizeMessage = (msg) => {
     if (!msg) return '';
@@ -539,18 +589,6 @@ function App() {
     }
   };
 
-  const [currentPage, setCurrentPage] = useState('overview');
-
-  // Scroll to top automatically when changing pages (Fix Scroll Jump)
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [currentPage]);
-  const [lastActiveCenterTab, setLastActiveCenterTab] = useState('overview');
-  const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('database');
-  const [settingsSubTab, setSettingsSubTab] = useState('budget');
-  const [currentFxRate, setCurrentFxRate] = useState(31.5);
-  const [guidedHint, setGuidedHint] = useState(null);
-
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
     setAssets(newAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
@@ -562,14 +600,43 @@ function App() {
     setDoc(docRef, newAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
   };
 
-  // --- Inactivity & Session Security Protection (Task 2 & 3) ---
-  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
-  const [timeoutCountdown, setTimeoutCountdown] = useState(15);
-  const [autoLogoutReason, setAutoLogoutReason] = useState('');
-  const inactivityTimerRef = useRef(null);
-  const countdownIntervalRef = useRef(null);
-  const lastActiveTimeRef = useRef(Date.now());
-  const prevExpensesCountRef = useRef(null);
+  // ★ 自動顯示更新日誌，且控制背景滾動鎖定
+  useEffect(() => {
+    if (hasNewUpdate) {
+      setShowChangelog(true);
+      if (CHANGELOG_DATA.length > 0) {
+        localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
+      }
+      setHasNewUpdate(false);
+    }
+  }, [hasNewUpdate]);
+
+  const handleOpenChangelog = () => {
+    setShowChangelog(true);
+    setChangelogTab('whatsnew');
+    if (CHANGELOG_DATA.length > 0) {
+      localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
+    }
+    setHasNewUpdate(false);
+  };
+
+  // ★ 控制所有彈窗開啟時的背景滾動與彈性滾動鎖定
+  useEffect(() => {
+    const shouldLock = showChangelog || !!modalConfig || showTimeoutWarning;
+    if (shouldLock) {
+      document.documentElement.classList.add('modal-open');
+      document.body.classList.add('modal-open');
+    } else {
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
+    }
+    return () => {
+      document.documentElement.classList.remove('modal-open');
+      document.body.classList.remove('modal-open');
+    };
+  }, [showChangelog, modalConfig, showTimeoutWarning]);
+
+
 
   const performAutoLogout = useCallback((reason) => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
@@ -851,72 +918,6 @@ function App() {
     const timeout = setTimeout(() => { dataReadyForSplash.current = true; }, 15000);
     return () => clearTimeout(timeout);
   }, []);
-
-  const [showChangelog, setShowChangelog] = useState(false);
-  const [changelogTab, setChangelogTab] = useState('whatsnew');
-  const [hasNewUpdate, setHasNewUpdate] = useState(() => {
-    const lastSeen = localStorage.getItem('potato_last_seen_version');
-    return CHANGELOG_DATA.length > 0 && lastSeen !== CHANGELOG_DATA[0].version;
-  });
-
-  // ★ 自動顯示更新日誌，且控制背景滾動鎖定
-  useEffect(() => {
-    if (hasNewUpdate) {
-      setShowChangelog(true);
-      if (CHANGELOG_DATA.length > 0) {
-        localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
-      }
-      setHasNewUpdate(false);
-    }
-  }, [hasNewUpdate]);
-
-  const handleOpenChangelog = () => {
-    setShowChangelog(true);
-    setChangelogTab('whatsnew');
-    if (CHANGELOG_DATA.length > 0) {
-      localStorage.setItem('potato_last_seen_version', CHANGELOG_DATA[0].version);
-    }
-    setHasNewUpdate(false);
-  };
-
-  // ★ 控制所有彈窗開啟時的背景滾動與彈性滾動鎖定
-  useEffect(() => {
-    const shouldLock = showChangelog || !!modalConfig || showTimeoutWarning;
-    if (shouldLock) {
-      document.documentElement.classList.add('modal-open');
-      document.body.classList.add('modal-open');
-    } else {
-      document.documentElement.classList.remove('modal-open');
-      document.body.classList.remove('modal-open');
-    }
-    return () => {
-      document.documentElement.classList.remove('modal-open');
-      document.body.classList.remove('modal-open');
-    };
-  }, [showChangelog, modalConfig, showTimeoutWarning]);
-
-  const [assets, setAssets] = useState({
-    userA: 0,
-    userB: 0,
-    userA_usd: 0,
-    userB_usd: 0,
-    jointCash: 0,
-    jointCash_usd: 0,
-    jointInvestments: { stock: 0, fund: 0, deposit: 0, other: 0 },
-    userInvestments: {
-      userA: { stock: 0, fund: 0, deposit: 0, other: 0 },
-      userB: { stock: 0, fund: 0, deposit: 0, other: 0 }
-    },
-    roi: { stock: 0, fund: 0, deposit: 0, other: 0 },
-    monthlyExpenses: [],
-    bills: []
-  });
-
-  const [archivedRecords, setArchivedRecords] = useState({});
-  const archivedRecordsRef = useRef({});
-  const [isFetchingArchive, setIsFetchingArchive] = useState(false);
-  const archivingInProgress = useRef(false);
-  const repairAttempted = useRef(false);
 
   // ★ Fix: 用 ref 同步追蹤已載入的月份，避免 useCallback 依賴 state 導致引用不穩定
   useEffect(() => { archivedRecordsRef.current = archivedRecords; }, [archivedRecords]);
