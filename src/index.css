@@ -385,17 +385,26 @@ body[data-page="settings"] {
   pointer-events: none;
 }
 
-.glass-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18),
-    0 2px 8px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border-color: var(--glass-border-strong);
-}
+@media (hover: hover) and (pointer: fine) {
+  .glass-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18),
+      0 2px 8px rgba(0, 0, 0, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    border-color: var(--glass-border-strong);
+  }
 
-.glass-btn:hover::after {
-  left: 100%;
+  .glass-btn:hover::after {
+    left: 100%;
+  }
+
+  .glass-btn.inactive:hover {
+    opacity: 0.6;
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
 }
 
 /* Liquid bounce on press */
@@ -411,13 +420,6 @@ body[data-page="settings"] {
   opacity: 0.4;
   filter: saturate(0.4);
   pointer-events: auto;
-}
-
-.glass-btn.inactive:hover {
-  opacity: 0.6;
-  transform: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 /* === 5. Typography === */

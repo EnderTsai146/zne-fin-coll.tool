@@ -108,12 +108,16 @@ function doPost(e) {
       var token = postData.token;
       var rawTitle = postData.title || "系統通知";
       var title = String(rawTitle)
-        .replace(/\s*[[(（【]?(from|drom)?馬鈴薯管家[\])）】]?/gi, '')
+        .replace(/\s*[[(（【]?(from|drom)?\s*馬鈴薯管家\s*[\])）】]?/gi, '')
         .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
         .replace(/\s*-\s*馬鈴薯管家/gi, '')
-        .replace(/【(from|drom)?馬鈴薯管家】/gi, '')
+        .replace(/【(from|drom)?\s*馬鈴薯管家】/gi, '')
+        .replace(/【馬鈴薯管家】/gi, '')
+        .replace(/(from|drom)\s*馬鈴薯管家/gi, '')
         .replace(/馬鈴薯管家/gi, '')
         .replace(/\s*(from|drom)\s*/gi, '')
+        .replace(/^[\s\-–—:：【】()[\]]+/, '')
+        .replace(/[\s\-–—:：【】()[\]]+$/, '')
         .trim() || "系統通知";
       var body = postData.body || "";
 

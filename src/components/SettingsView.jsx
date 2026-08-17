@@ -46,7 +46,9 @@ const ToggleSwitch = ({ checked, onChange, disabled }) => (
       transition: 'background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
       touchAction: 'manipulation',
       WebkitTapHighlightColor: 'transparent',
-      boxShadow: checked ? '0 0 10px rgba(48, 209, 88, 0.4)' : 'none'
+      boxShadow: checked ? '0 0 10px rgba(48, 209, 88, 0.4)' : 'none',
+      userSelect: 'none',
+      pointerEvents: 'auto'
     }}
   >
     <span
@@ -541,7 +543,7 @@ const SettingsView = ({
   }, [loadingLogs, logStartDate, logEndDate, lastVisibleDoc]);
 
   useEffect(() => {
-    if (activeSubTab === 'logs') {
+    if (currentSubTab === 'logs') {
       fetchLogs(true);
     } else {
       setDbLogs([]);
@@ -553,7 +555,7 @@ const SettingsView = ({
       setLogStartDate('');
       setLogEndDate('');
     }
-  }, [activeSubTab, logStartDate, logEndDate, fetchLogs]);
+  }, [currentSubTab, logStartDate, logEndDate, fetchLogs]);
 
   const formatTimestamp = (isoStr) => {
     if (!isoStr) return '';
@@ -940,7 +942,7 @@ const SettingsView = ({
       <div className="settings-tab-content" style={{ paddingBottom: '30px' }}>
         
         {/* === 1. 預算設定 === */}
-        {activeSubTab === 'budget' && (
+        {currentSubTab === 'budget' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             {/* Monthly Budget Editor Card */}
@@ -1170,9 +1172,13 @@ const SettingsView = ({
             </div>
 
             {/* Master Toggle Card */}
-            <div className="glass-card" style={{ padding: '18px' }}>
+            <div
+              className="glass-card"
+              onClick={() => handleToggleNotifSetting('enabled')}
+              style={{ padding: '18px', cursor: 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
+                <div style={{ flex: 1, paddingRight: '12px' }}>
                   <div style={{ fontWeight: '800', fontSize: '0.95rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>🔔</span>
                     <span>允許推播通知 (總開關)</span>
@@ -1198,7 +1204,10 @@ const SettingsView = ({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Partner Daily Expense */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div
+                  onClick={() => { if (localNotifSettings.enabled !== false) handleToggleNotifSetting('partnerExpense'); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: localNotifSettings.enabled === false ? 'not-allowed' : 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+                >
                   <div style={{ flex: 1, paddingRight: '12px' }}>
                     <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>📱 對方日常記帳即時通知</div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -1213,7 +1222,10 @@ const SettingsView = ({
                 </div>
 
                 {/* Joint & High Expense */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div
+                  onClick={() => { if (localNotifSettings.enabled !== false) handleToggleNotifSetting('jointExpense'); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: localNotifSettings.enabled === false ? 'not-allowed' : 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+                >
                   <div style={{ flex: 1, paddingRight: '12px' }}>
                     <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>🏫 共同公費與大額異動通知</div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -1238,7 +1250,10 @@ const SettingsView = ({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Fixed Bill Reminders */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div
+                  onClick={() => { if (localNotifSettings.enabled !== false) handleToggleNotifSetting('billReminders'); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: localNotifSettings.enabled === false ? 'not-allowed' : 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+                >
                   <div style={{ flex: 1, paddingRight: '12px' }}>
                     <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>📌 常態固定帳單到期提醒</div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -1253,7 +1268,10 @@ const SettingsView = ({
                 </div>
 
                 {/* Credit Card Statements */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div
+                  onClick={() => { if (localNotifSettings.enabled !== false) handleToggleNotifSetting('creditCardReminders'); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: localNotifSettings.enabled === false ? 'not-allowed' : 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+                >
                   <div style={{ flex: 1, paddingRight: '12px' }}>
                     <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>💳 信用卡結算與自動扣款提醒</div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -1278,7 +1296,10 @@ const SettingsView = ({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Budget 70%/90% */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div
+                  onClick={() => { if (localNotifSettings.enabled !== false) handleToggleNotifSetting('budgetWarning70'); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: localNotifSettings.enabled === false ? 'not-allowed' : 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+                >
                   <div style={{ flex: 1, paddingRight: '12px' }}>
                     <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>🟡 預算累計達 70% / 90% 溫馨預警</div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -1293,7 +1314,10 @@ const SettingsView = ({
                 </div>
 
                 {/* Budget Overdraft */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div
+                  onClick={() => { if (localNotifSettings.enabled !== false) handleToggleNotifSetting('budgetOverdraft'); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: localNotifSettings.enabled === false ? 'not-allowed' : 'pointer', userSelect: 'none', touchAction: 'manipulation' }}
+                >
                   <div style={{ flex: 1, paddingRight: '12px' }}>
                     <div style={{ fontWeight: '750', fontSize: '0.86rem', color: '#fff' }}>🚨 預算超支警報 (100%+)</div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
@@ -1477,7 +1501,7 @@ const SettingsView = ({
         )}
 
         {/* === 5. 歷史軌跡 === */}
-        {activeSubTab === 'logs' && (
+        {currentSubTab === 'logs' && (
           <div className="glass-card" style={{ padding: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               
@@ -1601,7 +1625,7 @@ const SettingsView = ({
         )}
 
         {/* === 6. 系統資訊 === */}
-        {activeSubTab === 'info' && (
+        {currentSubTab === 'info' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>

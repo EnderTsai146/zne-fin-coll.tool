@@ -101,6 +101,22 @@ const getDeviceInfo = () => {
   };
 };
 
+const cleanPushTitle = (rawTitle) => {
+  if (!rawTitle) return '';
+  return String(rawTitle)
+    .replace(/\s*[[(（【]?(from|drom)?\s*馬鈴薯管家\s*[\])）】]?/gi, '')
+    .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
+    .replace(/\s*-\s*馬鈴薯管家/gi, '')
+    .replace(/【(from|drom)?\s*馬鈴薯管家】/gi, '')
+    .replace(/【馬鈴薯管家】/gi, '')
+    .replace(/(from|drom)\s*馬鈴薯管家/gi, '')
+    .replace(/馬鈴薯管家/gi, '')
+    .replace(/\s*(from|drom)\s*/gi, '')
+    .replace(/^[\s\-–—:：【】()[\]]+/, '')
+    .replace(/[\s\-–—:：【】()[\]]+$/, '')
+    .trim();
+};
+
 const getTokensArray = (field) => {
   if (!field) return [];
   if (typeof field === 'string') return [field];
@@ -779,7 +795,8 @@ function App() {
     // Listen for foreground push notifications
     onFcmMessage((payload) => {
       console.log("Foreground push notification received:", payload);
-      const title = payload.notification?.title || payload.data?.title || "🎉 收到推播通知";
+      const rawTitle = payload.notification?.title || payload.data?.title || "🎉 收到推播通知";
+      const title = cleanPushTitle(rawTitle) || "🎉 收到推播通知";
       const body = payload.notification?.body || payload.data?.body || "";
       customAlert(`🔔 【${title}】\n${body}`, "即時推播通知");
     });
@@ -1685,23 +1702,9 @@ function App() {
     return true;
   }, [assets?.notificationSettings]);
 
-  const cleanTitle = (rawTitle) => {
-    if (!rawTitle) return '';
-    return String(rawTitle)
-      .replace(/\s*[[(（【]?(from|drom)?馬鈴薯管家[\])）】]?/gi, '')
-      .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
-      .replace(/\s*-\s*馬鈴薯管家/gi, '')
-      .replace(/【(from|drom)馬鈴薯管家】/gi, '')
-      .replace(/【馬鈴薯管家】/gi, '')
-      .replace(/(from|drom)馬鈴薯管家/gi, '')
-      .replace(/馬鈴薯管家/gi, '')
-      .replace(/\s*(from|drom)\s*/gi, '')
-      .trim();
-  };
-
   const sendTransactionPush = useCallback(async (title, body, isTest = false, targetScope = 'both', notifCategory = null) => {
     try {
-      const finalTitle = cleanTitle(title);
+      const finalTitle = cleanPushTitle(title);
       const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
       const partnerUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
       let localNativeTriggered = false;

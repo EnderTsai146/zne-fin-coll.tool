@@ -17,12 +17,16 @@ messaging.onBackgroundMessage((payload) => {
   console.log('[SW] Received background message payload: ', payload);
   const rawTitle = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || '系統通知';
   const title = String(rawTitle)
-    .replace(/\s*[[(（【]?(from|drom)?馬鈴薯管家[\])）】]?/gi, '')
+    .replace(/\s*[[(（【]?(from|drom)?\s*馬鈴薯管家\s*[\])）】]?/gi, '')
     .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
     .replace(/\s*-\s*馬鈴薯管家/gi, '')
-    .replace(/【(from|drom)?馬鈴薯管家】/gi, '')
+    .replace(/【(from|drom)?\s*馬鈴薯管家】/gi, '')
+    .replace(/【馬鈴薯管家】/gi, '')
+    .replace(/(from|drom)\s*馬鈴薯管家/gi, '')
     .replace(/馬鈴薯管家/gi, '')
     .replace(/\s*(from|drom)\s*/gi, '')
+    .replace(/^[\s\-–—:：【】()[\]]+/, '')
+    .replace(/[\s\-–—:：【】()[\]]+$/, '')
     .trim() || '系統通知';
   const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || '';
   const options = {
