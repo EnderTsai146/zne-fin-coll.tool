@@ -84,7 +84,22 @@ const SettingsView = ({
   onSendTestPush,
   onNavigateWithGuide
 }) => {
-  
+  // --- Sub-Tab Navigation State & User Identity ---
+  const [internalSubTab, setInternalSubTab] = useState(activeSubTab || 'budget');
+  useEffect(() => {
+    if (activeSubTab) setInternalSubTab(activeSubTab);
+  }, [activeSubTab]);
+
+  const currentSubTab = activeSubTab || internalSubTab;
+  const handleTabChange = (tab) => {
+    setInternalSubTab(tab);
+    if (setActiveSubTab) setActiveSubTab(tab);
+  };
+
+  const loggedInUserName = operatorName || currentUser || "系統";
+  const userKey = loggedInUserName.includes('大狗狗') ? 'userA' : 'userB';
+  const userDisplayName = userKey === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
+
   // --- Push Notification Permission States & Handlers ---
   const [notificationPermission, setNotificationPermission] = useState('default');
   const [isSubscribing, setIsSubscribing] = useState(false);
@@ -576,22 +591,6 @@ const SettingsView = ({
     if (action === 'calibrate') return 'timeline-dot calibrate';
     return 'timeline-dot';
   };
-
-  // --- Notification Preferences Helper States & Handlers ---
-  const [internalSubTab, setInternalSubTab] = useState(activeSubTab || 'budget');
-  useEffect(() => {
-    if (activeSubTab) setInternalSubTab(activeSubTab);
-  }, [activeSubTab]);
-
-  const currentSubTab = activeSubTab || internalSubTab;
-  const handleTabChange = (tab) => {
-    setInternalSubTab(tab);
-    if (setActiveSubTab) setActiveSubTab(tab);
-  };
-
-  const loggedInUserName = operatorName || currentUser || "系統";
-  const userKey = loggedInUserName.includes('大狗狗') ? 'userA' : 'userB';
-  const userDisplayName = userKey === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
 
   // --- Test Push Diagnostic State ---
   const [testPushDiagnostic, setTestPushDiagnostic] = useState({
