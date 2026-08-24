@@ -57,6 +57,97 @@ const cleanFirestoreData = (obj) => {
   return cleaned;
 };
 
+// ★ 智慧審計軌跡瘦身過濾器 — 僅保留有變動的帳戶與總額快照，體積縮小 95%
+const sanitizeAuditTrail = (trail) => {
+  if (!trail || typeof trail !== 'object') return null;
+  const before = trail.before;
+  const after = trail.after;
+  if (!before && !after) return null;
+
+  const beforeAccounts = Array.isArray(before?.accounts) ? before.accounts : [];
+  const afterAccounts = Array.isArray(after?.accounts) ? after.accounts : [];
+
+  const changedAccountIds = new Set();
+  afterAccounts.forEach(aAcc => {
+    if (!aAcc) return;
+    const bAcc = beforeAccounts.find(b => b && b.id === aAcc.id);
+    if (!bAcc || Number(bAcc.balance) !== Number(aAcc.balance)) {
+      changedAccountIds.add(aAcc.id);
+    }
+  });
+  beforeAccounts.forEach(bAcc => {
+    if (!bAcc) return;
+    const aAcc = afterAccounts.find(a => a && a.id === bAcc.id);
+    if (!aAcc || Number(aAcc.balance) !== Number(bAcc.balance)) {
+      changedAccountIds.add(bAcc.id);
+    }
+  });
+
+  const slimAccount = (acc) => {
+    if (!acc) return null;
+    return {
+      id: acc.id,
+      nickname: acc.nickname || '',
+      currency: acc.currency || 'TWD',
+      balance: Number(acc.balance) || 0,
+      owner: acc.owner || 'joint'
+    };
+  };
+
+  const slimBeforeAccs = beforeAccounts.filter(a => a && changedAccountIds.has(a.id)).map(slimAccount).filter(Boolean);
+  const slimAfterAccs = afterAccounts.filter(a => a && changedAccountIds.has(a.id)).map(slimAccount).filter(Boolean);
+
+  const slimSnapshot = (snap, slimAccs) => {
+    if (!snap) return null;
+    return {
+      userA: Number(snap.userA) || 0,
+      userB: Number(snap.userB) || 0,
+      userA_usd: Number(snap.userA_usd) || 0,
+      userB_usd: Number(snap.userB_usd) || 0,
+      jointCash: Number(snap.jointCash) || 0,
+      jointCash_usd: Number(snap.jointCash_usd) || 0,
+      jointInvestments: snap.jointInvestments ? { ...snap.jointInvestments } : {},
+      userInvestments: snap.userInvestments
+        ? JSON.parse(JSON.stringify(snap.userInvestments))
+        : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } },
+      accounts: slimAccs
+    };
+  };
+
+  return {
+    before: slimSnapshot(before, slimBeforeAccs),
+    after: slimSnapshot(after, slimAfterAccs)
+  };
+};
+
+// ★ 雲端資料庫全面安全過濾與防護瘦身函數
+const sanitizeAssetsForCloud = (rawAssets) => {
+  if (!rawAssets || typeof rawAssets !== 'object') return rawAssets;
+  const clean = cleanFirestoreData(rawAssets);
+
+  // 1. 移除過渡暫存之 logs（已全面獨立存放在子集合中）
+  if (clean.userOperationsLog) {
+    delete clean.userOperationsLog;
+  }
+
+  // 2. 徹底瘦身 monthlyExpenses 中所有歷史快照
+  if (Array.isArray(clean.monthlyExpenses)) {
+    clean.monthlyExpenses = clean.monthlyExpenses.map(record => {
+      if (!record || typeof record !== 'object') return record;
+      const slimRecord = { ...record };
+      if (slimRecord.auditTrail) {
+        slimRecord.auditTrail = sanitizeAuditTrail(slimRecord.auditTrail);
+      }
+      if (slimRecord.deleteAuditTrail) {
+        slimRecord.deleteAuditTrail = sanitizeAuditTrail(slimRecord.deleteAuditTrail);
+      }
+      return slimRecord;
+    });
+  }
+
+  return clean;
+};
+
 const USER_MAPPING = {
   "ender.tsai@gmail.com": "大狗狗🐕",
   "r5213467254@icloud.com": "阿陞🐶",
@@ -626,7 +717,7 @@ function App() {
 
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
-    const cleanAssets = cleanFirestoreData(newAssets);
+    const cleanAssets = sanitizeAssetsForCloud(newAssets);
     setAssets(cleanAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
     if (window.location.hostname === 'localhost') {
       console.log("[DEV MOCK] saveToCloud:", cleanAssets);
@@ -1108,7 +1199,7 @@ function App() {
     const docRef = doc(db, "finance", "data");
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
+        let data = docSnap.data();
         if (!data.userInvestments) {
           data.userInvestments = {
             userA: { stock: 0, fund: 0, deposit: 0, other: 0 },
@@ -1288,6 +1379,14 @@ function App() {
           needsUpdate = true;
         }
 
+        // ★ 自動無損瘦身偵測：若檢測到歷史快照過大，啟動自動壓縮並同步回寫 Firestore
+        let needsSanitizeWrite = false;
+        if (data.monthlyExpenses && data.monthlyExpenses.some(r => r.auditTrail?.before?.accounts?.length > 4)) {
+          console.log("[系統優化] 偵測到歷史交易快照體積較大，啟動自動無損瘦身...");
+          data = sanitizeAssetsForCloud(data);
+          needsSanitizeWrite = true;
+        }
+
         // ★ 安全月度歸檔引擎 — 序列化處理以防資料遺失
         if (data.monthlyExpenses && data.monthlyExpenses.length > 0) {
           try {
@@ -1332,11 +1431,13 @@ function App() {
                     rawRecords.forEach(r => existingMap.set(r.timestamp, r));
 
                     toArchive[month].forEach(r => {
-                      existingMap.set(r.timestamp, r); // 如果有同時間戳的更新，以主檔案 (即將歸檔的這筆) 為主
+                      existingMap.set(r.timestamp, r);
                       archivedTimestamps.add(r.timestamp);
                     });
 
-                    const mergedRecords = Array.from(existingMap.values()).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                    const mergedRecords = Array.from(existingMap.values())
+                      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+                      .map(r => r.auditTrail ? { ...r, auditTrail: sanitizeAuditTrail(r.auditTrail) } : r);
 
                     await setDoc(archiveDocRef, cleanFirestoreData({
                       month: month,
@@ -1352,7 +1453,8 @@ function App() {
                     const mainSnap = await transaction.get(mainDocRef);
                     if (mainSnap.exists()) {
                       const mainData = mainSnap.data();
-                      const safeMonthly = (mainData.monthlyExpenses || []).filter(r => !archivedTimestamps.has(r.timestamp));
+                      const rawSafeMonthly = (mainData.monthlyExpenses || []).filter(r => !archivedTimestamps.has(r.timestamp));
+                      const safeMonthly = rawSafeMonthly.map(r => r.auditTrail ? { ...r, auditTrail: sanitizeAuditTrail(r.auditTrail) } : r);
 
                       const newSnapshots = { ...(mainData.dailyNetWorth || {}) };
                       const holdingsBase = mainData.currentStockHoldings ? { ...mainData.currentStockHoldings } : {};
@@ -1392,7 +1494,7 @@ function App() {
 
                       Object.keys(holdingsBase).forEach(k => { if (holdingsBase[k].shares <= 0) delete holdingsBase[k]; });
 
-                      transaction.update(mainDocRef, cleanFirestoreData({
+                      transaction.update(mainDocRef, sanitizeAssetsForCloud({
                         monthlyExpenses: safeMonthly,
                         dailyNetWorth: newSnapshots,
                         currentStockHoldings: holdingsBase
@@ -1414,9 +1516,11 @@ function App() {
           }
         }
 
-        if (needsUpdate) {
-          const cleanData = cleanFirestoreData(data);
-          setDoc(docRef, cleanData).catch(err => console.error("Auto-migration setDoc error:", err));
+        if (needsUpdate || needsSanitizeWrite) {
+          const cleanData = sanitizeAssetsForCloud(data);
+          setDoc(docRef, cleanData)
+            .then(() => console.log("✅ 成功完成資料庫瘦身與同步回寫"))
+            .catch(err => console.error("Auto-migration / sanitize setDoc error:", err));
         }
 
         // --- Real-time Cross-Device Notification Trigger ---
@@ -1606,22 +1710,22 @@ function App() {
   const getSnapshot = (currentAssets) => {
     const accounts = currentAssets.accounts || [];
     const userA = accounts.length > 0
-      ? accounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0)
+      ? accounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + (Number(a.balance) || 0), 0)
       : (currentAssets.userA || 0);
     const userB = accounts.length > 0
-      ? accounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0)
+      ? accounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + (Number(a.balance) || 0), 0)
       : (currentAssets.userB || 0);
     const jointCash = accounts.length > 0
-      ? accounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0)
+      ? accounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + (Number(a.balance) || 0), 0)
       : (currentAssets.jointCash || 0);
     const userA_usd = accounts.length > 0
-      ? accounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0)
+      ? accounts.filter(a => a.owner === 'userA' && a.currency === 'USD').reduce((sum, a) => sum + (Number(a.balance) || 0), 0)
       : (currentAssets.userA_usd || 0);
     const userB_usd = accounts.length > 0
-      ? accounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0)
+      ? accounts.filter(a => a.owner === 'userB' && a.currency === 'USD').reduce((sum, a) => sum + (Number(a.balance) || 0), 0)
       : (currentAssets.userB_usd || 0);
     const jointCash_usd = accounts.length > 0
-      ? accounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + a.balance, 0)
+      ? accounts.filter(a => a.owner === 'joint' && a.currency === 'USD').reduce((sum, a) => sum + (Number(a.balance) || 0), 0)
       : (currentAssets.jointCash_usd || 0);
 
     return {
@@ -1631,11 +1735,17 @@ function App() {
       userB_usd,
       jointCash,
       jointCash_usd,
-      jointInvestments: { ...(currentAssets.jointInvestments || {}) },
+      jointInvestments: currentAssets.jointInvestments ? { ...currentAssets.jointInvestments } : {},
       userInvestments: currentAssets.userInvestments
         ? JSON.parse(JSON.stringify(currentAssets.userInvestments))
         : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } },
-      accounts: JSON.parse(JSON.stringify(accounts))
+      accounts: accounts.map(a => ({
+        id: a.id,
+        nickname: a.nickname || '',
+        currency: a.currency || 'TWD',
+        balance: Number(a.balance) || 0,
+        owner: a.owner || 'joint'
+      }))
     };
   };
 
@@ -1910,7 +2020,7 @@ function App() {
           ...r,
           operator: r.operator || operatorName,
           timestamp: r.timestamp || timestamp,
-          auditTrail: r.auditTrail || { before: getSnapshot(assets), after: getSnapshot(syncedNewAssets) }
+          auditTrail: r.auditTrail ? sanitizeAuditTrail(r.auditTrail) : sanitizeAuditTrail({ before: getSnapshot(assets), after: getSnapshot(syncedNewAssets) })
         }))
       ]
     };
@@ -2376,12 +2486,13 @@ function App() {
 
     const snapshotBefore = getSnapshot(assets);
     const snapshotAfter = getSnapshot(newAssets);
+    const slimmedAudit = sanitizeAuditTrail({ before: snapshotBefore, after: snapshotAfter });
     const updatedRecord = {
       ...record,
       isDeleted: true,
       deleteReason: reason.trim(),
       deleteTimestamp: new Date().toISOString(),
-      deleteAuditTrail: { before: snapshotBefore, after: snapshotAfter }
+      deleteAuditTrail: slimmedAudit
     };
     list[context.index] = updatedRecord;
 
@@ -2396,7 +2507,7 @@ function App() {
       payer: record.payer || '系統',
       operator: operatorName,
       timestamp: new Date().toISOString(),
-      auditTrail: { before: snapshotBefore, after: snapshotAfter },
+      auditTrail: slimmedAudit,
       necessity: record.necessity || 'need'
     };
 

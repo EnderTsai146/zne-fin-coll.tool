@@ -1011,6 +1011,34 @@ const MonthlyView = ({
                                     }
                                 });
 
+                                if (changes.length === 0 && detailModalRecord.auditTrail.before && detailModalRecord.auditTrail.after) {
+                                    const summaryKeys = [
+                                        { key: 'userA', label: '大狗狗 (TWD)', currency: 'TWD' },
+                                        { key: 'userB', label: '阿陞 (TWD)', currency: 'TWD' },
+                                        { key: 'jointCash', label: '共同現金 (TWD)', currency: 'TWD' },
+                                        { key: 'userA_usd', label: '大狗狗 (USD)', currency: 'USD' },
+                                        { key: 'userB_usd', label: '阿陞 (USD)', currency: 'USD' },
+                                        { key: 'jointCash_usd', label: '共同現金 (USD)', currency: 'USD' }
+                                    ];
+                                    const b = detailModalRecord.auditTrail.before || {};
+                                    const a = detailModalRecord.auditTrail.after || {};
+                                    summaryKeys.forEach(k => {
+                                        const bVal = Number(b[k.key]) || 0;
+                                        const aVal = Number(a[k.key]) || 0;
+                                        const diff = aVal - bVal;
+                                        if (diff !== 0) {
+                                            changes.push({
+                                                nickname: k.label,
+                                                currency: k.currency,
+                                                before: bVal,
+                                                after: aVal,
+                                                diff: diff,
+                                                owner: k.key.includes('userA') ? 'userA' : (k.key.includes('userB') ? 'userB' : 'joint')
+                                            });
+                                        }
+                                    });
+                                }
+
                                 if (changes.length === 0) return null;
 
                                 return (
