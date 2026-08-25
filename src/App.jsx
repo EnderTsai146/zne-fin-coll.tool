@@ -2139,7 +2139,84 @@ function App() {
   const handleEditTransaction = async (context, newData) => {
     const newAssets = { ...assets };
 
+    // --- CASE A: BATCH TRANSACTION EDIT ---
+    if (newData?.batchUpdates && Array.isArray(newData.batchUpdates)) {
+      let mainList = [...(newAssets.monthlyExpenses || [])];
+      let arcUpdates = {}; // { [month]: list }
 
+      newData.batchUpdates.forEach(update => {
+        const itemCtx = update.context;
+        if (!itemCtx) return;
+
+        let list;
+        let targetRecord;
+        if (itemCtx.source === 'main') {
+          list = mainList;
+          targetRecord = list[itemCtx.index];
+        } else {
+          if (!arcUpdates[itemCtx.month]) {
+            arcUpdates[itemCtx.month] = [...(archivedRecords[itemCtx.month] || [])];
+          }
+          list = arcUpdates[itemCtx.month];
+          targetRecord = list[itemCtx.index];
+        }
+
+        if (!targetRecord) return;
+
+        const oldDate = targetRecord.date;
+        const newDate = update.date || targetRecord.date;
+
+        let subCategory = targetRecord.subCategory;
+        if (!subCategory && targetRecord.type === 'spend') {
+          const oldNote = targetRecord.note || '';
+          if (oldNote.includes('餐費')) subCategory = '餐費';
+          else if (oldNote.includes('購物')) subCategory = '購物';
+          else if (oldNote.includes('娛樂')) subCategory = '娛樂';
+          else subCategory = '其他';
+        }
+
+        const mutatedRecord = {
+          ...targetRecord,
+          date: newDate,
+          month: newDate.slice(0, 7),
+          category: update.category || targetRecord.category,
+          note: update.note !== undefined ? update.note : targetRecord.note,
+          ...(subCategory && { subCategory }),
+          operator: operatorName
+        };
+
+        if (itemCtx.source === 'main') {
+          if (newAssets.dailyNetWorth) {
+            if (newAssets.dailyNetWorth[oldDate]) delete newAssets.dailyNetWorth[oldDate];
+            if (newAssets.dailyNetWorth[newDate]) delete newAssets.dailyNetWorth[newDate];
+          }
+          list[itemCtx.index] = mutatedRecord;
+        } else {
+          list[itemCtx.index] = mutatedRecord;
+        }
+      });
+
+      newAssets.monthlyExpenses = mainList;
+
+      // Sync any modified archive lists to Firestore
+      for (const [m, arcList] of Object.entries(arcUpdates)) {
+        setArchivedRecords(prev => ({ ...prev, [m]: arcList }));
+        setDoc(doc(db, "finance", `arc_${m}`), cleanFirestoreData({
+          month: m,
+          archivedAt: new Date().toISOString(),
+          records: arcList
+        })).catch(async e => await customAlert("歸檔紀錄同步失敗：" + e.message, "同步失敗"));
+      }
+
+      const logDetail = `修改購物車批次紀錄 (共 ${newData.batchUpdates.length} 筆)`;
+      const finalAssetsWithLog = logOperation(newAssets, 'edit', logDetail);
+      saveToCloud(finalAssetsWithLog);
+      sendTransactionPush("✏️ 購物車明細批次修改", `${operatorName} 修改了購物車批次之 ${newData.batchUpdates.length} 筆明細`);
+      await customAlert("✅ 購物車批次紀錄修改成功！(金額與帳戶已受保護不可修改)", "修改成功");
+      return;
+    }
+
+    // --- CASE B: SINGLE TRANSACTION EDIT ---
     let list;
     let targetRecord;
     if (context.source === 'main') {
@@ -2149,6 +2226,8 @@ function App() {
       list = [...archivedRecords[context.month]];
       targetRecord = list[context.index];
     }
+
+    if (!targetRecord) return;
 
     const oldDate = targetRecord.date;
     const newDate = newData.date;
@@ -2167,7 +2246,7 @@ function App() {
       ...targetRecord,
       date: newDate,
       month: newDate.slice(0, 7),
-      category: newData.category,
+      category: newData.category || targetRecord.category,
       note: newData.note,
       ...(subCategory && { subCategory }),
       operator: operatorName
@@ -2216,6 +2295,120 @@ function App() {
 
   // ★ 完美還原的作廢功能
   const handleDeleteTransaction = async (context) => {
+    // --- CASE A: BATCH DELETION ---
+    if (context?.batchContexts && Array.isArray(context.batchContexts)) {
+      const newAssets = {
+        ...assets,
+        jointInvestments: { ...(assets.jointInvestments || { stock: 0, fund: 0, deposit: 0, other: 0 }) },
+        userInvestments: assets.userInvestments
+          ? { userA: { ...assets.userInvestments.userA }, userB: { ...assets.userInvestments.userB } }
+          : { userA: { stock: 0, fund: 0, deposit: 0, other: 0 }, userB: { stock: 0, fund: 0, deposit: 0, other: 0 } }
+      };
+      let updatedAccounts = assets.accounts ? [...assets.accounts] : null;
+
+      const modifyAccountBalance = (accId, diffAmount) => {
+        if (!updatedAccounts || !accId) return;
+        updatedAccounts = updatedAccounts.map(a => {
+          if (a.id === accId) return { ...a, balance: a.balance + diffAmount };
+          return a;
+        });
+      };
+
+      const reason = await customPrompt("⚠️ 即將作廢此購物車整批紀錄，系統將自動還原對應的金額。\n請輸入作廢原因（必填）：");
+      if (!reason || !reason.trim()) {
+        await customAlert("❌ 必須輸入作廢原因才能繼續。");
+        return;
+      }
+
+      let mainList = [...(newAssets.monthlyExpenses || [])];
+      let arcUpdates = {};
+      let totalRefundAmt = 0;
+      let firstRecord = null;
+
+      for (const itemCtx of context.batchContexts) {
+        let list;
+        let record;
+        if (itemCtx.source === 'main') {
+          list = mainList;
+          record = list[itemCtx.index];
+        } else {
+          if (!arcUpdates[itemCtx.month]) arcUpdates[itemCtx.month] = [...(archivedRecords[itemCtx.month] || [])];
+          list = arcUpdates[itemCtx.month];
+          record = list[itemCtx.index];
+        }
+
+        if (!record || record.isDeleted) continue;
+        if (!firstRecord) firstRecord = record;
+
+        totalRefundAmt += (record.total || 0);
+
+        const safePayer = record.payer || '';
+        const payerKey = (safePayer.includes('大狗狗🐕') || safePayer.includes('用戶1'))
+          ? 'userA'
+          : ((safePayer.includes('阿陞🐶') || safePayer.includes('用戶2')) ? 'userB' : null);
+
+        if (record.accountId) {
+          modifyAccountBalance(record.accountId, record.total);
+        } else {
+          if (record.type === 'spend') {
+            if (record.advancedBy === 'jointCash' || !record.advancedBy) newAssets.jointCash += record.total;
+            else newAssets[record.advancedBy] += record.total;
+          } else {
+            if (payerKey) newAssets[payerKey] += record.total;
+          }
+        }
+
+        list[itemCtx.index] = {
+          ...record,
+          isDeleted: true,
+          deleteReason: reason.trim(),
+          deleteTimestamp: new Date().toISOString()
+        };
+      }
+
+      if (updatedAccounts) newAssets.accounts = updatedAccounts;
+
+      const snapshotBefore = getSnapshot(assets);
+      const snapshotAfter = getSnapshot(newAssets);
+      const slimmedAudit = sanitizeAuditTrail({ before: snapshotBefore, after: snapshotAfter });
+
+      // Add single calibration record for batch refund
+      const calibrateRecord = {
+        date: new Date().toISOString().split('T')[0],
+        month: new Date().toISOString().slice(0, 7),
+        type: 'calibrate',
+        category: '作廢退款',
+        total: totalRefundAmt,
+        note: `🗑️ 作廢退款: 購物車批次 (共 ${context.batchContexts.length} 筆，原因: ${reason.trim()})`,
+        payer: firstRecord?.payer || '系統',
+        operator: operatorName,
+        timestamp: new Date().toISOString(),
+        auditTrail: slimmedAudit,
+        necessity: 'need'
+      };
+
+      mainList = [calibrateRecord, ...mainList];
+      newAssets.monthlyExpenses = mainList;
+
+      // Sync any modified archive lists
+      for (const [m, arcList] of Object.entries(arcUpdates)) {
+        setArchivedRecords(prev => ({ ...prev, [m]: arcList }));
+        setDoc(doc(db, "finance", `arc_${m}`), cleanFirestoreData({
+          month: m,
+          archivedAt: new Date().toISOString(),
+          records: arcList
+        })).catch(async e => await customAlert("歸檔紀錄同步失敗：" + e.message));
+      }
+
+      const logDetail = `作廢購物車整批紀錄 (共 ${context.batchContexts.length} 筆，總計 $${totalRefundAmt} TWD) - 原因: ${reason.trim()}`;
+      const finalAssetsWithLog = logOperation(newAssets, 'delete', logDetail);
+      saveToCloud(finalAssetsWithLog);
+      sendTransactionPush("🗑️ 購物車批次作廢", `${operatorName} 作廢了購物車整批紀錄 (共 ${context.batchContexts.length} 筆，退回 $${totalRefundAmt} TWD)`);
+      await customAlert("🗑️ 購物車整批紀錄已作廢，相關金額已完全復原。");
+      return;
+    }
+
+    // --- CASE B: SINGLE RECORD DELETION ---
     let list;
     let record;
     if (context.source === 'main') {

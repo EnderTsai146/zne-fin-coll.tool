@@ -63,6 +63,49 @@ const MonthlyView = ({
     const [detailModalRecord, setDetailModalRecord] = useState(null);
     const [editDate, setEditDate] = useState('');
     const [editNote, setEditNote] = useState('');
+    const [syncBatchDate, setSyncBatchDate] = useState(true);
+    const [batchItemsState, setBatchItemsState] = useState([]);
+
+    const openDetailModal = (item) => {
+        setDetailModalRecord(item);
+        if (item.isBatchGroup) {
+            setEditDate(item.date);
+            setSyncBatchDate(true);
+            setBatchItemsState(item.records.map(r => ({
+                originalIndex: r.originalIndex,
+                _context: r._context,
+                id: r.id,
+                cat: r.subCategory || r.category || '支出',
+                amount: r.total,
+                date: r.date,
+                note: r.note || '',
+                originalDate: r.date,
+                originalNote: r.note || ''
+            })));
+        } else {
+            const siblings = item.batchId ? history.filter(r => r.batchId === item.batchId) : [];
+            if (siblings.length > 1) {
+                setEditDate(item.date);
+                setSyncBatchDate(true);
+                setBatchItemsState(siblings.map(r => ({
+                    originalIndex: r.originalIndex,
+                    _context: r._context,
+                    id: r.id,
+                    cat: r.subCategory || r.category || '支出',
+                    amount: r.total,
+                    date: r.date,
+                    note: r.note || '',
+                    originalDate: r.date,
+                    originalNote: r.note || '',
+                    isCurrentTarget: r.originalIndex === item.originalIndex
+                })));
+            } else {
+                setEditDate(item.date);
+                setEditNote(item.note || '');
+                setBatchItemsState([]);
+            }
+        }
+    };
 
     const dynamicNecessityMap = useMemo(() => {
         return computeDynamicNecessities(historyWithIndex, assets);
@@ -155,6 +198,48 @@ const MonthlyView = ({
         });
     }, [filteredHistory]);
 
+    // Group shopping cart batch items together in the list view
+    const groupedDisplayHistory = useMemo(() => {
+        const result = [];
+        const seenBatchIds = new Set();
+
+        sortedHistory.forEach(record => {
+            if (record.batchId) {
+                if (seenBatchIds.has(record.batchId)) {
+                    return;
+                }
+                const batchMembers = sortedHistory.filter(r => r.batchId === record.batchId);
+                if (batchMembers.length > 1) {
+                    seenBatchIds.add(record.batchId);
+                    const totalAmt = batchMembers.reduce((s, r) => s + (r.total || 0), 0);
+                    const isAllDeleted = batchMembers.every(r => r.isDeleted || r.category === '作廢退款');
+                    result.push({
+                        isBatchGroup: true,
+                        batchId: record.batchId,
+                        date: record.date,
+                        month: record.month,
+                        type: record.type,
+                        category: record.category,
+                        payer: record.payer,
+                        operator: record.operator,
+                        accountId: record.accountId,
+                        targetAccountId: record.targetAccountId,
+                        total: totalAmt,
+                        records: batchMembers,
+                        isDeleted: isAllDeleted,
+                        originalIndex: record.originalIndex,
+                        _context: record._context,
+                        auditTrail: record.auditTrail,
+                        timestamp: record.timestamp
+                    });
+                    return;
+                }
+            }
+            result.push(record);
+        });
+        return result;
+    }, [sortedHistory]);
+
     // Infinite scroll
     const [renderCount, setRenderCount] = useState(30);
     const loadMoreRef = useRef(null);
@@ -167,12 +252,12 @@ const MonthlyView = ({
         if (viewMode !== 'list') return;
         const observer = new IntersectionObserver((entries) => {
             if (entries[0].isIntersecting) {
-                setRenderCount(prev => Math.min(prev + 30, sortedHistory.length));
+                setRenderCount(prev => Math.min(prev + 30, groupedDisplayHistory.length));
             }
         }, { threshold: 0.1 });
         if (loadMoreRef.current) observer.observe(loadMoreRef.current);
         return () => observer.disconnect();
-    }, [sortedHistory, viewMode]);
+    }, [groupedDisplayHistory, viewMode]);
 
     // Block page scrolling when overlay modals are open
     useEffect(() => {
@@ -495,13 +580,13 @@ const MonthlyView = ({
                         </div>
                     </div>
 
-                    {sortedHistory.length === 0 ? (
+                    {groupedDisplayHistory.length === 0 ? (
                         <div className="glass-card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.88rem' }}>
                             📭 本月無符合篩選條件的交易紀錄
                         </div>
                     ) : (
                         <>
-                            {sortedHistory.slice(0, renderCount).map((record) => {
+                            {groupedDisplayHistory.slice(0, renderCount).map((record, rIdx) => {
                                 const isDeleted = record.isDeleted || record.category === '作廢退款';
                                 const itemNec = dynamicNecessityMap[record.originalIndex] || { needAmount: record.total, wantAmount: 0 };
                                 const isNeed = itemNec.needAmount > 0;
@@ -511,7 +596,110 @@ const MonthlyView = ({
                                     ? 'newly-added-highlight'
                                     : '';
 
-                                // Currency or delta styles
+                                // CASE 1: GROUPED SHOPPING CART BATCH CARD
+                                if (record.isBatchGroup) {
+                                    return (
+                                        <div
+                                            key={`batch_${record.batchId}_${rIdx}`}
+                                            className={`glass-card ${highlightClass}`}
+                                            onClick={() => {
+                                                if (!isDeleted) {
+                                                    openDetailModal(record);
+                                                }
+                                            }}
+                                            style={{
+                                                padding: '14px 16px',
+                                                marginBottom: '12px',
+                                                cursor: isDeleted ? 'default' : 'pointer',
+                                                opacity: isDeleted ? 0.45 : 1,
+                                                borderLeft: isDeleted ? '3px solid #8e8e93' : '3px solid #ff9f0a',
+                                                background: 'linear-gradient(135deg, rgba(255, 159, 10, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%)',
+                                                transition: 'transform 0.2s ease, background-color 0.2s ease'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
+                                                    {/* Header badges */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                                                        <span style={{
+                                                            fontSize: '0.64rem',
+                                                            background: record.type === 'spend' ? 'rgba(0,122,255,0.15)' : 'rgba(175,82,222,0.15)',
+                                                            color: record.type === 'spend' ? '#007AFF' : '#AF52DE',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '4px',
+                                                            fontWeight: '700'
+                                                        }}>
+                                                            {record.category || '支出'}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
+                                                            {record.date}
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '0.62rem',
+                                                            background: 'rgba(255,159,10,0.18)',
+                                                            color: '#ff9f0a',
+                                                            border: '0.5px solid rgba(255,159,10,0.4)',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '4px',
+                                                            fontWeight: '800'
+                                                        }}>
+                                                            🛒 購物車整批結帳 (共 {record.records.length} 筆)
+                                                        </span>
+                                                        {isDeleted && (
+                                                            <span style={{ fontSize: '0.6rem', backgroundColor: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                                                已作廢
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Sub-items Preview List */}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', margin: '6px 0 8px 0', background: 'rgba(0,0,0,0.22)', padding: '8px 10px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)' }}>
+                                                        {record.records.map((sub, sIdx) => (
+                                                            <div key={sIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
+                                                                <span style={{ color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                    <span style={{ color: '#ff9f0a', marginRight: '4px' }}>•</span>
+                                                                    <strong style={{ opacity: 0.9 }}>{sub.subCategory || sub.category}</strong>
+                                                                    {sub.note && sub.note !== (sub.subCategory || sub.category) ? <span style={{ opacity: 0.7, marginLeft: '4px' }}>({sub.note.replace(`${sub.subCategory} - `, '')})</span> : ''}
+                                                                </span>
+                                                                <span style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700', marginLeft: '8px', flexShrink: 0 }}>
+                                                                    ${sub.total.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    {/* Account line */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                                        {(() => {
+                                                            const sourceAcc = assets.accounts?.find(a => a.id === record.accountId);
+                                                            if (sourceAcc) {
+                                                                const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
+                                                                return (
+                                                                    <span>
+                                                                        💳 交易帳戶：<strong style={{ color: '#8effa2' }}>{sourceAcc.icon || '🏦'} {sourceAcc.nickname}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return <span>💳 交易帳戶：<strong style={{ color: 'var(--text-tertiary)' }}>{record.payer || '無'}</strong></span>;
+                                                        })()}
+                                                    </div>
+                                                </div>
+
+                                                {/* Right Column: Amount & Member */}
+                                                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
+                                                    <div style={{ fontSize: '1.02rem', fontWeight: '850', color: '#ff9f0a' }}>
+                                                        -${record.total.toLocaleString()}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '3px' }}>
+                                                        👤 {record.payer || '無'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                // CASE 2: SINGLE TRANSACTION CARD
                                 let amountColor = '#fff';
                                 let sign = '';
                                 if (record.type === 'income') {
@@ -532,9 +720,7 @@ const MonthlyView = ({
                                         className={`glass-card ${highlightClass}`}
                                         onClick={() => {
                                             if (!isDeleted) {
-                                                setDetailModalRecord(record);
-                                                setEditDate(record.date);
-                                                setEditNote(record.note || '');
+                                                openDetailModal(record);
                                             }
                                         }}
                                         style={{
@@ -571,19 +757,6 @@ const MonthlyView = ({
                                                     <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
                                                         {record.date}
                                                     </span>
-                                                    {record.batchId && (
-                                                        <span style={{
-                                                            fontSize: '0.6rem',
-                                                            background: 'rgba(255,159,10,0.12)',
-                                                            color: '#ff9f0a',
-                                                            border: '0.5px solid rgba(255,159,10,0.3)',
-                                                            padding: '1px 5px',
-                                                            borderRadius: '4px',
-                                                            fontWeight: '750'
-                                                        }}>
-                                                            🛒 合併結帳 ({record.batchIndex || '1'}/{record.batchCount || '多'})
-                                                        </span>
-                                                    )}
                                                     {isDeleted && (
                                                         <span style={{ fontSize: '0.6rem', backgroundColor: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
                                                             已作廢
@@ -596,81 +769,20 @@ const MonthlyView = ({
                                                     {record.note || record.category}
                                                 </div>
 
-                                                {/* Line 3: Account info change & Post-Transaction Balance */}
+                                                {/* Line 3: Account info change */}
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                                     {(() => {
                                                         const sourceAcc = assets.accounts?.find(a => a.id === record.accountId);
-                                                        const targetAcc = assets.accounts?.find(a => a.id === record.targetAccountId);
-                                                        
-                                                        // Check audit trail for exact snapshot of account balances immediately after this transaction
-                                                        const srcAfter = record.auditTrail?.after?.accounts?.find(a => a.id === record.accountId);
-                                                        const tgtAfter = record.auditTrail?.after?.accounts?.find(a => a.id === record.targetAccountId);
-                                                        
-                                                        if (record.type === 'transfer') {
-                                                            const srcName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '未指定帳戶';
-                                                            const tgtName = targetAcc ? `${targetAcc.icon || '🏦'} ${targetAcc.nickname}` : '未指定帳戶';
+                                                        const accName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '';
+                                                        if (accName) {
+                                                            const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
                                                             return (
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                    <span>
-                                                                        🔁 資金劃撥：<strong style={{ color: '#bf5af2' }}>{srcName}</strong> ➡️ <strong style={{ color: '#bf5af2' }}>{tgtName}</strong>
-                                                                    </span>
-                                                                    {(srcAfter || tgtAfter) && (
-                                                                        <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.45)' }}>
-                                                                            交易後餘額：{srcAfter ? `${srcName} $${srcAfter.balance.toLocaleString()} ${srcAfter.currency || 'TWD'}` : ''}
-                                                                            {srcAfter && tgtAfter ? ' ｜ ' : ''}
-                                                                            {tgtAfter ? `${tgtName} $${tgtAfter.balance.toLocaleString()} ${tgtAfter.currency || 'TWD'}` : ''}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
+                                                                <span>
+                                                                    💳 交易帳戶：<strong style={{ color: '#8effa2' }}>{accName}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
+                                                                </span>
                                                             );
-                                                        } else if (record.type === 'exchange') {
-                                                            const srcName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '未指定帳戶';
-                                                            const tgtName = targetAcc ? `${targetAcc.icon || '🏦'} ${targetAcc.nickname}` : '未指定帳戶';
-                                                            return (
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                    <span>
-                                                                        💱 外幣換匯：<strong style={{ color: '#ff9f0a' }}>{srcName}</strong> ➡️ <strong style={{ color: '#ff9f0a' }}>{tgtName}</strong>
-                                                                    </span>
-                                                                    {(srcAfter || tgtAfter) && (
-                                                                        <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.45)' }}>
-                                                                            交易後餘額：{srcAfter ? `${srcName} $${srcAfter.balance.toLocaleString()} ${srcAfter.currency || 'USD'}` : ''}
-                                                                            {srcAfter && tgtAfter ? ' ｜ ' : ''}
-                                                                            {tgtAfter ? `${tgtName} $${tgtAfter.balance.toLocaleString()} ${tgtAfter.currency || 'TWD'}` : ''}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        } else {
-                                                            const accName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '';
-                                                            if (accName) {
-                                                                const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
-                                                                const postBalance = srcAfter ? srcAfter.balance : null;
-                                                                return (
-                                                                    <span>
-                                                                        💳 交易帳戶：<strong style={{ color: '#8effa2' }}>{accName}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
-                                                                        {postBalance !== null && (
-                                                                            <span style={{ marginLeft: '6px', fontSize: '0.66rem', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '4px' }}>
-                                                                                餘額: ${postBalance.toLocaleString()} {srcAfter.currency || 'TWD'}
-                                                                            </span>
-                                                                        )}
-                                                                    </span>
-                                                                );
-                                                            } else {
-                                                                const getLegacyPayerName = (p) => {
-                                                                    if (!p) return '未指定';
-                                                                    if (p.includes('大狗狗') || p === 'userA') return '大狗狗個人';
-                                                                    if (p.includes('阿陞') || p === 'userB') return '阿陞個人';
-                                                                    if (p.includes('共同') || p === 'jointCash' || p === 'joint') return '共同帳戶';
-                                                                    return p;
-                                                                };
-                                                                const legacyPayer = getLegacyPayerName(record.payer);
-                                                                return (
-                                                                    <span>
-                                                                        💳 交易帳戶：<strong style={{ color: 'var(--text-tertiary)' }}>{legacyPayer} (舊資料)</strong>
-                                                                    </span>
-                                                                );
-                                                            }
                                                         }
+                                                        return <span>💳 交易帳戶：<strong style={{ color: 'var(--text-tertiary)' }}>{record.payer || '無'}</strong></span>;
                                                     })()}
                                                 </div>
                                             </div>
@@ -705,9 +817,9 @@ const MonthlyView = ({
                                 );
                             })}
                             
-                            {renderCount < sortedHistory.length && (
+                            {renderCount < groupedDisplayHistory.length && (
                                 <div ref={loadMoreRef} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: '0.82rem', fontWeight: '600' }}>
-                                    捲動載入更多 ({renderCount}/{sortedHistory.length})
+                                    捲動載入更多 ({renderCount}/{groupedDisplayHistory.length})
                                 </div>
                             )}
                         </>
@@ -753,7 +865,7 @@ const MonthlyView = ({
                         const debts = getDebtList('userA');
                         const debt = debts.reduce((sum, r) => sum + r.total, 0);
                         return (
-                            <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-pink)' }}>
+                            <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-purple)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                     <div>
                                         <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>🐕 大狗狗 🐕</h4>
@@ -773,7 +885,7 @@ const MonthlyView = ({
                                         <div style={{ fontSize: '0.78rem', color: '#30d158', fontWeight: '600' }}>已全數清算結案</div>
                                     )}
                                     {debt > 0 && (
-                                        <button className="glass-btn" style={{ padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-pink)', borderColor: 'rgba(255,45,85,0.3)', backgroundColor: 'rgba(255,45,85,0.08)' }} onClick={() => handleSettle('userA')}>
+                                        <button className="glass-btn" style={{ padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.3)', backgroundColor: 'rgba(52,199,89,0.08)' }} onClick={() => handleSettle('userA')}>
                                             一鍵結清
                                         </button>
                                     )}
@@ -872,7 +984,7 @@ const MonthlyView = ({
                         {/* Modal Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                             <div style={{ fontWeight: '850', fontSize: '1.15rem', color: '#fff' }} className="liquid-modal-title">
-                                🔍 交易詳細資訊 & 管理
+                                🔍 {batchItemsState.length > 1 ? '購物車批次明細 & 管理' : '交易詳細資訊 & 管理'}
                             </div>
                             <button onClick={() => setDetailModalRecord(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
                         </div>
@@ -883,14 +995,18 @@ const MonthlyView = ({
                             {/* Summary Card */}
                             <div className="inset-group-card" style={{ padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>💰 交易金額</span>
-                                    <strong style={{ fontSize: '1.1rem', color: detailModalRecord.type === 'income' ? '#30d158' : '#fff' }}>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+                                        {batchItemsState.length > 1 ? '🛒 批次總金額' : '💰 交易金額'}
+                                    </span>
+                                    <strong style={{ fontSize: '1.12rem', color: detailModalRecord.type === 'income' ? '#30d158' : (batchItemsState.length > 1 ? '#ff9f0a' : '#fff') }}>
                                         {detailModalRecord.type === 'income' ? '+' : '-'}${detailModalRecord.total.toLocaleString()} TWD
                                     </strong>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                                     <span style={{ color: 'var(--text-tertiary)' }}>🏷️ 交易分類</span>
-                                    <span style={{ color: '#fff', fontWeight: '600' }}>{detailModalRecord.category}</span>
+                                    <span style={{ color: '#fff', fontWeight: '600' }}>
+                                        {detailModalRecord.category} {batchItemsState.length > 1 ? `(共 ${batchItemsState.length} 筆明細)` : ''}
+                                    </span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                                     <span style={{ color: 'var(--text-tertiary)' }}>👤 記錄成員</span>
@@ -898,127 +1014,164 @@ const MonthlyView = ({
                                 </div>
                             </div>
 
-                            {/* Necessity Split Display */}
-                            {detailModalRecord.type !== 'income' && detailModalRecord.category !== '作廢退款' && (() => {
-                                const itemNec = dynamicNecessityMap[detailModalRecord.originalIndex] || { needAmount: detailModalRecord.total, wantAmount: 0 };
-                                const hasNeed = itemNec.needAmount > 0;
-                                const hasWant = itemNec.wantAmount > 0;
-                                
-                                return (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: '750' }}>🎯 預算需求分析 (自動判定)</div>
-                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                            {hasNeed && (
-                                                <span style={{ fontSize: '0.74rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(52,199,89,0.2)' }}>
-                                                    🍲 必要支出: ${itemNec.needAmount.toLocaleString()} TWD
-                                                </span>
-                                            )}
-                                            {hasWant && (
-                                                <span style={{ fontSize: '0.74rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(255,45,85,0.2)' }}>
-                                                    ✨ 選擇性支出: ${itemNec.wantAmount.toLocaleString()} TWD
-                                                </span>
-                                            )}
+                            {/* BATCH EDITOR: WHEN RECORD CONTAINS MULTIPLE CART ITEMS */}
+                            {batchItemsState.length > 1 ? (
+                                <>
+                                    {/* Batch Date & Sync Switch */}
+                                    <div className="inset-group-card" style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '750' }}>📅 批次交易日期</span>
+                                            <input 
+                                                type="date"
+                                                value={editDate}
+                                                onChange={e => {
+                                                    const newD = e.target.value;
+                                                    setEditDate(newD);
+                                                    if (syncBatchDate) {
+                                                        setBatchItemsState(prev => prev.map(item => ({ ...item, date: newD })));
+                                                    }
+                                                }}
+                                                style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.86rem', fontFamily: 'var(--font-family)' }}
+                                            />
                                         </div>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: '#ff9f0a', cursor: 'pointer', background: 'rgba(255,159,10,0.1)', padding: '6px 10px', borderRadius: '8px', border: '0.5px solid rgba(255,159,10,0.25)' }}>
+                                            <input 
+                                                type="checkbox"
+                                                checked={syncBatchDate}
+                                                onChange={e => {
+                                                    const checked = e.target.checked;
+                                                    setSyncBatchDate(checked);
+                                                    if (checked) {
+                                                        setBatchItemsState(prev => prev.map(item => ({ ...item, date: editDate })));
+                                                    }
+                                                }}
+                                                style={{ cursor: 'pointer', accentColor: '#ff9f0a' }}
+                                            />
+                                            <span>🔄 同步套用此日期至全批次 ({batchItemsState.length} 筆) 明細</span>
+                                        </label>
                                     </div>
-                                );
-                            })()}
 
-                            {/* Editable Fields */}
-                            <div className="inset-group-card" style={{ marginBottom: 0, background: 'rgba(255,255,255,0.02)' }}>
-                                <div style={{ padding: '8px 12px', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                    <span>✏️</span>
-                                    <span>編輯交易屬性 (金額與帳戶屬唯讀)</span>
-                                </div>
-                                <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span className="inset-group-label" style={{ fontSize: '0.82rem' }}>📅 交易日期</span>
-                                    <span className="inset-group-value">
-                                        <input 
-                                            type="date" 
-                                            style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.85rem', fontFamily: 'var(--font-family)' }} 
-                                            value={editDate} 
-                                            onChange={e => setEditDate(e.target.value)} 
-                                        />
-                                    </span>
-                                </div>
-                                <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span className="inset-group-label" style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>📝 交易備註</span>
-                                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
-                                        <input 
-                                            type="text" 
-                                            className="inset-group-input" 
-                                            value={editNote} 
-                                            onChange={e => setEditNote(e.target.value)} 
-                                            placeholder="請輸入交易備註" 
-                                            style={{ fontSize: '0.85rem', textAlign: 'right', width: '100%' }}
-                                        />
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Cart Batch Items Breakdown Section */}
-                            {detailModalRecord.batchItems && detailModalRecord.batchItems.length > 1 && (
-                                <div style={{
-                                    background: 'rgba(255, 159, 10, 0.08)',
-                                    border: '1px solid rgba(255, 159, 10, 0.25)',
-                                    borderRadius: '14px',
-                                    padding: '12px 14px'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                        <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#ff9f0a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <span>🛒</span>
-                                            <span>購物車整批送出明細 (共 {detailModalRecord.batchCount || detailModalRecord.batchItems.length} 筆)</span>
+                                    {/* Itemized Note & Detail Inputs */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750', display: 'flex', justifyContent: 'space-between', padding: '0 2px' }}>
+                                            <span>📝 批次各項目備註 (可分別編輯)</span>
+                                            <span>共 {batchItemsState.length} 筆</span>
                                         </div>
-                                        <strong style={{ fontSize: '0.86rem', color: '#fff' }}>
-                                            合計 ${detailModalRecord.batchTotal ? detailModalRecord.batchTotal.toLocaleString() : detailModalRecord.batchItems.reduce((s, i) => s + i.amount, 0).toLocaleString()} TWD
-                                        </strong>
-                                    </div>
-                                    <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.65)', marginBottom: '8px', lineHeight: '1.4' }}>
-                                        💡 本筆項目係與下方其他項目於同一購物車批次結帳，因此下方帳戶餘額變動軌跡反映的是該批次之<strong>總扣款金額</strong>。
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        {(() => {
-                                            const currentIdx = (() => {
-                                                if (typeof detailModalRecord.batchIndex === 'number' && detailModalRecord.batchIndex >= 1) {
-                                                    return detailModalRecord.batchIndex - 1;
-                                                }
-                                                // Fallback for legacy records: find exact match by note + amount + cat
-                                                const exactMatch = detailModalRecord.batchItems.findIndex(i => {
-                                                    const noteMatch = (i.note && detailModalRecord.note && (detailModalRecord.note === i.note || detailModalRecord.note === `${i.cat} - ${i.note}` || detailModalRecord.note.includes(i.note))) || (!i.note && (!detailModalRecord.note || detailModalRecord.note === i.cat));
-                                                    const amtMatch = i.amount === detailModalRecord.total;
-                                                    const catMatch = i.cat === detailModalRecord.subCategory || i.cat === detailModalRecord.category;
-                                                    return noteMatch && amtMatch && catMatch;
-                                                });
-                                                if (exactMatch !== -1) return exactMatch;
-                                                // Last resort fallback: find first match by amount + cat
-                                                return detailModalRecord.batchItems.findIndex(i => (i.cat === detailModalRecord.subCategory || i.cat === detailModalRecord.category) && i.amount === detailModalRecord.total);
-                                            })();
 
-                                            return detailModalRecord.batchItems.map((item, idx) => {
-                                                const isCurrent = idx === currentIdx;
-                                                return (
-                                                    <div key={idx} style={{
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        fontSize: '0.74rem',
-                                                        padding: '5px 8px',
-                                                        borderRadius: '6px',
-                                                        background: isCurrent ? 'rgba(255, 159, 10, 0.18)' : 'rgba(255,255,255,0.03)',
-                                                        border: isCurrent ? '0.5px solid rgba(255, 159, 10, 0.45)' : '0.5px solid rgba(255,255,255,0.04)'
-                                                    }}>
-                                                        <span style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <span style={{ color: isCurrent ? '#ff9f0a' : 'rgba(255,255,255,0.4)' }}>•</span>
-                                                            <strong>{item.cat}</strong>
-                                                            {item.note ? <span style={{ opacity: 0.6 }}>({item.note})</span> : ''}
-                                                            {isCurrent && <span style={{ fontSize: '0.6rem', color: '#ff9f0a', fontWeight: '800' }}>(當前項目)</span>}
-                                                        </span>
-                                                        <span style={{ fontWeight: '700', color: '#fff' }}>${item.amount.toLocaleString()} TWD</span>
+                                        {batchItemsState.map((item, idx) => (
+                                            <div key={idx} style={{
+                                                background: 'rgba(255,255,255,0.03)',
+                                                border: '1px solid rgba(255,255,255,0.07)',
+                                                borderRadius: '12px',
+                                                padding: '10px 12px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <span style={{ fontSize: '0.72rem', color: '#ff9f0a', fontWeight: '800' }}>#{idx + 1}</span>
+                                                        <strong style={{ fontSize: '0.84rem', color: '#fff' }}>{item.cat}</strong>
                                                     </div>
-                                                );
-                                            });
-                                        })()}
+                                                    <span style={{ fontSize: '0.84rem', fontWeight: '800', color: '#fff' }}>
+                                                        ${item.amount.toLocaleString()} TWD
+                                                    </span>
+                                                </div>
+                                                
+                                                {/* Note Input */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.25)', padding: '7px 10px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.08)' }}>
+                                                    <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>📝 備註:</span>
+                                                    <input 
+                                                        type="text"
+                                                        value={item.note}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setBatchItemsState(prev => prev.map((it, i) => i === idx ? { ...it, note: val } : it));
+                                                        }}
+                                                        placeholder="請輸入品名/備註"
+                                                        style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.82rem', outline: 'none', width: '100%' }}
+                                                    />
+                                                </div>
+
+                                                {/* Individual Date if not synced */}
+                                                {!syncBatchDate && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', padding: '2px 4px' }}>
+                                                        <span style={{ color: 'var(--text-tertiary)' }}>📅 個別日期:</span>
+                                                        <input 
+                                                            type="date"
+                                                            value={item.date}
+                                                            onChange={e => {
+                                                                const val = e.target.value;
+                                                                setBatchItemsState(prev => prev.map((it, i) => i === idx ? { ...it, date: val } : it));
+                                                            }}
+                                                            style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.78rem', fontFamily: 'var(--font-family)' }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
-                                </div>
+                                </>
+                            ) : (
+                                /* SINGLE TRANSACTION EDITOR */
+                                <>
+                                    {/* Necessity Split Display */}
+                                    {detailModalRecord.type !== 'income' && detailModalRecord.category !== '作廢退款' && (() => {
+                                        const itemNec = dynamicNecessityMap[detailModalRecord.originalIndex] || { needAmount: detailModalRecord.total, wantAmount: 0 };
+                                        const hasNeed = itemNec.needAmount > 0;
+                                        const hasWant = itemNec.wantAmount > 0;
+                                        
+                                        return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: '750' }}>🎯 預算需求分析 (自動判定)</div>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    {hasNeed && (
+                                                        <span style={{ fontSize: '0.74rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(52,199,89,0.2)' }}>
+                                                            🍲 必要支出: ${itemNec.needAmount.toLocaleString()} TWD
+                                                        </span>
+                                                    )}
+                                                    {hasWant && (
+                                                        <span style={{ fontSize: '0.74rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(255,45,85,0.2)' }}>
+                                                            ✨ 選擇性支出: ${itemNec.wantAmount.toLocaleString()} TWD
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Editable Fields */}
+                                    <div className="inset-group-card" style={{ marginBottom: 0, background: 'rgba(255,255,255,0.02)' }}>
+                                        <div style={{ padding: '8px 12px', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <span>✏️</span>
+                                            <span>編輯交易屬性 (金額與帳戶屬唯讀)</span>
+                                        </div>
+                                        <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span className="inset-group-label" style={{ fontSize: '0.82rem' }}>📅 交易日期</span>
+                                            <span className="inset-group-value">
+                                                <input 
+                                                    type="date" 
+                                                    style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.85rem', fontFamily: 'var(--font-family)' }} 
+                                                    value={editDate} 
+                                                    onChange={e => setEditDate(e.target.value)} 
+                                                />
+                                            </span>
+                                        </div>
+                                        <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span className="inset-group-label" style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>📝 交易備註</span>
+                                            <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
+                                                <input 
+                                                    type="text" 
+                                                    className="inset-group-input" 
+                                                    value={editNote} 
+                                                    onChange={e => setEditNote(e.target.value)} 
+                                                    placeholder="請輸入交易備註" 
+                                                    style={{ fontSize: '0.85rem', textAlign: 'right', width: '100%' }}
+                                                />
+                                            </span>
+                                        </div>
+                                    </div>
+                                </>
                             )}
 
                             {/* Audit Trail Balance Diffs Section */}
@@ -1141,14 +1294,24 @@ const MonthlyView = ({
                             ) : (
                                 <button
                                     onClick={async () => {
-                                        const rec = detailModalRecord;
-                                        if (rec.isSettled && rec.advancedBy) {
-                                            await customAlert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
-                                            return;
-                                        }
-                                        if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
-                                            onDelete(rec._context);
-                                            setDetailModalRecord(null);
+                                        if (batchItemsState.length > 1) {
+                                            const batchContexts = batchItemsState.map(it => it._context);
+                                            if (await customConfirm(`⚠️ 確定要作廢此購物車整批交易 (共 ${batchItemsState.length} 筆，合計 $${detailModalRecord.total.toLocaleString()} TWD)？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
+                                                onDelete({
+                                                    batchContexts
+                                                });
+                                                setDetailModalRecord(null);
+                                            }
+                                        } else {
+                                            const rec = detailModalRecord;
+                                            if (rec.isSettled && rec.advancedBy) {
+                                                await customAlert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
+                                                return;
+                                            }
+                                            if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
+                                                onDelete(rec._context);
+                                                setDetailModalRecord(null);
+                                            }
                                         }
                                     }}
                                     className="glass-btn"
@@ -1161,42 +1324,87 @@ const MonthlyView = ({
                                         background: 'rgba(255,69,58,0.08)'
                                     }}
                                 >
-                                    🗑️ 作廢此交易
+                                    🗑️ {batchItemsState.length > 1 ? '作廢整批交易' : '作廢此交易'}
                                 </button>
                             )}
 
                             <button
                                 onClick={async () => {
-                                    const origDate = detailModalRecord.date || '';
-                                    const origNote = detailModalRecord.note || '';
-                                    const trimmedNote = editNote.trim();
+                                    if (batchItemsState.length > 1) {
+                                        // BATCH SAVE
+                                        const changes = [];
+                                        const batchUpdates = [];
 
-                                    const changes = [];
-                                    if (origDate !== editDate) {
-                                        changes.push(`📅 交易日期：${origDate || '(無)'} ➡️ ${editDate}`);
-                                    }
-                                    if (origNote !== trimmedNote) {
-                                        changes.push(`📝 交易備註：${origNote || '(無)'} ➡️ ${trimmedNote || '(無)'}`);
-                                    }
+                                        batchItemsState.forEach((item, idx) => {
+                                            const finalDate = syncBatchDate ? editDate : (item.date || editDate);
+                                            const finalNote = (item.note || '').trim();
+                                            const dateChanged = item.originalDate !== finalDate;
+                                            const noteChanged = item.originalNote !== finalNote;
 
-                                    if (changes.length === 0) {
-                                        await customAlert("⚠️ 您尚未修改任何欄位內容（日期與備註均未變更）。", "提示");
-                                        return;
-                                    }
+                                            if (dateChanged || noteChanged) {
+                                                const itemChanges = [];
+                                                if (dateChanged) itemChanges.push(`📅 日期：${item.originalDate} ➡️ ${finalDate}`);
+                                                if (noteChanged) itemChanges.push(`📝 備註：${item.originalNote || '(無)'} ➡️ ${finalNote || '(無)'}`);
+                                                changes.push(`• 第 ${idx + 1} 筆【${item.cat} $${item.amount}】：\n  ` + itemChanges.join('\n  '));
+                                            }
 
-                                    const confirmMsg = `📝 請確認即將修改的項目：\n\n` +
-                                        changes.join('\n') +
-                                        `\n\n💰 交易金額：$${detailModalRecord.total.toLocaleString()} TWD\n` +
-                                        `🏷️ 交易分類：${detailModalRecord.category}\n\n` +
-                                        `確定要套用並儲存這些修改嗎？`;
-
-                                    if (await customConfirm(confirmMsg, "儲存修改確認")) {
-                                        onEdit(detailModalRecord._context, {
-                                            index: detailModalRecord.originalIndex,
-                                            date: editDate,
-                                            note: trimmedNote
+                                            batchUpdates.push({
+                                                context: item._context,
+                                                originalIndex: item.originalIndex,
+                                                date: finalDate,
+                                                note: finalNote
+                                            });
                                         });
-                                        setDetailModalRecord(null);
+
+                                        if (changes.length === 0) {
+                                            await customAlert("⚠️ 您尚未修改任何項目的日期或備註內容。", "提示");
+                                            return;
+                                        }
+
+                                        const confirmMsg = `📝 請確認即將修改的購物車批次項目：\n\n` +
+                                            changes.join('\n\n') +
+                                            `\n\n🛒 批次總金額：$${detailModalRecord.total.toLocaleString()} TWD\n` +
+                                            `確定要套用並儲存這些修改嗎？`;
+
+                                        if (await customConfirm(confirmMsg, "儲存批次修改確認")) {
+                                            onEdit(detailModalRecord._context, {
+                                                batchUpdates
+                                            });
+                                            setDetailModalRecord(null);
+                                        }
+                                    } else {
+                                        // SINGLE SAVE
+                                        const origDate = detailModalRecord.date || '';
+                                        const origNote = detailModalRecord.note || '';
+                                        const trimmedNote = editNote.trim();
+
+                                        const changes = [];
+                                        if (origDate !== editDate) {
+                                            changes.push(`📅 交易日期：${origDate || '(無)'} ➡️ ${editDate}`);
+                                        }
+                                        if (origNote !== trimmedNote) {
+                                            changes.push(`📝 交易備註：${origNote || '(無)'} ➡️ ${trimmedNote || '(無)'}`);
+                                        }
+
+                                        if (changes.length === 0) {
+                                            await customAlert("⚠️ 您尚未修改任何欄位內容（日期與備註均未變更）。", "提示");
+                                            return;
+                                        }
+
+                                        const confirmMsg = `📝 請確認即將修改的項目：\n\n` +
+                                            changes.join('\n') +
+                                            `\n\n💰 交易金額：$${detailModalRecord.total.toLocaleString()} TWD\n` +
+                                            `🏷️ 交易分類：${detailModalRecord.category}\n\n` +
+                                            `確定要套用並儲存這些修改嗎？`;
+
+                                        if (await customConfirm(confirmMsg, "儲存修改確認")) {
+                                            onEdit(detailModalRecord._context, {
+                                                index: detailModalRecord.originalIndex,
+                                                date: editDate,
+                                                note: trimmedNote
+                                            });
+                                            setDetailModalRecord(null);
+                                        }
                                     }
                                 }}
                                 className="glass-btn primary-gradient-btn"
