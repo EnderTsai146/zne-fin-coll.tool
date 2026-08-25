@@ -268,7 +268,7 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
     if (idx < 0) return;
     const child = navRef.current.children[idx + 1];
     if (!child) return;
-    
+
     setPillStyle({
       width: child.offsetWidth,
       height: child.offsetHeight,
@@ -320,7 +320,7 @@ const BottomNav = ({ currentPage, onPageChange, assets, lastActiveCenterTab }) =
           const isCenterActive = currentPage === 'overview' || currentPage === 'expense';
           const displayLabel = currentPage === 'expense' ? '記帳' : '總覽';
           const displayIcon = currentPage === 'expense' ? '✍️' : '🏠';
-          
+
           return (
             <div
               key="center"
@@ -837,17 +837,17 @@ function App() {
     const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
     const existingTokens = assets?.fcmTokens || {};
     const existingUserField = existingTokens[userKey];
-    
+
     const setupNotifications = async () => {
       const vapidKey = "BGYGX29x3HiHqANNRIu9qtH_M5nEu9C70r5BgSQ6omRLLRm2nL941IOz8z8PQ3UXaK-wXslOprbMpP-zRIfSruc";
-      
+
       try {
         if ('Notification' in window) {
           let permission = Notification.permission;
           if (permission === 'default') {
             permission = await Notification.requestPermission();
           }
-          
+
           if (permission === 'granted') {
             setFcmDiagnostic(prev => ({ ...prev, status: 'fetching' }));
             const token = await getFcmToken(vapidKey);
@@ -882,7 +882,7 @@ function App() {
     };
 
     setupNotifications();
-    
+
     // Listen for foreground push notifications (silently record to log, avoid blocking in-app popup dialog)
     onFcmMessage((payload) => {
       const rawTitle = payload.notification?.title || payload.data?.title || "🎉 收到推播通知";
@@ -899,12 +899,12 @@ function App() {
       setFcmDiagnostic({ token: null, error: "此瀏覽器或裝置不支援 Web Push 推播通知。", status: 'unsupported' });
       return 'unsupported';
     }
-    
+
     let permission = Notification.permission;
     if (permission === 'default') {
       permission = await Notification.requestPermission();
     }
-    
+
     if (permission === 'granted' && operatorName) {
       try {
         setFcmDiagnostic(prev => ({ ...prev, status: 'fetching' }));
@@ -914,7 +914,7 @@ function App() {
           const userKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
           const existingTokens = assets?.fcmTokens || {};
           const existingUserField = existingTokens[userKey];
-          
+
           const tokenList = getTokensArray(existingUserField);
           if (!tokenList.includes(token)) {
             const updatedUserField = addTokenToDict(existingUserField, token);
@@ -951,7 +951,7 @@ function App() {
         const elapsed = Date.now() - lastActiveTimeRef.current;
         const idleLimit = 180000; // 3 minutes
         const warningPeriod = 15000; // 15 seconds
-        
+
         if (elapsed >= idleLimit + warningPeriod) {
           performAutoLogout('inactivity');
         } else if (elapsed >= idleLimit) {
@@ -1303,11 +1303,11 @@ function App() {
         const autoPayDate = new Date();
         const currentMonthStr = `${autoPayDate.getFullYear()}-${String(autoPayDate.getMonth() + 1).padStart(2, '0')}`;
         const currentDay = autoPayDate.getDate();
-        
+
         if (data.accounts && data.accounts.length > 0) {
           const updatedAccs = [...data.accounts];
           let changed = false;
-          
+
           for (let i = 0; i < updatedAccs.length; i++) {
             const acc = updatedAccs[i];
             if (acc.type === 'credit' && acc.autoPay && currentDay >= acc.billingDay && acc.balance < 0 && acc.lastAutoPayMonth !== currentMonthStr) {
@@ -1315,7 +1315,7 @@ function App() {
               if (linkedBankIndex !== -1) {
                 const linkedBank = updatedAccs[linkedBankIndex];
                 const payAmount = Math.abs(acc.balance);
-                
+
                 if (linkedBank.balance >= payAmount) {
                   // Perform payoff
                   updatedAccs[linkedBankIndex] = {
@@ -1327,7 +1327,7 @@ function App() {
                     balance: 0,
                     lastAutoPayMonth: currentMonthStr
                   };
-                  
+
                   const stmtId = `auto_stmt_${Date.now()}`;
                   const autoPayoffRecord = {
                     date: autoPayDate.toISOString().split('T')[0],
@@ -1344,7 +1344,7 @@ function App() {
                     note: `[自動扣款] ${acc.nickname} 帳單結清`,
                     timestamp: autoPayDate.toISOString()
                   };
-                  
+
                   if (!data.monthlyExpenses) data.monthlyExpenses = [];
                   data.monthlyExpenses = data.monthlyExpenses.map(r => {
                     if (!r.isDeleted && r.accountId === acc.id && !r.ccBillSettled) {
@@ -1353,14 +1353,14 @@ function App() {
                     return r;
                   });
                   data.monthlyExpenses.push(autoPayoffRecord);
-                  
+
                   changed = true;
                   console.log(`[Auto-Pay] Successfully paid off credit card bill for: ${acc.nickname} ($${payAmount})`);
                 }
               }
             }
           }
-          
+
           if (changed) {
             data.accounts = updatedAccs;
             needsUpdate = true;
@@ -1686,8 +1686,8 @@ function App() {
 
     let text = "";
     if (percentage < 50) {
-      const paceText = dailyAvg <= dailyLimit 
-        ? ` (日均 $${dailyAvg.toLocaleString()} 穩健低於上限 $${dailyLimit.toLocaleString()}！)` 
+      const paceText = dailyAvg <= dailyLimit
+        ? ` (日均 $${dailyAvg.toLocaleString()} 穩健低於上限 $${dailyLimit.toLocaleString()}！)`
         : ` (不過目前日均 $${dailyAvg.toLocaleString()} 略高於上限 $${dailyLimit.toLocaleString()}，中旬請稍微克制喔。)`;
       text = `🟢 共同預算水位充足！本月已用 ${percentage}% (已用 $${totalWithNext.toLocaleString()}，剩餘 $${remaining.toLocaleString()})${paceText}`;
     } else if (percentage < 80) {
@@ -1785,7 +1785,7 @@ function App() {
       const existingTokens = prev.fcmTokens || {};
       const newTokens = { ...existingTokens };
       let changed = false;
-      
+
       ['userA', 'userB'].forEach(userKey => {
         const val = existingTokens[userKey];
         if (typeof val === 'object' && val) {
@@ -1800,7 +1800,7 @@ function App() {
           changed = true;
         }
       });
-      
+
       if (changed) {
         const nextAssets = { ...prev, fcmTokens: newTokens };
         if (currentUser && window.location.hostname !== 'localhost') {
@@ -2017,7 +2017,7 @@ function App() {
 
     // Determine base monthlyExpenses: prefer syncedNewAssets.monthlyExpenses if modified/provided, otherwise fallback to assets.monthlyExpenses
     const baseExpenses = syncedNewAssets.monthlyExpenses || assets.monthlyExpenses || [];
-    
+
     // Filter out records that are already present in baseExpenses (to prevent duplicate appends when caller already added them)
     const newRecordsToAppend = records.filter(r => r && !baseExpenses.some(existing => (r.id && existing.id === r.id) || (r.timestamp && existing.timestamp === r.timestamp && existing.note === r.note)));
 
@@ -2039,7 +2039,7 @@ function App() {
     const finalAssetsWithLog = logOperation(finalAssets, 'transaction', logDetail);
 
     saveToCloud(finalAssetsWithLog);
-    
+
     if (records.length > 0) {
       let title = "🔄 帳務變動通知";
       let body = `${operatorName} 執行了操作`;
@@ -2106,7 +2106,7 @@ function App() {
         } else if (type === 'spend') {
           title = "🤝 共同支出異動";
           const payerNameText = operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶';
-          const advancedByText = firstRecord.advancedBy 
+          const advancedByText = firstRecord.advancedBy
             ? `由 ${firstRecord.advancedBy === 'userA' ? '大狗狗🐕' : '阿陞🐶'}代墊`
             : '共同現金直付';
           body = `${payerNameText} 登錄共同支出（${advancedByText}）：${firstRecord.note || firstRecord.category} - $${recordAmount}`;
@@ -2115,7 +2115,7 @@ function App() {
 
       sendTransactionPush(title, body);
     }
-    
+
     // 檢查是否有投資交易紀錄
     const firstInvestRecord = records.find(r => r.type && r.type.includes('invest'));
     if (firstInvestRecord && firstInvestRecord.symbol) {
@@ -2889,7 +2889,7 @@ function App() {
               <span style={{ fontSize: '1.8rem' }}>🥔</span>
               <div>
                 <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', letterSpacing: '-0.02em' }}>馬鈴薯管家</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>Apple Liquid Glass Edition</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>余珈陞屌超大</div>
               </div>
             </div>
 
@@ -2943,9 +2943,9 @@ function App() {
                 {operatorName || '系統成員'}
               </div>
             </div>
-            <button 
-              onClick={handleLogout} 
-              className="glass-btn glass-btn-danger" 
+            <button
+              onClick={handleLogout}
+              className="glass-btn glass-btn-danger"
               style={{ padding: '6px 12px', fontSize: '0.78rem', borderRadius: '10px', cursor: 'pointer', flexShrink: 0 }}
             >
               登出
@@ -3074,16 +3074,16 @@ function App() {
               您已閒置一段時間，系統為了防範財務資料外洩，將在 <strong style={{ color: 'var(--accent-red)', fontSize: '1.1rem' }}>{timeoutCountdown}</strong> 秒後自動登出。
             </p>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
-                onClick={() => performAutoLogout('inactivity')} 
-                className="liquid-modal-btn liquid-btn-cancel" 
+              <button
+                onClick={() => performAutoLogout('inactivity')}
+                className="liquid-modal-btn liquid-btn-cancel"
                 style={{ flex: 1, padding: '10px', fontSize: '0.88rem' }}
               >
                 立即登出
               </button>
-              <button 
-                onClick={handleResumeSession} 
-                className="liquid-modal-btn liquid-btn-confirm" 
+              <button
+                onClick={handleResumeSession}
+                className="liquid-modal-btn liquid-btn-confirm"
                 style={{ flex: 1, padding: '10px', fontSize: '0.88rem' }}
               >
                 繼續使用
