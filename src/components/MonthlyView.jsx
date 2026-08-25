@@ -66,6 +66,10 @@ const MonthlyView = ({
     const [syncBatchDate, setSyncBatchDate] = useState(true);
     const [batchItemsState, setBatchItemsState] = useState([]);
 
+    // Infinite scroll & lazy load states
+    const [renderCount, setRenderCount] = useState(30);
+    const loadMoreRef = useRef(null);
+
     const openDetailModal = (item) => {
         setDetailModalRecord(item);
         if (item.isBatchGroup) {
@@ -291,10 +295,7 @@ const MonthlyView = ({
         }
     }, [newlyAddedRecordTimestamp, groupedDisplayHistory, viewMode, renderCount]);
 
-    // Infinite scroll
-    const [renderCount, setRenderCount] = useState(30);
-    const loadMoreRef = useRef(null);
-
+    // Infinite scroll observer
     useEffect(() => {
         setRenderCount(30); // Reset when filter changes
     }, [filterDate, filterType, filterUser, filterNecessity, searchTerm, minAmount, maxAmount]);
