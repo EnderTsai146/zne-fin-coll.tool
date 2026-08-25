@@ -1166,13 +1166,38 @@ const MonthlyView = ({
                             )}
 
                             <button
-                                onClick={() => {
-                                    onEdit(detailModalRecord._context, {
-                                        index: detailModalRecord.originalIndex,
-                                        date: editDate,
-                                        note: editNote
-                                    });
-                                    setDetailModalRecord(null);
+                                onClick={async () => {
+                                    const origDate = detailModalRecord.date || '';
+                                    const origNote = detailModalRecord.note || '';
+                                    const trimmedNote = editNote.trim();
+
+                                    const changes = [];
+                                    if (origDate !== editDate) {
+                                        changes.push(`📅 交易日期：${origDate || '(無)'} ➡️ ${editDate}`);
+                                    }
+                                    if (origNote !== trimmedNote) {
+                                        changes.push(`📝 交易備註：${origNote || '(無)'} ➡️ ${trimmedNote || '(無)'}`);
+                                    }
+
+                                    if (changes.length === 0) {
+                                        await customAlert("⚠️ 您尚未修改任何欄位內容（日期與備註均未變更）。", "提示");
+                                        return;
+                                    }
+
+                                    const confirmMsg = `📝 請確認即將修改的項目：\n\n` +
+                                        changes.join('\n') +
+                                        `\n\n💰 交易金額：$${detailModalRecord.total.toLocaleString()} TWD\n` +
+                                        `🏷️ 交易分類：${detailModalRecord.category}\n\n` +
+                                        `確定要套用並儲存這些修改嗎？`;
+
+                                    if (await customConfirm(confirmMsg, "儲存修改確認")) {
+                                        onEdit(detailModalRecord._context, {
+                                            index: detailModalRecord.originalIndex,
+                                            date: editDate,
+                                            note: trimmedNote
+                                        });
+                                        setDetailModalRecord(null);
+                                    }
                                 }}
                                 className="glass-btn primary-gradient-btn"
                                 style={{ flex: 2, padding: '12px 0', borderRadius: '10px', fontWeight: '800' }}
