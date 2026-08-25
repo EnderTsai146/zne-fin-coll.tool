@@ -84,7 +84,9 @@ const MonthlyView = ({
                 date: r.date,
                 note: r.note || '',
                 originalDate: r.date,
-                originalNote: r.note || ''
+                originalNote: r.note || '',
+                isDeleted: !!(r.isDeleted || r.category === '作廢退款'),
+                rawRecord: r
             })));
         } else {
             const siblings = item.batchId ? history.filter(r => r.batchId === item.batchId) : [];
@@ -101,7 +103,9 @@ const MonthlyView = ({
                     note: r.note || '',
                     originalDate: r.date,
                     originalNote: r.note || '',
-                    isCurrentTarget: r.originalIndex === item.originalIndex
+                    isDeleted: !!(r.isDeleted || r.category === '作廢退款'),
+                    isCurrentTarget: r.originalIndex === item.originalIndex,
+                    rawRecord: r
                 })));
             } else {
                 setEditDate(item.date);
@@ -215,7 +219,10 @@ const MonthlyView = ({
                 const batchMembers = sortedHistory.filter(r => r.batchId === record.batchId);
                 if (batchMembers.length > 1) {
                     seenBatchIds.add(record.batchId);
-                    const totalAmt = batchMembers.reduce((s, r) => s + (r.total || 0), 0);
+                    const activeMembers = batchMembers.filter(r => !r.isDeleted && r.category !== '作廢退款');
+                    const totalAmt = activeMembers.length > 0 
+                        ? activeMembers.reduce((s, r) => s + (r.total || 0), 0)
+                        : batchMembers.reduce((s, r) => s + (r.total || 0), 0);
                     const isAllDeleted = batchMembers.every(r => r.isDeleted || r.category === '作廢退款');
                     result.push({
                         isBatchGroup: true,
@@ -707,18 +714,22 @@ const MonthlyView = ({
 
                                                     {/* Sub-items Preview List */}
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', margin: '6px 0 8px 0', background: 'rgba(0,0,0,0.22)', padding: '8px 10px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)' }}>
-                                                        {record.records.map((sub, sIdx) => (
-                                                            <div key={sIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                                                                <span style={{ color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                                    <span style={{ color: '#ff9f0a', marginRight: '4px' }}>•</span>
-                                                                    <strong style={{ opacity: 0.9 }}>{sub.subCategory || sub.category}</strong>
-                                                                    {sub.note && sub.note !== (sub.subCategory || sub.category) ? <span style={{ opacity: 0.7, marginLeft: '4px' }}>({sub.note.replace(`${sub.subCategory} - `, '')})</span> : ''}
-                                                                </span>
-                                                                <span style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700', marginLeft: '8px', flexShrink: 0 }}>
-                                                                    ${sub.total.toLocaleString()}
-                                                                </span>
-                                                            </div>
-                                                        ))}
+                                                        {record.records.map((sub, sIdx) => {
+                                                            const isSubDeleted = sub.isDeleted || sub.category === '作廢退款';
+                                                            return (
+                                                                <div key={sIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', opacity: isSubDeleted ? 0.45 : 1 }}>
+                                                                    <span style={{ color: isSubDeleted ? '#8e8e93' : '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isSubDeleted ? 'line-through' : 'none' }}>
+                                                                        <span style={{ color: isSubDeleted ? '#8e8e93' : '#ff9f0a', marginRight: '4px' }}>•</span>
+                                                                        <strong style={{ opacity: 0.9 }}>{sub.subCategory || sub.category}</strong>
+                                                                        {sub.note && sub.note !== (sub.subCategory || sub.category) ? <span style={{ opacity: 0.7, marginLeft: '4px' }}>({sub.note.replace(`${sub.subCategory} - `, '')})</span> : ''}
+                                                                        {isSubDeleted && <span style={{ fontSize: '0.62rem', color: '#8e8e93', marginLeft: '4px' }}>(已作廢)</span>}
+                                                                    </span>
+                                                                    <span style={{ color: isSubDeleted ? '#8e8e93' : 'rgba(255,255,255,0.9)', fontWeight: '700', marginLeft: '8px', flexShrink: 0, textDecoration: isSubDeleted ? 'line-through' : 'none' }}>
+                                                                        ${sub.total.toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
 
                                                     {/* Account line */}
@@ -1052,13 +1063,19 @@ const MonthlyView = ({
                                         {batchItemsState.length > 1 ? '🛒 批次總金額' : '💰 交易金額'}
                                     </span>
                                     <strong style={{ fontSize: '1.12rem', color: detailModalRecord.type === 'income' ? '#30d158' : (batchItemsState.length > 1 ? '#ff9f0a' : '#fff') }}>
-                                        {detailModalRecord.type === 'income' ? '+' : '-'}${detailModalRecord.total.toLocaleString()} TWD
+                                        {(() => {
+                                            if (batchItemsState.length > 1) {
+                                                const activeTotal = batchItemsState.filter(it => !it.isDeleted).reduce((s, it) => s + it.amount, 0);
+                                                return `-$${activeTotal.toLocaleString()} TWD`;
+                                            }
+                                            return `${detailModalRecord.type === 'income' ? '+' : '-'}$${detailModalRecord.total.toLocaleString()} TWD`;
+                                        })()}
                                     </strong>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                                     <span style={{ color: 'var(--text-tertiary)' }}>🏷️ 交易分類</span>
                                     <span style={{ color: '#fff', fontWeight: '600' }}>
-                                        {detailModalRecord.category} {batchItemsState.length > 1 ? `(共 ${batchItemsState.length} 筆明細)` : ''}
+                                        {detailModalRecord.category} {batchItemsState.length > 1 ? `(共 ${batchItemsState.filter(it => !it.isDeleted).length}/${batchItemsState.length} 筆有效明細)` : ''}
                                     </span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
@@ -1073,7 +1090,7 @@ const MonthlyView = ({
                                     {/* Batch Date & Sync Switch */}
                                     <div className="inset-group-card" style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '750' }}>📅 批次交易日期</span>
+                                            <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '750' }}>📅 批次同步日期</span>
                                             <input 
                                                 type="date"
                                                 value={editDate}
@@ -1081,7 +1098,7 @@ const MonthlyView = ({
                                                     const newD = e.target.value;
                                                     setEditDate(newD);
                                                     if (syncBatchDate) {
-                                                        setBatchItemsState(prev => prev.map(item => ({ ...item, date: newD })));
+                                                        setBatchItemsState(prev => prev.map(item => item.isDeleted ? item : ({ ...item, date: newD })));
                                                     }
                                                 }}
                                                 style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.86rem', fontFamily: 'var(--font-family)' }}
@@ -1095,74 +1112,123 @@ const MonthlyView = ({
                                                     const checked = e.target.checked;
                                                     setSyncBatchDate(checked);
                                                     if (checked) {
-                                                        setBatchItemsState(prev => prev.map(item => ({ ...item, date: editDate })));
+                                                        setBatchItemsState(prev => prev.map(item => item.isDeleted ? item : ({ ...item, date: editDate })));
                                                     }
                                                 }}
                                                 style={{ cursor: 'pointer', accentColor: '#ff9f0a' }}
                                             />
-                                            <span>🔄 同步套用此日期至全批次 ({batchItemsState.length} 筆) 明細</span>
+                                            <span>🔄 自動同步此日期至各筆明細（或於下方各別選擇不同日期）</span>
                                         </label>
                                     </div>
 
                                     {/* Itemized Note & Detail Inputs */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                         <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750', display: 'flex', justifyContent: 'space-between', padding: '0 2px' }}>
-                                            <span>📝 批次各項目備註 (可分別編輯)</span>
+                                            <span>📝 批次各項目明細 (可個別修改日期、備註或單獨作廢)</span>
                                             <span>共 {batchItemsState.length} 筆</span>
                                         </div>
 
-                                        {batchItemsState.map((item, idx) => (
-                                            <div key={idx} style={{
-                                                background: 'rgba(255,255,255,0.03)',
-                                                border: '1px solid rgba(255,255,255,0.07)',
-                                                borderRadius: '12px',
-                                                padding: '10px 12px',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '8px'
-                                            }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                        <span style={{ fontSize: '0.72rem', color: '#ff9f0a', fontWeight: '800' }}>#{idx + 1}</span>
-                                                        <strong style={{ fontSize: '0.84rem', color: '#fff' }}>{item.cat}</strong>
-                                                    </div>
-                                                    <span style={{ fontSize: '0.84rem', fontWeight: '800', color: '#fff' }}>
-                                                        ${item.amount.toLocaleString()} TWD
-                                                    </span>
-                                                </div>
-                                                
-                                                {/* Note Input */}
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.25)', padding: '7px 10px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.08)' }}>
-                                                    <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>📝 備註:</span>
-                                                    <input 
-                                                        type="text"
-                                                        value={item.note}
-                                                        onChange={e => {
-                                                            const val = e.target.value;
-                                                            setBatchItemsState(prev => prev.map((it, i) => i === idx ? { ...it, note: val } : it));
-                                                        }}
-                                                        placeholder="請輸入品名/備註"
-                                                        style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.82rem', outline: 'none', width: '100%' }}
-                                                    />
-                                                </div>
+                                        {batchItemsState.map((item, idx) => {
+                                            const isItemDeleted = item.isDeleted;
+                                            return (
+                                                <div key={idx} style={{
+                                                    background: isItemDeleted ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.03)',
+                                                    border: isItemDeleted ? '1px dashed rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.08)',
+                                                    borderRadius: '12px',
+                                                    padding: '12px 14px',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '10px',
+                                                    opacity: isItemDeleted ? 0.45 : 1,
+                                                    position: 'relative'
+                                                }}>
+                                                    {/* Row 1: Item #, Category, Amount and Single Item Void Button */}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span style={{ fontSize: '0.74rem', color: isItemDeleted ? '#8e8e93' : '#ff9f0a', fontWeight: '800' }}>#{idx + 1}</span>
+                                                            <strong style={{ fontSize: '0.86rem', color: isItemDeleted ? '#8e8e93' : '#fff', textDecoration: isItemDeleted ? 'line-through' : 'none' }}>
+                                                                {item.cat}
+                                                            </strong>
+                                                            {isItemDeleted && (
+                                                                <span style={{ fontSize: '0.62rem', background: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                                                    已作廢
+                                                                </span>
+                                                            )}
+                                                        </div>
 
-                                                {/* Individual Date if not synced */}
-                                                {!syncBatchDate && (
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', padding: '2px 4px' }}>
-                                                        <span style={{ color: 'var(--text-tertiary)' }}>📅 個別日期:</span>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{ fontSize: '0.88rem', fontWeight: '800', color: isItemDeleted ? '#8e8e93' : '#fff', textDecoration: isItemDeleted ? 'line-through' : 'none' }}>
+                                                                ${item.amount.toLocaleString()} TWD
+                                                            </span>
+
+                                                            {/* Single Void Action Button */}
+                                                            {!isItemDeleted && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        const msg = `⚠️ 確定要單獨作廢此筆明細？\n\n• 第 ${idx + 1} 筆：【${item.cat} $${item.amount.toLocaleString()} TWD】\n  📝 備註：${item.note || '(無)'}\n\n系統將自動退款 $${item.amount.toLocaleString()} TWD 回原帳戶，其他購物車項目將保持不變。`;
+                                                                        if (await customConfirm(msg, "單獨作廢明細確認")) {
+                                                                            await onDelete(item._context);
+                                                                            setBatchItemsState(prev => prev.map((it, i) => i === idx ? { ...it, isDeleted: true } : it));
+                                                                        }
+                                                                    }}
+                                                                    className="glass-btn"
+                                                                    style={{
+                                                                        padding: '3px 8px',
+                                                                        fontSize: '0.68rem',
+                                                                        fontWeight: '750',
+                                                                        color: '#ff453a',
+                                                                        borderColor: 'rgba(255,69,58,0.3)',
+                                                                        background: 'rgba(255,69,58,0.1)',
+                                                                        borderRadius: '6px'
+                                                                    }}
+                                                                >
+                                                                    🗑️ 單獨作廢
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Row 2: Note Input */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.25)', padding: '7px 10px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.08)' }}>
+                                                        <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>📝 備註:</span>
+                                                        <input 
+                                                            type="text"
+                                                            disabled={isItemDeleted}
+                                                            value={item.note}
+                                                            onChange={e => {
+                                                                const val = e.target.value;
+                                                                setBatchItemsState(prev => prev.map((it, i) => i === idx ? { ...it, note: val } : it));
+                                                            }}
+                                                            placeholder="請輸入品名/備註"
+                                                            style={{ background: 'transparent', border: 'none', color: isItemDeleted ? '#8e8e93' : '#fff', fontSize: '0.82rem', outline: 'none', width: '100%' }}
+                                                        />
+                                                    </div>
+
+                                                    {/* Row 3: Individual Date Input */}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', padding: '4px 6px', background: 'rgba(255,255,255,0.015)', borderRadius: '6px' }}>
+                                                        <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span>📅</span>
+                                                            <span>明細日期:</span>
+                                                        </span>
                                                         <input 
                                                             type="date"
+                                                            disabled={isItemDeleted}
                                                             value={item.date}
                                                             onChange={e => {
                                                                 const val = e.target.value;
                                                                 setBatchItemsState(prev => prev.map((it, i) => i === idx ? { ...it, date: val } : it));
+                                                                if (syncBatchDate && val !== editDate) {
+                                                                    setSyncBatchDate(false);
+                                                                }
                                                             }}
-                                                            style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.78rem', fontFamily: 'var(--font-family)' }}
+                                                            style={{ background: 'none', border: 'none', color: isItemDeleted ? '#8e8e93' : '#fff', textAlign: 'right', outline: 'none', fontSize: '0.78rem', fontFamily: 'var(--font-family)', cursor: isItemDeleted ? 'default' : 'pointer' }}
                                                         />
                                                     </div>
-                                                )}
-                                            </div>
-                                        ))}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </>
                             ) : (
@@ -1316,7 +1382,7 @@ const MonthlyView = ({
 
                         {/* Fixed Actions Footer */}
                         <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexShrink: 0 }}>
-                            {detailModalRecord.isDeleted ? (
+                            {detailModalRecord.isDeleted || (batchItemsState.length > 1 && batchItemsState.every(it => it.isDeleted)) ? (
                                 <div style={{
                                     flex: 1,
                                     padding: '12px 0',
@@ -1328,7 +1394,7 @@ const MonthlyView = ({
                                     background: 'rgba(255,255,255,0.05)',
                                     border: '1px solid rgba(255,255,255,0.08)'
                                 }}>
-                                    🗑️ 此交易已被作廢
+                                    🗑️ 此交易（或全批次項目）已被作廢
                                 </div>
                             ) : detailModalRecord.category === '作廢退款' ? (
                                 <div style={{
@@ -1348,9 +1414,15 @@ const MonthlyView = ({
                                 <button
                                     onClick={async () => {
                                         if (batchItemsState.length > 1) {
-                                            const batchContexts = batchItemsState.map(it => it._context);
-                                            if (await customConfirm(`⚠️ 確定要作廢此購物車整批交易 (共 ${batchItemsState.length} 筆，合計 $${detailModalRecord.total.toLocaleString()} TWD)？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
-                                                onDelete({
+                                            const activeItems = batchItemsState.filter(it => !it.isDeleted);
+                                            if (activeItems.length === 0) {
+                                                await customAlert("❌ 本批次所有項目皆已被作廢！");
+                                                return;
+                                            }
+                                            const activeTotal = activeItems.reduce((s, it) => s + it.amount, 0);
+                                            const batchContexts = activeItems.map(it => it._context);
+                                            if (await customConfirm(`⚠️ 確定要作廢此購物車剩餘之整批交易 (共 ${activeItems.length} 筆，合計 $${activeTotal.toLocaleString()} TWD)？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
+                                                await onDelete({
                                                     batchContexts
                                                 });
                                                 setDetailModalRecord(null);
@@ -1362,7 +1434,7 @@ const MonthlyView = ({
                                                 return;
                                             }
                                             if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
-                                                onDelete(rec._context);
+                                                await onDelete(rec._context);
                                                 setDetailModalRecord(null);
                                             }
                                         }
@@ -1377,7 +1449,7 @@ const MonthlyView = ({
                                         background: 'rgba(255,69,58,0.08)'
                                     }}
                                 >
-                                    🗑️ {batchItemsState.length > 1 ? '作廢整批交易' : '作廢此交易'}
+                                    🗑️ {batchItemsState.length > 1 ? '作廢剩餘整批' : '作廢此交易'}
                                 </button>
                             )}
 
@@ -1389,6 +1461,8 @@ const MonthlyView = ({
                                         const batchUpdates = [];
 
                                         batchItemsState.forEach((item, idx) => {
+                                            if (item.isDeleted) return; // Skip voided items
+
                                             const finalDate = syncBatchDate ? editDate : (item.date || editDate);
                                             const finalNote = (item.note || '').trim();
                                             const dateChanged = item.originalDate !== finalDate;
@@ -1410,13 +1484,14 @@ const MonthlyView = ({
                                         });
 
                                         if (changes.length === 0) {
-                                            await customAlert("⚠️ 您尚未修改任何項目的日期或備註內容。", "提示");
+                                            await customAlert("⚠️ 您尚未修改任何有效項目的日期或備註內容。", "提示");
                                             return;
                                         }
 
+                                        const activeTotal = batchItemsState.filter(it => !it.isDeleted).reduce((s, it) => s + it.amount, 0);
                                         const confirmMsg = `📝 請確認即將修改的購物車批次項目：\n\n` +
                                             changes.join('\n\n') +
-                                            `\n\n🛒 批次總金額：$${detailModalRecord.total.toLocaleString()} TWD\n` +
+                                            `\n\n🛒 批次有效總金額：$${activeTotal.toLocaleString()} TWD\n` +
                                             `確定要套用並儲存這些修改嗎？`;
 
                                         if (await customConfirm(confirmMsg, "儲存批次修改確認")) {
