@@ -240,6 +240,57 @@ const MonthlyView = ({
         return result;
     }, [sortedHistory]);
 
+    // Auto-switch month & reset filters when a new record timestamp is provided
+    useEffect(() => {
+        if (!newlyAddedRecordTimestamp) return;
+
+        const targetRecord = history.find(r => 
+            r.timestamp === newlyAddedRecordTimestamp ||
+            (r.batchItems && r.batchId && r.timestamp === newlyAddedRecordTimestamp)
+        );
+
+        if (targetRecord) {
+            const targetMonth = targetRecord.month || targetRecord.date?.slice(0, 7);
+            if (targetMonth && targetMonth !== filterDate) {
+                setFilterDate(targetMonth);
+                if (loadArchiveMonth) loadArchiveMonth(targetMonth);
+            }
+            setViewMode('list');
+            setFilterType('all');
+            setFilterUser('all');
+            setFilterNecessity('all');
+            setSearchTerm('');
+            setMinAmount('');
+            setMaxAmount('');
+        }
+    }, [newlyAddedRecordTimestamp, history, filterDate, loadArchiveMonth]);
+
+    // Auto-scroll to the newly added record or batch group card
+    useEffect(() => {
+        if (!newlyAddedRecordTimestamp || viewMode !== 'list') return;
+
+        const targetIndex = groupedDisplayHistory.findIndex(r => 
+            r.timestamp === newlyAddedRecordTimestamp ||
+            (r.records && r.records.some(sub => sub.timestamp === newlyAddedRecordTimestamp))
+        );
+
+        if (targetIndex !== -1) {
+            if (targetIndex >= renderCount) {
+                setRenderCount(targetIndex + 20);
+            }
+
+            // Smoothly scroll into view with slight delay to ensure DOM render
+            const timer = setTimeout(() => {
+                const el = document.querySelector('.newly-added-highlight');
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 180);
+
+            return () => clearTimeout(timer);
+        }
+    }, [newlyAddedRecordTimestamp, groupedDisplayHistory, viewMode, renderCount]);
+
     // Infinite scroll
     const [renderCount, setRenderCount] = useState(30);
     const loadMoreRef = useRef(null);
@@ -592,9 +643,10 @@ const MonthlyView = ({
                                 const isNeed = itemNec.needAmount > 0;
                                 const isWant = itemNec.wantAmount > 0;
                                 
-                                const highlightClass = (newlyAddedRecordTimestamp && record.timestamp === newlyAddedRecordTimestamp)
-                                    ? 'newly-added-highlight'
-                                    : '';
+                                const highlightClass = (newlyAddedRecordTimestamp && (
+                                    record.timestamp === newlyAddedRecordTimestamp ||
+                                    (record.records && record.records.some(sub => sub.timestamp === newlyAddedRecordTimestamp))
+                                )) ? 'newly-added-highlight' : '';
 
                                 // CASE 1: GROUPED SHOPPING CART BATCH CARD
                                 if (record.isBatchGroup) {
