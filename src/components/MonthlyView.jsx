@@ -1075,17 +1075,17 @@ const MonthlyView = ({
                         
                         {/* Modal Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-                            <div style={{ fontWeight: '850', fontSize: '1.15rem', color: '#fff' }} className="liquid-modal-title">
+                            <div style={{ fontWeight: '850', fontSize: '1.12rem', color: '#fff' }} className="liquid-modal-title">
                                 🔍 {batchItemsState.length > 1 ? '購物車批次明細 & 管理' : '交易詳細資訊 & 管理'}
                             </div>
                             <button onClick={() => setDetailModalRecord(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
                         </div>
 
                         {/* Scrollable Modal Content */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, overflowY: 'auto', padding: '12px 2px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 2px' }}>
                             
                             {/* Summary Card */}
-                            <div className="inset-group-card" style={{ padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div className="inset-group-card" style={{ flexShrink: 0, padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
                                         {batchItemsState.length > 1 ? '🛒 批次總金額' : '💰 交易金額'}
@@ -1116,7 +1116,7 @@ const MonthlyView = ({
                             {batchItemsState.length > 1 ? (
                                 <>
                                     {/* Batch Date & Sync Switch */}
-                                    <div className="inset-group-card" style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <div className="inset-group-card" style={{ flexShrink: 0, padding: '12px 14px', background: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '750' }}>📅 批次同步日期</span>
                                             <input 
@@ -1150,7 +1150,7 @@ const MonthlyView = ({
                                     </div>
 
                                     {/* Itemized Note & Detail Inputs */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
                                         <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750', display: 'flex', justifyContent: 'space-between', padding: '0 2px' }}>
                                             <span>📝 批次各項目明細 (可個別修改日期、備註或單獨作廢)</span>
                                             <span>共 {batchItemsState.length} 筆</span>
@@ -1168,7 +1168,8 @@ const MonthlyView = ({
                                                     flexDirection: 'column',
                                                     gap: '10px',
                                                     opacity: isItemDeleted ? 0.45 : 1,
-                                                    position: 'relative'
+                                                    position: 'relative',
+                                                    flexShrink: 0
                                                 }}>
                                                     {/* Row 1: Item #, Category, Amount and Single Item Void Button */}
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

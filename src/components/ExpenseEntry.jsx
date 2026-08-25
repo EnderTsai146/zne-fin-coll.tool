@@ -2566,7 +2566,7 @@ const ExpenseEntry = ({
             </div>
 
             {/* Modal Body (Scrollable) */}
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '14px', touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '14px', touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
 
               <div style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
                 您正準備繳納帳單【<strong>{selectedBill.note || selectedBill.category || selectedBill.name || '帳單'}</strong>】，應繳金額為 <strong style={{ color: '#fff' }}>${(selectedBill.amount || 0).toLocaleString()} {selectedBill.currency || 'TWD'}</strong>。
@@ -2862,10 +2862,10 @@ const ExpenseEntry = ({
             </div>
 
             {/* Scrollable Modal Content */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 2px' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 2px' }}>
 
               {/* Card Summary Inset */}
-              <div className="inset-group-card" style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.03)' }}>
+              <div className="inset-group-card" style={{ flexShrink: 0, padding: '12px 14px', background: 'rgba(255,255,255,0.03)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>📊 目前未結算刷卡負債</span>
                   <strong style={{ fontSize: '1.18rem', color: (selectedCcBill?.amount || 0) > 0 ? '#ffb94f' : '#8effa2' }}>
@@ -3318,10 +3318,10 @@ const ExpenseEntry = ({
             </div>
 
             {/* Modal Body (Scrollable) */}
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '14px', touchAction: 'pan-y' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '14px', touchAction: 'pan-y' }}>
 
               {/* Operator & Date Info Card */}
-              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <div style={{ flexShrink: 0, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 <div>👤 記帳操作者：<strong style={{ color: '#fff' }}>{pendingSubmitConfig.operator}</strong></div>
                 <div>📅 入帳日期：<strong style={{ color: '#fff' }}>{pendingSubmitConfig.txDate}</strong></div>
               </div>
