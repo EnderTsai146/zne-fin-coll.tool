@@ -3203,30 +3203,38 @@ const ExpenseEntry = ({
                   );
                 }
 
-                // Scenario 2: Small discrepancy tolerance button
-                if (targetInputVal > 0 && Math.abs(diff) > 0 && Math.abs(diff) <= 30 && selSum > 0) {
+                // Scenario 2: Target entered with difference (e.g. 10,575 vs 10,190 -> diff $385)
+                if (targetInputVal > 0 && Math.abs(diff) > 0 && selSum > 0) {
                   return (
-                    <button
-                      type="button"
-                      onClick={() => handleExecuteCreditCardSettlement(targetInputVal, { calibrationDiff: diff })}
-                      className="glass-btn"
-                      style={{
-                        width: '100%',
-                        padding: '12px 0',
-                        borderRadius: '12px',
-                        fontWeight: '850',
-                        fontSize: '0.86rem',
-                        background: 'linear-gradient(135deg, rgba(10,132,255,0.4), rgba(48,209,88,0.4))',
-                        border: '1px solid rgba(10,132,255,0.5)',
-                        color: '#fff'
-                      }}
-                    >
-                      ⚡ 允許 ${Math.abs(diff)} 微差，以網銀 ${targetInputVal.toLocaleString()} 結清並校正
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteCreditCardSettlement(targetInputVal, { calibrationDiff: diff })}
+                        className="glass-btn primary-gradient-btn"
+                        style={{
+                          width: '100%',
+                          padding: '12px 0',
+                          borderRadius: '12px',
+                          fontWeight: '850',
+                          fontSize: '0.9rem',
+                          background: 'linear-gradient(135deg, #007aff 0%, #30d158 100%)'
+                        }}
+                      >
+                        🚀 以網銀 ${targetInputVal.toLocaleString()} 劃撥結清 (沖銷 {selCount} 筆 + 差額 ${Math.abs(diff)} 自動校正)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteCreditCardSettlement(selSum)}
+                        className="glass-btn"
+                        style={{ width: '100%', padding: '7px 0', borderRadius: '8px', fontSize: '0.74rem', color: 'var(--text-tertiary)' }}
+                      >
+                        或僅依勾選合計 ${selSum.toLocaleString()} 劃撥結清
+                      </button>
+                    </div>
                   );
                 }
 
-                // Scenario 3: Regular manual selection settlement
+                // Scenario 3: Regular manual selection settlement (No target input)
                 if (selSum > 0) {
                   return (
                     <button
@@ -3256,7 +3264,16 @@ const ExpenseEntry = ({
                 {/* Fast Balance Calibration */}
                 <button
                   type="button"
-                  onClick={() => setShowDirectCalibration(v => !v)}
+                  onClick={() => {
+                    if (!showDirectCalibration) {
+                      if (reconcileAmountInput) {
+                        setDirectCalibrateInput(reconcileAmountInput);
+                      } else {
+                        setDirectCalibrateInput(String(Math.abs(selectedCcBill?.rawAccount?.balance || selectedCcBill?.amount || 0)));
+                      }
+                    }
+                    setShowDirectCalibration(v => !v);
+                  }}
                   className="glass-btn"
                   style={{
                     flex: 1,
