@@ -961,29 +961,47 @@ const MonthlyView = ({
                                         💡 本筆項目係與下方其他項目於同一購物車批次結帳，因此下方帳戶餘額變動軌跡反映的是該批次之<strong>總扣款金額</strong>。
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        {detailModalRecord.batchItems.map((item, idx) => {
-                                            const isCurrent = (item.cat === detailModalRecord.subCategory || item.cat === detailModalRecord.category) && item.amount === detailModalRecord.total;
-                                            return (
-                                                <div key={idx} style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center',
-                                                    fontSize: '0.74rem',
-                                                    padding: '5px 8px',
-                                                    borderRadius: '6px',
-                                                    background: isCurrent ? 'rgba(255, 159, 10, 0.18)' : 'rgba(255,255,255,0.03)',
-                                                    border: isCurrent ? '0.5px solid rgba(255, 159, 10, 0.45)' : '0.5px solid rgba(255,255,255,0.04)'
-                                                }}>
-                                                    <span style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <span style={{ color: isCurrent ? '#ff9f0a' : 'rgba(255,255,255,0.4)' }}>•</span>
-                                                        <strong>{item.cat}</strong>
-                                                        {item.note ? <span style={{ opacity: 0.6 }}>({item.note})</span> : ''}
-                                                        {isCurrent && <span style={{ fontSize: '0.6rem', color: '#ff9f0a', fontWeight: '800' }}>(當前項目)</span>}
-                                                    </span>
-                                                    <span style={{ fontWeight: '700', color: '#fff' }}>${item.amount.toLocaleString()} TWD</span>
-                                                </div>
-                                            );
-                                        })}
+                                        {(() => {
+                                            const currentIdx = (() => {
+                                                if (typeof detailModalRecord.batchIndex === 'number' && detailModalRecord.batchIndex >= 1) {
+                                                    return detailModalRecord.batchIndex - 1;
+                                                }
+                                                // Fallback for legacy records: find exact match by note + amount + cat
+                                                const exactMatch = detailModalRecord.batchItems.findIndex(i => {
+                                                    const noteMatch = (i.note && detailModalRecord.note && (detailModalRecord.note === i.note || detailModalRecord.note === `${i.cat} - ${i.note}` || detailModalRecord.note.includes(i.note))) || (!i.note && (!detailModalRecord.note || detailModalRecord.note === i.cat));
+                                                    const amtMatch = i.amount === detailModalRecord.total;
+                                                    const catMatch = i.cat === detailModalRecord.subCategory || i.cat === detailModalRecord.category;
+                                                    return noteMatch && amtMatch && catMatch;
+                                                });
+                                                if (exactMatch !== -1) return exactMatch;
+                                                // Last resort fallback: find first match by amount + cat
+                                                return detailModalRecord.batchItems.findIndex(i => (i.cat === detailModalRecord.subCategory || i.cat === detailModalRecord.category) && i.amount === detailModalRecord.total);
+                                            })();
+
+                                            return detailModalRecord.batchItems.map((item, idx) => {
+                                                const isCurrent = idx === currentIdx;
+                                                return (
+                                                    <div key={idx} style={{
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        fontSize: '0.74rem',
+                                                        padding: '5px 8px',
+                                                        borderRadius: '6px',
+                                                        background: isCurrent ? 'rgba(255, 159, 10, 0.18)' : 'rgba(255,255,255,0.03)',
+                                                        border: isCurrent ? '0.5px solid rgba(255, 159, 10, 0.45)' : '0.5px solid rgba(255,255,255,0.04)'
+                                                    }}>
+                                                        <span style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ color: isCurrent ? '#ff9f0a' : 'rgba(255,255,255,0.4)' }}>•</span>
+                                                            <strong>{item.cat}</strong>
+                                                            {item.note ? <span style={{ opacity: 0.6 }}>({item.note})</span> : ''}
+                                                            {isCurrent && <span style={{ fontSize: '0.6rem', color: '#ff9f0a', fontWeight: '800' }}>(當前項目)</span>}
+                                                        </span>
+                                                        <span style={{ fontWeight: '700', color: '#fff' }}>${item.amount.toLocaleString()} TWD</span>
+                                                    </div>
+                                                );
+                                            });
+                                        })()}
                                     </div>
                                 </div>
                             )}
