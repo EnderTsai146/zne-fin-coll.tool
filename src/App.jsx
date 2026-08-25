@@ -883,13 +883,12 @@ function App() {
 
     setupNotifications();
     
-    // Listen for foreground push notifications
+    // Listen for foreground push notifications (silently record to log, avoid blocking in-app popup dialog)
     onFcmMessage((payload) => {
-      console.log("Foreground push notification received:", payload);
       const rawTitle = payload.notification?.title || payload.data?.title || "🎉 收到推播通知";
       const title = cleanPushTitle(rawTitle) || "🎉 收到推播通知";
       const body = payload.notification?.body || payload.data?.body || "";
-      customAlert(`🔔 【${title}】\n${body}`, "即時推播通知");
+      logger.addLog('INFO', `[FCM Foreground Notification] ${title}: ${body}`);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, dataReady, operatorName]);
