@@ -53,74 +53,132 @@ export const getRecordMainCategory = (r) => {
   return '其他';
 };
 
+export const isFixedCategory = (catName) => {
+  if (!catName) return false;
+  const name = catName.toLowerCase();
+  return name.includes('固定') || 
+         name.includes('房租') || 
+         name.includes('水電') || 
+         name.includes('瓦斯') || 
+         name.includes('電信') || 
+         name.includes('網路') || 
+         name.includes('管理費') || 
+         name.includes('保險') || 
+         name.includes('訂閱') || 
+         name.includes('學費') || 
+         name.includes('稅') ||
+         name.includes('帳單');
+};
+
+export const getDaysInMonth = (monthStr) => {
+  if (!monthStr || typeof monthStr !== 'string' || !monthStr.includes('-')) return 30;
+  const parts = monthStr.split('-');
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) return 30;
+  const days = new Date(year, month, 0).getDate();
+  return isNaN(days) || days <= 0 ? 30 : days;
+};
+
 export const getDailyBudgetLimit = (assets, monthStr, category) => {
   if (!assets?.budgets || !monthStr || typeof monthStr !== 'string' || !monthStr.includes('-')) return 0;
   const budgets = getBudgetForMonth(assets, monthStr);
   const budgetVal = budgets[category] || 0;
   if (budgetVal <= 0) return 0;
   
-  const parts = monthStr.split('-');
-  const year = Number(parts[0]);
-  const month = Number(parts[1]);
-  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) return 0;
-  
-  const daysInMonth = new Date(year, month, 0).getDate();
-  return isNaN(daysInMonth) || daysInMonth <= 0 ? 0 : (budgetVal / daysInMonth);
+  const daysInMonth = getDaysInMonth(monthStr);
+  return budgetVal / daysInMonth;
 };
 
+/**
+ * 依據「方案 A：日常支出累積日額滾動 + 固定支出全月判定」
+ * 動態精確計算每筆支出的必要金額 (needAmount) 與選擇性金額 (wantAmount)
+ */
 export const computeDynamicNecessities = (records, assets) => {
   // Sort history chronologically to compute running sum correctly
   const sorted = [...records]
     .map((r, idx) => ({ ...r, originalIndex: idx }))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
+    .sort((a, b) => {
+      const dateA = new Date(a.date).getTime() || 0;
+      const dateB = new Date(b.date).getTime() || 0;
+      if (dateA !== dateB) return dateA - dateB;
+      const tsA = new Date(a.timestamp || 0).getTime() || 0;
+      const tsB = new Date(b.timestamp || 0).getTime() || 0;
+      return tsA - tsB;
+    });
     
-  const monthlySpentNeed = {}; // key: "YYYY-MM:Category", val: cumulative spent need amount in month
+  // 記錄各月份各分類已消耗的必要金額：key: "YYYY-MM:Category", val: cumulative spent need
+  const monthlySpentNeed = {};
   const results = {}; // Map of record originalIndex to { needAmount, wantAmount }
   
   sorted.forEach(r => {
-    if (r.isDeleted) {
-      results[r.originalIndex] = { needAmount: 0, wantAmount: 0 };
-      return;
-    }
-    if (r.type !== 'expense' && r.type !== 'spend') {
+    if (r.isDeleted || (r.type !== 'expense' && r.type !== 'spend')) {
       results[r.originalIndex] = { needAmount: 0, wantAmount: 0 };
       return;
     }
     
-    const m = r.month || r.date.slice(0, 7);
+    const m = r.month || r.date?.slice(0, 7) || new Date().toISOString().slice(0, 7);
+    const totalDays = getDaysInMonth(m);
+    
+    // 取得該筆交易發生在當月的第幾天 (1 ~ totalDays)
+    let dayOfMonth = totalDays;
+    if (r.date) {
+      const dateParts = r.date.split('-');
+      if (dateParts.length >= 3) {
+        const parsedDay = Number(dateParts[2]);
+        if (!isNaN(parsedDay) && parsedDay >= 1 && parsedDay <= totalDays) {
+          dayOfMonth = parsedDay;
+        }
+      }
+    }
     
     let itemNeedTotal = 0;
-    
     const details = r.details || {};
     const catAmounts = [];
     
-    if (details.food || details.shopping || details.entertainment || details.other) {
+    if (details.food || details.shopping || details.entertainment || details.fixed || details.other) {
+      if (details.fixed) catAmounts.push({ category: '固定費用', amount: Number(details.fixed) });
       if (details.food) catAmounts.push({ category: '餐費', amount: Number(details.food) });
       if (details.shopping) catAmounts.push({ category: '購物', amount: Number(details.shopping) });
       if (details.entertainment) catAmounts.push({ category: '娛樂', amount: Number(details.entertainment) });
       if (details.other) catAmounts.push({ category: '其他', amount: Number(details.other) });
     } else {
       const cat = getRecordMainCategory(r);
-      catAmounts.push({ category: cat, amount: r.total });
+      catAmounts.push({ category: cat, amount: r.total || 0 });
     }
     
     catAmounts.forEach(({ category, amount }) => {
-      // Get monthly budget for this category in month m
+      if (!amount || amount <= 0) return;
+      
       const budgets = getBudgetForMonth(assets, m);
       const monthlyBudget = budgets[category] || 0;
       const key = `${m}:${category}`;
-      const spentNeedInMonth = monthlySpentNeed[key] || 0;
+      const spentNeedSoFar = monthlySpentNeed[key] || 0;
       
       if (monthlyBudget > 0) {
-        const allowedNeed = Math.max(0, monthlyBudget - spentNeedInMonth);
-        const needAmt = Math.min(amount, allowedNeed);
+        let maxAllowedCumulativeNeed = 0;
+        
+        if (isFixedCategory(category)) {
+          // 【固定費用】採用整月預算上限
+          maxAllowedCumulativeNeed = monthlyBudget;
+        } else {
+          // 【日常變動費用】採用「日額累積滾動制」：截至第 D 天的可用累計必要上限
+          const dailyLimit = monthlyBudget / totalDays;
+          maxAllowedCumulativeNeed = Math.min(monthlyBudget, dailyLimit * dayOfMonth);
+        }
+        
+        // 當前該分類尚可認列為「必要」的可用額度
+        const availableNeed = Math.max(0, maxAllowedCumulativeNeed - spentNeedSoFar);
+        const needAmt = Math.min(amount, availableNeed);
+        
         itemNeedTotal += needAmt;
-        monthlySpentNeed[key] = spentNeedInMonth + needAmt;
+        monthlySpentNeed[key] = spentNeedSoFar + needAmt;
       }
     });
     
-    const roundedNeed = Math.round(itemNeedTotal);
-    const roundedWant = Math.max(0, Math.round(r.total - roundedNeed));
+    const roundedNeed = Math.min(r.total || 0, Math.max(0, Math.round(itemNeedTotal)));
+    const roundedWant = Math.max(0, (r.total || 0) - roundedNeed);
+    
     results[r.originalIndex] = {
       needAmount: roundedNeed,
       wantAmount: roundedWant

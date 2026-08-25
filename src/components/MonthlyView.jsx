@@ -759,6 +759,34 @@ const MonthlyView = ({
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* Dynamic Need/Want pill rendering for Batch */}
+                                            {!isDeleted && (() => {
+                                                let bNeed = 0;
+                                                let bWant = 0;
+                                                record.records?.forEach(sub => {
+                                                    if (!sub.isDeleted && sub.category !== '作廢退款') {
+                                                        const subNec = dynamicNecessityMap[sub.originalIndex] || { needAmount: sub.total, wantAmount: 0 };
+                                                        bNeed += subNec.needAmount || 0;
+                                                        bWant += subNec.wantAmount || 0;
+                                                    }
+                                                });
+                                                if (bNeed === 0 && bWant === 0) return null;
+                                                return (
+                                                    <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                                        {bNeed > 0 && (
+                                                            <span style={{ fontSize: '0.62rem', background: 'rgba(52,199,89,0.08)', color: '#30d158', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
+                                                                🍲 必要 ${bNeed.toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                        {bWant > 0 && (
+                                                            <span style={{ fontSize: '0.62rem', background: 'rgba(255,45,85,0.08)', color: '#ff2d55', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
+                                                                ✨ 選擇 ${bWant.toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     );
                                 }
@@ -1149,11 +1177,27 @@ const MonthlyView = ({
                                                             <strong style={{ fontSize: '0.86rem', color: isItemDeleted ? '#8e8e93' : '#fff', textDecoration: isItemDeleted ? 'line-through' : 'none' }}>
                                                                 {item.cat}
                                                             </strong>
-                                                            {isItemDeleted && (
+                                                            {isItemDeleted ? (
                                                                 <span style={{ fontSize: '0.62rem', background: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
                                                                     已作廢
                                                                 </span>
-                                                            )}
+                                                            ) : (() => {
+                                                                const subNec = dynamicNecessityMap[item.originalIndex] || { needAmount: item.amount, wantAmount: 0 };
+                                                                return (
+                                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                                        {subNec.needAmount > 0 && (
+                                                                            <span style={{ fontSize: '0.58rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>
+                                                                                🍲 必要 ${subNec.needAmount.toLocaleString()}
+                                                                            </span>
+                                                                        )}
+                                                                        {subNec.wantAmount > 0 && (
+                                                                            <span style={{ fontSize: '0.58rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>
+                                                                                ✨ 選擇 ${subNec.wantAmount.toLocaleString()}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
 
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
