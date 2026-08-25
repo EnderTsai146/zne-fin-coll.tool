@@ -463,11 +463,11 @@ const SettingsView = ({
 
 
 
-  // --- 3. Operation Logs State & Logic ---
+  // --- 3. Operation Logs State & Logic (High-Performance Refactored) ---
   const [dbLogs, setDbLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  const [lastVisibleDoc, setLastVisibleDoc] = useState(null);
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
+  const [visibleLogCount, setVisibleLogCount] = useState(40);
 
   // Search & Filter state variables
   const [logSearchText, setLogSearchText] = useState('');
@@ -476,41 +476,70 @@ const SettingsView = ({
   const [logStartDate, setLogStartDate] = useState('');
   const [logEndDate, setLogEndDate] = useState('');
 
+  const isFetchingLogsRef = useRef(false);
+  const lastDocRef = useRef(null);
+  const logsFetchedInitialRef = useRef(false);
+
   const filteredLogs = useMemo(() => {
+    const rawSearch = (logSearchText || '').trim().toLowerCase();
+    const searchTokens = rawSearch ? rawSearch.split(/\s+/).filter(Boolean) : [];
+
     return dbLogs.filter(log => {
-      const matchesSearch = logSearchText 
-        ? (log.detail?.toLowerCase().includes(logSearchText.toLowerCase()) || log.operator?.toLowerCase().includes(logSearchText.toLowerCase())) 
-        : true;
-      const matchesAction = logFilterAction === 'all' ? true : (
-        logFilterAction === 'calibrate'
-          ? (log.action === 'calibrate' || log.detail?.includes('校正') || log.detail?.includes('餘額校正'))
-          : logFilterAction === 'transaction'
-          ? (log.action === 'transaction' || log.action === 'expense_add' || log.detail?.includes('記帳') || log.detail?.includes('支出') || log.detail?.includes('收入') || log.detail?.includes('劃撥'))
-          : logFilterAction === 'delete'
-          ? (log.action === 'delete' || log.action === 'budget_delete' || log.detail?.includes('作廢') || log.detail?.includes('刪除') || log.detail?.includes('註銷'))
-          : logFilterAction === 'expense_add'
-          ? (log.action === 'expense_add' || log.detail?.includes('新增支出'))
-          : logFilterAction === 'login'
-          ? (log.action === 'login' || log.detail?.includes('登入'))
-          : log.action === logFilterAction
-      );
-      const matchesOperator = logFilterOperator === 'all' ? true : (
-        logFilterOperator === 'userA' ? (log.operator?.includes('大狗狗') || log.operator === 'userA') :
-        logFilterOperator === 'userB' ? (log.operator?.includes('阿陞') || log.operator === 'userB') :
-        logFilterOperator === 'system' ? (log.operator?.includes('系統') || log.operator === 'system' || !log.operator) : true
-      );
-      return matchesSearch && matchesAction && matchesOperator;
+      // 1. Search filter with tokens
+      if (searchTokens.length > 0) {
+        const detailStr = (log.detail || '').toLowerCase();
+        const operatorStr = (log.operator || '').toLowerCase();
+        const actionStr = (log.action || '').toLowerCase();
+        const tsStr = (log.timestamp || '').toLowerCase();
+        const combined = `${detailStr} ${operatorStr} ${actionStr} ${tsStr}`;
+        const allMatch = searchTokens.every(tok => combined.includes(tok));
+        if (!allMatch) return false;
+      }
+
+      // 2. Action filter
+      if (logFilterAction !== 'all') {
+        const act = log.action || '';
+        const det = log.detail || '';
+        if (logFilterAction === 'calibrate') {
+          if (act !== 'calibrate' && !det.includes('校正')) return false;
+        } else if (logFilterAction === 'transaction') {
+          if (act !== 'transaction' && act !== 'expense_add' && !det.includes('記帳') && !det.includes('支出') && !det.includes('收入') && !det.includes('劃撥')) return false;
+        } else if (logFilterAction === 'delete') {
+          if (act !== 'delete' && act !== 'budget_delete' && !det.includes('作廢') && !det.includes('刪除') && !det.includes('註銷')) return false;
+        } else if (logFilterAction === 'expense_add') {
+          if (act !== 'expense_add' && !det.includes('新增支出')) return false;
+        } else if (logFilterAction === 'login') {
+          if (act !== 'login' && !det.includes('登入')) return false;
+        } else {
+          if (act !== logFilterAction) return false;
+        }
+      }
+
+      // 3. Operator filter
+      if (logFilterOperator !== 'all') {
+        const op = log.operator || '';
+        if (logFilterOperator === 'userA') {
+          if (!op.includes('大狗狗') && op !== 'userA' && !op.includes('用戶1')) return false;
+        } else if (logFilterOperator === 'userB') {
+          if (!op.includes('阿陞') && op !== 'userB' && !op.includes('用戶2')) return false;
+        } else if (logFilterOperator === 'system') {
+          if (!op.includes('系統') && op !== 'system' && op) return false;
+        }
+      }
+
+      return true;
     });
   }, [dbLogs, logSearchText, logFilterAction, logFilterOperator]);
 
   const fetchLogs = useCallback(async (isInitial = false) => {
-    if (loadingLogs) return;
+    if (isFetchingLogsRef.current) return;
+    isFetchingLogsRef.current = true;
     setLoadingLogs(true);
+
     try {
       const logsRef = collection(db, "finance", "data", "operationsLog");
-      let q;
-
       const queryConstraints = [orderBy("timestamp", "desc")];
+
       if (logStartDate) {
         queryConstraints.push(where("timestamp", ">=", logStartDate + "T00:00:00"));
       }
@@ -519,58 +548,67 @@ const SettingsView = ({
       }
 
       if (isInitial) {
-        queryConstraints.push(limit(20));
-        q = query(logsRef, ...queryConstraints);
-      } else if (lastVisibleDoc) {
-        queryConstraints.push(startAfter(lastVisibleDoc), limit(20));
-        q = query(logsRef, ...queryConstraints);
+        lastDocRef.current = null;
+        queryConstraints.push(limit(50));
+      } else if (lastDocRef.current) {
+        queryConstraints.push(startAfter(lastDocRef.current), limit(50));
       } else {
+        isFetchingLogsRef.current = false;
         setLoadingLogs(false);
         return;
       }
 
+      const q = query(logsRef, ...queryConstraints);
       const querySnapshot = await getDocs(q);
       const newLogs = [];
       querySnapshot.forEach((doc) => {
         newLogs.push({ id: doc.id, ...doc.data() });
       });
 
-      if (querySnapshot.docs.length < 20) {
+      if (querySnapshot.docs.length < 50) {
         setHasMoreLogs(false);
       } else {
         setHasMoreLogs(true);
       }
 
       if (querySnapshot.docs.length > 0) {
-        setLastVisibleDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
+        lastDocRef.current = querySnapshot.docs[querySnapshot.docs.length - 1];
       }
 
       if (isInitial) {
         setDbLogs(newLogs);
+        setVisibleLogCount(40);
       } else {
-        setDbLogs(prev => [...prev, ...newLogs]);
+        setDbLogs(prev => {
+          const existingIds = new Set(prev.map(l => l.id));
+          const uniqueNew = newLogs.filter(l => !existingIds.has(l.id));
+          return [...prev, ...uniqueNew];
+        });
       }
     } catch (err) {
       console.error("Error fetching logs: ", err);
     } finally {
+      isFetchingLogsRef.current = false;
       setLoadingLogs(false);
     }
-  }, [loadingLogs, logStartDate, logEndDate, lastVisibleDoc]);
+  }, [logStartDate, logEndDate]);
 
   useEffect(() => {
     if (currentSubTab === 'logs') {
-      fetchLogs(true);
-    } else {
-      setDbLogs([]);
-      setLastVisibleDoc(null);
-      setHasMoreLogs(true);
-      setLogSearchText('');
-      setLogFilterAction('all');
-      setLogFilterOperator('all');
-      setLogStartDate('');
-      setLogEndDate('');
+      if (!logsFetchedInitialRef.current || logStartDate || logEndDate) {
+        fetchLogs(true);
+        logsFetchedInitialRef.current = true;
+      }
     }
   }, [currentSubTab, logStartDate, logEndDate, fetchLogs]);
+
+  const resetLogFilters = () => {
+    setLogSearchText('');
+    setLogFilterAction('all');
+    setLogFilterOperator('all');
+    setLogStartDate('');
+    setLogEndDate('');
+  };
 
   const formatTimestamp = (isoStr) => {
     if (!isoStr) return '';
@@ -1504,8 +1542,36 @@ const SettingsView = ({
           <div className="glass-card" style={{ padding: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               
+              {/* Header & Quick Refresh */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '4px' }}>
+                <div style={{ fontSize: '0.86rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📜 操作審計軌跡</span>
+                  {loadingLogs && <span style={{ fontSize: '0.7rem', color: '#007aff', animation: 'pulse 1s infinite' }}>● 載入中...</span>}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {(logSearchText || logFilterAction !== 'all' || logFilterOperator !== 'all' || logStartDate || logEndDate) && (
+                    <button
+                      onClick={resetLogFilters}
+                      className="glass-btn"
+                      style={{ padding: '3px 8px', fontSize: '0.72rem', color: '#ff9f0a', borderRadius: '6px' }}
+                    >
+                      ✕ 清除篩選
+                    </button>
+                  )}
+                  <button
+                    onClick={() => fetchLogs(true)}
+                    disabled={loadingLogs}
+                    className="glass-btn"
+                    style={{ padding: '3px 8px', fontSize: '0.72rem', borderRadius: '6px' }}
+                    title="重新整理歷史軌跡"
+                  >
+                    🔄 重新整理
+                  </button>
+                </div>
+              </div>
+
               {/* Filters grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '2px' }}>
                 <select 
                   value={logFilterOperator} 
                   onChange={(e) => setLogFilterOperator(e.target.value)} 
@@ -1534,69 +1600,112 @@ const SettingsView = ({
               </div>
 
               {/* Date range pickers */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 起始日期</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '2px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 起始日期</span>
                   <input 
                     type="date" 
                     value={logStartDate} 
                     onChange={(e) => setLogStartDate(e.target.value)} 
                     className="glass-input" 
-                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem', height: '36px', borderRadius: '8px' }}
+                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.78rem', height: '36px', borderRadius: '8px' }}
                   />
                 </div>
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 結束日期</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 結束日期</span>
                   <input 
                     type="date" 
                     value={logEndDate} 
                     onChange={(e) => setLogEndDate(e.target.value)} 
                     className="glass-input" 
-                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.8rem', height: '36px', borderRadius: '8px' }}
+                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.78rem', height: '36px', borderRadius: '8px' }}
                   />
                 </div>
               </div>
 
-              <input 
-                type="text" 
-                placeholder="🔍 輸入關鍵字搜尋已載入軌跡..." 
-                value={logSearchText} 
-                onChange={(e) => setLogSearchText(e.target.value)} 
-                className="glass-input" 
-                style={{ width: '100%', boxSizing: 'border-box', margin: '0 0 6px 0', padding: '8px 12px', fontSize: '0.82rem', borderRadius: '8px' }}
-              />
+              {/* Instant Search Bar */}
+              <div style={{ position: 'relative' }}>
+                <input 
+                  type="text" 
+                  placeholder="🔍 即時搜尋關鍵字 (支援多詞搜尋，如「大狗狗 晚餐」)..." 
+                  value={logSearchText} 
+                  onChange={(e) => setLogSearchText(e.target.value)} 
+                  className="glass-input" 
+                  style={{ width: '100%', boxSizing: 'border-box', margin: 0, padding: '8px 12px 8px 32px', fontSize: '0.82rem', borderRadius: '8px' }}
+                />
+                <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, fontSize: '0.8rem' }}>🔍</span>
+                {logSearchText && (
+                  <button
+                    onClick={() => setLogSearchText('')}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.85rem' }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
 
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', justifyContent: 'space-between', padding: '0 4px', marginBottom: '4px' }}>
-                <span>已載入: {dbLogs.length} 筆</span>
-                <span>符合搜尋: {filteredLogs.length} 筆</span>
+              {/* Stats Bar */}
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
+                <span>已載入記憶體: <strong style={{ color: '#fff' }}>{dbLogs.length}</strong> 筆</span>
+                <span>符合搜尋條件: <strong style={{ color: '#30d158' }}>{filteredLogs.length}</strong> 筆</span>
               </div>
 
               {loadingLogs && dbLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>載入中...</div>
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>
+                  ⏳ 正在高速載入歷史軌跡...
+                </div>
               ) : dbLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>目前尚無操作紀錄。</div>
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>
+                  📭 目前尚無操作紀錄。
+                </div>
               ) : filteredLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>無符合條件的軌跡。</div>
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>
+                  🔍 無符合目前搜尋條件的軌跡。
+                </div>
               ) : (
                 <>
-                  <div className="timeline-list" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
-                    {filteredLogs.slice(0, 200).map((log, idx) => (
-                      <div key={log.id || idx} className="timeline-item">
-                        <div className={getTimelineDotClass(log.action)} />
-                        <div className="timeline-meta">
-                          <span className="timeline-operator">{log.operator}</span>
-                          <span>{formatTimestamp(log.timestamp)}</span>
+                  <div className="timeline-list" style={{ maxHeight: '52vh', overflowY: 'auto', paddingRight: '2px' }}>
+                    {filteredLogs.slice(0, visibleLogCount).map((log, idx) => {
+                      const operatorDisplay = (log.operator?.includes('大狗狗') || log.operator === 'userA') ? '🐕 大狗狗' :
+                                              (log.operator?.includes('阿陞') || log.operator === 'userB') ? '🐶 阿陞' : (log.operator || '🤖 系統');
+                      return (
+                        <div key={log.id || idx} className="timeline-item">
+                          <div className={getTimelineDotClass(log.action)} />
+                          <div className="timeline-meta">
+                            <span className="timeline-operator" style={{ color: operatorDisplay.includes('大狗狗') ? '#007aff' : (operatorDisplay.includes('阿陞') ? '#af52de' : 'var(--text-secondary)') }}>
+                              {operatorDisplay}
+                            </span>
+                            <span>{formatTimestamp(log.timestamp)}</span>
+                          </div>
+                          <div className="timeline-desc" style={{ wordBreak: 'break-all', fontSize: '0.8rem', lineHeight: '1.4' }}>
+                            {log.detail}
+                          </div>
                         </div>
-                        <div className="timeline-desc" style={{ wordBreak: 'break-all' }}>{log.detail}</div>
-                      </div>
-                    ))}
-                    {filteredLogs.length > 200 && (
-                      <div style={{ textAlign: 'center', fontSize: '0.74rem', color: 'var(--text-tertiary)', padding: '12px 0', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
-                        ⚠️ 僅顯示最新的 200 筆軌跡（尚有 {filteredLogs.length - 200} 筆未列出）
-                      </div>
+                      );
+                    })}
+
+                    {filteredLogs.length > visibleLogCount && (
+                      <button
+                        onClick={() => setVisibleLogCount(prev => prev + 40)}
+                        className="glass-btn"
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          borderRadius: '8px',
+                          fontSize: '0.76rem',
+                          color: '#007aff',
+                          background: 'rgba(0, 122, 255, 0.08)',
+                          border: '0.5px solid rgba(0, 122, 255, 0.25)',
+                          cursor: 'pointer',
+                          marginTop: '6px'
+                        }}
+                      >
+                        ⬇️ 展開更多已載入軌跡 (尚有 {filteredLogs.length - visibleLogCount} 筆)
+                      </button>
                     )}
                   </div>
+
                   {hasMoreLogs && (
                     <button
                       onClick={() => fetchLogs(false)}
@@ -1607,14 +1716,15 @@ const SettingsView = ({
                         padding: '10px',
                         borderRadius: '12px',
                         fontSize: '0.8rem',
+                        fontWeight: '700',
                         color: 'var(--text-primary)',
                         background: 'rgba(255, 255, 255, 0.05)',
                         border: '1px solid rgba(255, 255, 255, 0.1)',
                         cursor: 'pointer',
-                        marginTop: '8px'
+                        marginTop: '6px'
                       }}
                     >
-                      {loadingLogs ? '載入中...' : '載入先前軌跡'}
+                      {loadingLogs ? '⏳ 載入中...' : '📥 載入更早的雲端歷史紀錄 (+50 筆)'}
                     </button>
                   )}
                 </>
