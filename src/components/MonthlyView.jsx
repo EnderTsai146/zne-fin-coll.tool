@@ -65,10 +65,19 @@ const MonthlyView = ({
     const [editNote, setEditNote] = useState('');
     const [syncBatchDate, setSyncBatchDate] = useState(true);
     const [batchItemsState, setBatchItemsState] = useState([]);
+    const [explanationModalData, setExplanationModalData] = useState(null);
 
     // Infinite scroll & lazy load states
     const [renderCount, setRenderCount] = useState(30);
     const loadMoreRef = useRef(null);
+
+    const openNecessityExplanation = (itemNec, recordContext = {}) => {
+        if (!itemNec) return;
+        setExplanationModalData({
+            ...itemNec,
+            recordContext
+        });
+    };
 
     const openDetailModal = (item) => {
         setDetailModalRecord(item);
@@ -764,25 +773,67 @@ const MonthlyView = ({
                                             {!isDeleted && (() => {
                                                 let bNeed = 0;
                                                 let bWant = 0;
+                                                const subBreakdowns = [];
                                                 record.records?.forEach(sub => {
                                                     if (!sub.isDeleted && sub.category !== '作廢退款') {
                                                         const subNec = dynamicNecessityMap[sub.originalIndex] || { needAmount: sub.total, wantAmount: 0 };
                                                         bNeed += subNec.needAmount || 0;
                                                         bWant += subNec.wantAmount || 0;
+                                                        if (subNec.categoryBreakdown) {
+                                                            subBreakdowns.push(...subNec.categoryBreakdown.map(cb => ({ ...cb, subNote: sub.note })));
+                                                        }
                                                     }
                                                 });
                                                 if (bNeed === 0 && bWant === 0) return null;
+
+                                                const handleBatchTagClick = (e) => {
+                                                    e.stopPropagation();
+                                                    setExplanationModalData({
+                                                        isBatch: true,
+                                                        needAmount: bNeed,
+                                                        wantAmount: bWant,
+                                                        total: record.total,
+                                                        date: record.date,
+                                                        batchCount: record.records?.length || 0,
+                                                        statusType: bWant === 0 ? 'full_need' : (bNeed > 0 ? 'partial' : 'full_want'),
+                                                        statusBadge: bWant === 0 
+                                                            ? { label: '批次全額穩健必要', color: '#30d158', bg: 'rgba(52,199,89,0.12)', border: 'rgba(52,199,89,0.3)', icon: '🟢' }
+                                                            : (bNeed > 0 
+                                                                ? { label: '批次跨越進度上限（含潛在必要）', color: '#ff9f0a', bg: 'rgba(255,159,10,0.12)', border: 'rgba(255,159,10,0.3)', icon: '🟡' }
+                                                                : { label: '批次進度超前消費（選擇性）', color: '#ff2d55', bg: 'rgba(255,45,85,0.12)', border: 'rgba(255,45,85,0.3)', icon: '🔴' }
+                                                            ),
+                                                        summaryExplanation: `此購物車批次整批結帳金額為 $${record.total.toLocaleString()} TWD，共 ${record.records?.length} 筆明細。經系統逐筆計算當日時間進度與各分類可用預算後，合計認列必要 $${bNeed.toLocaleString()}，超前選擇性 $${bWant.toLocaleString()}。`,
+                                                        summaryAdvice: bWant > 0 
+                                                            ? '💡 購物車中部分品項超前使用了後續日子的預算（潛在必要），若屬於整週大採買，後續幾天維持節流即可在月底保持平衡！'
+                                                            : '🟢 整批購物車明細皆在各分類截至當天的累積可用預算內，消費健康無虞！',
+                                                        categoryBreakdown: subBreakdowns,
+                                                        recordContext: { title: '🛒 購物車整批結帳', note: record.note, date: record.date }
+                                                    });
+                                                };
+
                                                 return (
                                                     <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
                                                         {bNeed > 0 && (
-                                                            <span style={{ fontSize: '0.62rem', background: 'rgba(52,199,89,0.08)', color: '#30d158', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
-                                                                🍲 必要 ${bNeed.toLocaleString()}
-                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleBatchTagClick}
+                                                                style={{ background: 'rgba(52,199,89,0.1)', color: '#30d158', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(52,199,89,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                                                title="點擊查看預算判定原因與分析"
+                                                            >
+                                                                <span>🍲 必要 ${bNeed.toLocaleString()}</span>
+                                                                <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
+                                                            </button>
                                                         )}
                                                         {bWant > 0 && (
-                                                            <span style={{ fontSize: '0.62rem', background: 'rgba(255,45,85,0.08)', color: '#ff2d55', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
-                                                                ✨ 選擇 ${bWant.toLocaleString()}
-                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleBatchTagClick}
+                                                                style={{ background: 'rgba(255,45,85,0.1)', color: '#ff2d55', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(255,45,85,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                                                title="點擊查看預算判定原因與分析"
+                                                            >
+                                                                <span>✨ 選擇 ${bWant.toLocaleString()}</span>
+                                                                <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
+                                                            </button>
                                                         )}
                                                     </div>
                                                 );
@@ -894,14 +945,32 @@ const MonthlyView = ({
                                         {!isDeleted && record.type !== 'income' && (
                                             <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
                                                 {isNeed && (
-                                                    <span style={{ fontSize: '0.62rem', background: 'rgba(52,199,89,0.08)', color: '#30d158', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
-                                                        🍲 必要 ${itemNec.needAmount.toLocaleString()}
-                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openNecessityExplanation(itemNec, { title: record.category, note: record.note, date: record.date });
+                                                        }}
+                                                        style={{ background: 'rgba(52,199,89,0.1)', color: '#30d158', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(52,199,89,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                                        title="點擊查看預算判定原因與分析"
+                                                    >
+                                                        <span>🍲 必要 ${itemNec.needAmount.toLocaleString()}</span>
+                                                        <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
+                                                    </button>
                                                 )}
                                                 {isWant && (
-                                                    <span style={{ fontSize: '0.62rem', background: 'rgba(255,45,85,0.08)', color: '#ff2d55', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
-                                                        ✨ 選擇 ${itemNec.wantAmount.toLocaleString()}
-                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openNecessityExplanation(itemNec, { title: record.category, note: record.note, date: record.date });
+                                                        }}
+                                                        style={{ background: 'rgba(255,45,85,0.1)', color: '#ff2d55', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(255,45,85,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                                        title="點擊查看預算判定原因與分析"
+                                                    >
+                                                        <span>✨ 選擇 ${itemNec.wantAmount.toLocaleString()}</span>
+                                                        <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
+                                                    </button>
                                                 )}
                                             </div>
                                         )}
@@ -1187,14 +1256,30 @@ const MonthlyView = ({
                                                                 return (
                                                                     <div style={{ display: 'flex', gap: '4px' }}>
                                                                         {subNec.needAmount > 0 && (
-                                                                            <span style={{ fontSize: '0.58rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>
-                                                                                🍲 必要 ${subNec.needAmount.toLocaleString()}
-                                                                            </span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    openNecessityExplanation(subNec, { title: item.cat, note: item.note, date: item.date });
+                                                                                }}
+                                                                                style={{ fontSize: '0.6rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '2px 6px', borderRadius: '4px', fontWeight: '750', border: '0.5px solid rgba(52,199,89,0.25)', cursor: 'pointer' }}
+                                                                                title="點擊查看此明細判定原因"
+                                                                            >
+                                                                                🍲 必要 ${subNec.needAmount.toLocaleString()} ℹ️
+                                                                            </button>
                                                                         )}
                                                                         {subNec.wantAmount > 0 && (
-                                                                            <span style={{ fontSize: '0.58rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>
-                                                                                ✨ 選擇 ${subNec.wantAmount.toLocaleString()}
-                                                                            </span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    openNecessityExplanation(subNec, { title: item.cat, note: item.note, date: item.date });
+                                                                                }}
+                                                                                style={{ fontSize: '0.6rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '2px 6px', borderRadius: '4px', fontWeight: '750', border: '0.5px solid rgba(255,45,85,0.25)', cursor: 'pointer' }}
+                                                                                title="點擊查看此明細判定原因"
+                                                                            >
+                                                                                ✨ 選擇 ${subNec.wantAmount.toLocaleString()} ℹ️
+                                                                            </button>
                                                                         )}
                                                                     </div>
                                                                 );
@@ -1286,18 +1371,38 @@ const MonthlyView = ({
                                         const hasWant = itemNec.wantAmount > 0;
                                         
                                         return (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: '750' }}>🎯 預算需求分析 (自動判定)</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750' }}>🎯 預算需求分析</div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openNecessityExplanation(itemNec, { title: detailModalRecord.category, note: detailModalRecord.note, date: detailModalRecord.date })}
+                                                        style={{ background: 'none', border: 'none', color: '#0a84ff', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                                    >
+                                                        <span>🧠 點擊查看智慧解讀</span>
+                                                        <span>➔</span>
+                                                    </button>
+                                                </div>
                                                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                                     {hasNeed && (
-                                                        <span style={{ fontSize: '0.74rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(52,199,89,0.2)' }}>
-                                                            🍲 必要支出: ${itemNec.needAmount.toLocaleString()} TWD
-                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openNecessityExplanation(itemNec, { title: detailModalRecord.category, note: detailModalRecord.note, date: detailModalRecord.date })}
+                                                            style={{ fontSize: '0.76rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '5px 12px', borderRadius: 'var(--radius-pill)', fontWeight: '750', border: '0.5px solid rgba(52,199,89,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                        >
+                                                            <span>🍲 必要支出: ${itemNec.needAmount.toLocaleString()} TWD</span>
+                                                            <span style={{ fontSize: '0.65rem' }}>ℹ️</span>
+                                                        </button>
                                                     )}
                                                     {hasWant && (
-                                                        <span style={{ fontSize: '0.74rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '4px 10px', borderRadius: 'var(--radius-pill)', fontWeight: '700', border: '0.5px solid rgba(255,45,85,0.2)' }}>
-                                                            ✨ 選擇性支出: ${itemNec.wantAmount.toLocaleString()} TWD
-                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openNecessityExplanation(itemNec, { title: detailModalRecord.category, note: detailModalRecord.note, date: detailModalRecord.date })}
+                                                            style={{ fontSize: '0.76rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '5px 12px', borderRadius: 'var(--radius-pill)', fontWeight: '750', border: '0.5px solid rgba(255,45,85,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                        >
+                                                            <span>✨ 選擇性支出: ${itemNec.wantAmount.toLocaleString()} TWD</span>
+                                                            <span style={{ fontSize: '0.65rem' }}>ℹ️</span>
+                                                        </button>
                                                     )}
                                                 </div>
                                             </div>
@@ -1587,6 +1692,152 @@ const MonthlyView = ({
                             </button>
                         </div>
 
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* INTELLIGENT BUDGET & NECESSITY EXPLANATION MODAL */}
+            {explanationModalData && createPortal(
+                <div className="liquid-modal-overlay" onClick={() => setExplanationModalData(null)} style={{ zIndex: 11000 }}>
+                    <div
+                        className="liquid-modal-card"
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            maxWidth: '460px',
+                            width: '92%',
+                            maxHeight: '88vh',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            padding: '20px 18px',
+                            boxSizing: 'border-box',
+                            overflow: 'hidden',
+                            gap: '0px'
+                        }}
+                    >
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+                            <div style={{ fontWeight: '850', fontSize: '1.08rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>🧠</span>
+                                <span>智慧預算分析與判定解讀</span>
+                            </div>
+                            <button onClick={() => setExplanationModalData(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+                        </div>
+
+                        {/* Scrollable Content */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 2px' }}>
+                            
+                            {/* 1. Status & Split Overview */}
+                            <div style={{
+                                background: explanationModalData.statusBadge?.bg || 'rgba(255,255,255,0.04)',
+                                border: `1px solid ${explanationModalData.statusBadge?.border || 'rgba(255,255,255,0.1)'}`,
+                                borderRadius: '14px',
+                                padding: '14px 16px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '10px',
+                                flexShrink: 0
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.86rem', fontWeight: '800', color: explanationModalData.statusBadge?.color || '#fff', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        <span>{explanationModalData.statusBadge?.icon}</span>
+                                        <span>{explanationModalData.statusBadge?.label}</span>
+                                    </span>
+                                    <span style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.6)' }}>
+                                        📅 {explanationModalData.date || '當日'} (第 {explanationModalData.dayOfMonth || 1}/{explanationModalData.totalDays || 30} 天)
+                                    </span>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: '8px' }}>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                                        {explanationModalData.recordContext?.title && <span>【{explanationModalData.recordContext.title}】</span>}
+                                        {explanationModalData.recordContext?.note && <span>{explanationModalData.recordContext.note}</span>}
+                                    </div>
+                                    <div style={{ fontSize: '1.18rem', fontWeight: '850', color: '#fff' }}>
+                                        ${explanationModalData.total?.toLocaleString()} TWD
+                                    </div>
+                                </div>
+
+                                {/* Progress Bar Split */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', display: 'flex' }}>
+                                        <div style={{ width: `${Math.round((explanationModalData.needAmount / (explanationModalData.total || 1)) * 100)}%`, background: '#30d158', transition: 'width 0.3s ease' }} />
+                                        <div style={{ width: `${Math.round((explanationModalData.wantAmount / (explanationModalData.total || 1)) * 100)}%`, background: '#ff2d55', transition: 'width 0.3s ease' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+                                        <span style={{ color: '#30d158', fontWeight: '750' }}>
+                                            🍲 必要: ${explanationModalData.needAmount?.toLocaleString()} ({Math.round((explanationModalData.needAmount / (explanationModalData.total || 1)) * 100)}%)
+                                        </span>
+                                        <span style={{ color: '#ff2d55', fontWeight: '750' }}>
+                                            ✨ 選擇: ${explanationModalData.wantAmount?.toLocaleString()} ({Math.round((explanationModalData.wantAmount / (explanationModalData.total || 1)) * 100)}%)
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 2. Detailed Scenario Breakdown Cards */}
+                            {explanationModalData.categoryBreakdown && explanationModalData.categoryBreakdown.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
+                                    <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750', padding: '0 2px' }}>
+                                        📊 分類日額度滾動拆解 (方案 A 演算法)
+                                    </div>
+
+                                    {explanationModalData.categoryBreakdown.map((catItem, idx) => (
+                                        <div key={idx} className="inset-group-card" style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.025)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <strong style={{ fontSize: '0.88rem', color: '#fff' }}>🏷️ {catItem.category} {catItem.subNote ? `(${catItem.subNote})` : ''}</strong>
+                                                <span style={{ fontSize: '0.88rem', fontWeight: '800', color: '#fff' }}>${catItem.amount.toLocaleString()} TWD</span>
+                                            </div>
+
+                                            {/* Math Grid */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: 'rgba(0,0,0,0.2)', padding: '8px 10px', borderRadius: '8px', fontSize: '0.72rem' }}>
+                                                <div style={{ color: 'var(--text-secondary)' }}>
+                                                    月度總預算: <strong style={{ color: '#fff' }}>${catItem.monthlyBudget.toLocaleString()}</strong>
+                                                </div>
+                                                <div style={{ color: 'var(--text-secondary)' }}>
+                                                    每日平均配額: <strong style={{ color: '#0a84ff' }}>${catItem.dailyLimit.toLocaleString()}/天</strong>
+                                                </div>
+                                                <div style={{ color: 'var(--text-secondary)' }}>
+                                                    截至當日累計上限: <strong style={{ color: '#30d158' }}>${catItem.maxAllowedCumulativeNeed.toLocaleString()}</strong>
+                                                </div>
+                                                <div style={{ color: 'var(--text-secondary)' }}>
+                                                    此筆前已用必要: <strong style={{ color: '#ff9f0a' }}>${catItem.spentNeedSoFar.toLocaleString()}</strong>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.85)', lineHeight: '1.45', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '6px' }}>
+                                                {catItem.explanation}
+                                            </div>
+
+                                            {catItem.advice && (
+                                                <div style={{ fontSize: '0.74rem', color: '#ffd60a', lineHeight: '1.4', background: 'rgba(255,214,10,0.08)', padding: '6px 8px', borderRadius: '6px', border: '0.5px solid rgba(255,214,10,0.2)' }}>
+                                                    {catItem.advice}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* 3. Global AI Financial Tip */}
+                            {explanationModalData.summaryAdvice && (!explanationModalData.categoryBreakdown || explanationModalData.categoryBreakdown.length === 0) && (
+                                <div style={{ background: 'rgba(10,132,255,0.08)', border: '1px solid rgba(10,132,255,0.25)', borderRadius: '12px', padding: '12px 14px', fontSize: '0.78rem', color: '#64d2ff', lineHeight: '1.5', flexShrink: 0 }}>
+                                    {explanationModalData.summaryAdvice}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div style={{ paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+                            <button
+                                type="button"
+                                onClick={() => setExplanationModalData(null)}
+                                className="liquid-modal-btn liquid-btn-confirm"
+                                style={{ width: '100%', padding: '11px', fontSize: '0.88rem', fontWeight: '750', borderRadius: '12px' }}
+                            >
+                                我知道了
+                            </button>
+                        </div>
                     </div>
                 </div>,
                 document.body
