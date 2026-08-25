@@ -853,10 +853,24 @@ const MonthlyView = ({
             {/* UNIFIED TRANSACTION DETAILS & MANAGEMENT MODAL */}
             {detailModalRecord && createPortal(
                 <div className="liquid-modal-overlay" onClick={() => setDetailModalRecord(null)}>
-                    <div className="liquid-modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', width: '92%', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+                    <div
+                        className="liquid-modal-card"
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            maxWidth: '440px',
+                            width: '92%',
+                            maxHeight: '88vh',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            padding: '18px 16px',
+                            boxSizing: 'border-box',
+                            overflow: 'hidden',
+                            gap: '0px'
+                        }}
+                    >
                         
                         {/* Modal Header */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                             <div style={{ fontWeight: '850', fontSize: '1.15rem', color: '#fff' }} className="liquid-modal-title">
                                 🔍 交易詳細資訊 & 管理
                             </div>
@@ -864,23 +878,23 @@ const MonthlyView = ({
                         </div>
 
                         {/* Scrollable Modal Content */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '68vh', overflowY: 'auto', paddingRight: '4px', paddingBottom: '16px', flexGrow: 1 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, overflowY: 'auto', padding: '12px 2px' }}>
                             
                             {/* Summary Card */}
-                            <div className="inset-group-card" style={{ padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: 0 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                    <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)' }}>💰 交易金額</span>
-                                    <strong style={{ fontSize: '1.05rem', color: detailModalRecord.type === 'income' ? '#30d158' : '#fff' }}>
+                            <div className="inset-group-card" style={{ padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>💰 交易金額</span>
+                                    <strong style={{ fontSize: '1.1rem', color: detailModalRecord.type === 'income' ? '#30d158' : '#fff' }}>
                                         {detailModalRecord.type === 'income' ? '+' : '-'}${detailModalRecord.total.toLocaleString()} TWD
                                     </strong>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.78rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                                     <span style={{ color: 'var(--text-tertiary)' }}>🏷️ 交易分類</span>
                                     <span style={{ color: '#fff', fontWeight: '600' }}>{detailModalRecord.category}</span>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                                     <span style={{ color: 'var(--text-tertiary)' }}>👤 記錄成員</span>
-                                    <span style={{ color: '#fff' }}>{detailModalRecord.payer || '無'} ({detailModalRecord.operator || '無'})</span>
+                                    <span style={{ color: '#fff' }}>{detailModalRecord.payer || '無'} {detailModalRecord.operator ? `(${detailModalRecord.operator})` : ''}</span>
                                 </div>
                             </div>
 
@@ -910,31 +924,32 @@ const MonthlyView = ({
                             })()}
 
                             {/* Editable Fields */}
-                            <div className="inset-group-card" style={{ marginBottom: 0 }}>
+                            <div className="inset-group-card" style={{ marginBottom: 0, background: 'rgba(255,255,255,0.02)' }}>
                                 <div style={{ padding: '8px 12px', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', gap: '4px', alignItems: 'center' }}>
                                     <span>✏️</span>
                                     <span>編輯交易屬性 (金額與帳戶屬唯讀)</span>
                                 </div>
-                                <div className="inset-group-row" style={{ padding: '10px 14px', minHeight: '44px' }}>
-                                    <span className="inset-group-label">📅 交易日期</span>
+                                <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="inset-group-label" style={{ fontSize: '0.82rem' }}>📅 交易日期</span>
                                     <span className="inset-group-value">
                                         <input 
                                             type="date" 
-                                            style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontFamily: 'var(--font-family)' }} 
+                                            style={{ background: 'none', border: 'none', color: '#fff', textAlign: 'right', outline: 'none', fontSize: '0.85rem', fontFamily: 'var(--font-family)' }} 
                                             value={editDate} 
                                             onChange={e => setEditDate(e.target.value)} 
                                         />
                                     </span>
                                 </div>
-                                <div className="inset-group-row" style={{ padding: '10px 14px', minHeight: '44px' }}>
-                                    <span className="inset-group-label">📝 交易備註</span>
-                                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+                                <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="inset-group-label" style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>📝 交易備註</span>
+                                    <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
                                         <input 
                                             type="text" 
                                             className="inset-group-input" 
                                             value={editNote} 
                                             onChange={e => setEditNote(e.target.value)} 
                                             placeholder="請輸入交易備註" 
+                                            style={{ fontSize: '0.85rem', textAlign: 'right', width: '100%' }}
                                         />
                                     </span>
                                 </div>
