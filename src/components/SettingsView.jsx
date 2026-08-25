@@ -1651,6 +1651,43 @@ const SettingsView = ({
                 </div>
               </div>
 
+              {/* AI Diagnostic Report Panel */}
+              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🤖</span>
+                  <span>AI 全方位系統健康診斷</span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                  一鍵產出結構化之系統環境、帳戶資產守恆檢查、信用卡待繳明細與最新操作日誌報告。若遇到任何問題或日常定期檢查，可直接複製傳給 AI 進行分析診斷。
+                </p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const report = logger.generateAiDiagnosticReport(assets, { operatorName, currentUser: currentUser?.email, fcmToken: fcmDiagnostic?.token });
+                      try {
+                        await navigator.clipboard.writeText(report);
+                        await customAlert("🤖 已成功將【AI 全方位健康診斷報告】複製到剪貼簿！\n\n您可以直接將複製的 Markdown 內容傳給 AI 進行檢查與排查。", "複製成功");
+                      } catch {
+                        await customAlert("請手動複製報告內容：\n" + report.slice(0, 300) + "...", "診斷報告");
+                      }
+                    }}
+                    className="glass-btn primary-gradient-btn"
+                    style={{ flex: 2, padding: '10px 0', borderRadius: '10px', fontWeight: '800', fontSize: '0.84rem' }}
+                  >
+                    📋 一鍵複製 AI 系統健康診斷報告
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsLogsModalOpen(true)}
+                    className="glass-btn"
+                    style={{ flex: 1, padding: '10px 0', borderRadius: '10px', fontSize: '0.8rem' }}
+                  >
+                    📜 檢視詳細日誌
+                  </button>
+                </div>
+              </div>
+
               {/* Notification card panel */}
               <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ fontWeight: '700', fontSize: '0.9rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1899,6 +1936,7 @@ const SettingsView = ({
       <SystemLogsModal
         isOpen={isLogsModalOpen}
         onClose={() => setIsLogsModalOpen(false)}
+        assets={assets}
         appContext={{
           operatorName,
           currentUser: currentUser?.email,
@@ -1911,7 +1949,7 @@ const SettingsView = ({
 };
 
 // --- Session Diagnostic Logs Modal Component ---
-const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
+const SystemLogsModal = ({ isOpen, onClose, assets, appContext, customAlert }) => {
   const [copied, setCopied] = useState(false);
   const [clearVersion, setClearVersion] = useState(0);
 
@@ -1922,6 +1960,29 @@ const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
   }, [isOpen, clearVersion]);
 
   if (!isOpen) return null;
+
+  const handleCopyAiReport = async () => {
+    const reportText = logger.generateAiDiagnosticReport(assets, appContext);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(reportText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = reportText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      if (customAlert) {
+        customAlert("🤖 已成功複製【AI 全方位系統健康診斷報告】！您可以直接將複製的 Markdown 內容傳給 AI 進行分析。", "複製成功");
+      }
+    } catch (err) {
+      console.error("Copy AI report fail:", err);
+    }
+  };
 
   const handleCopyReport = async () => {
     const reportText = logger.generateDiagnosticReport(appContext);
@@ -1939,7 +2000,7 @@ const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
       if (customAlert) {
-        customAlert("📋 已成功複製本階段所有除錯診斷日誌！您可以直接貼給 AI 進行排錯。", "複製成功");
+        customAlert("📋 已成功複製本階段原始除錯診斷日誌！", "複製成功");
       }
     } catch (err) {
       console.error("Copy report fail:", err);
@@ -2004,20 +2065,18 @@ const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
         </div>
 
         {/* Modal Action Toolbar */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={handleCopyReport}
-            className="glass-btn"
+            onClick={handleCopyAiReport}
+            className="glass-btn primary-gradient-btn"
             style={{
-              flex: 1,
-              padding: '10px 16px',
+              flex: 1.5,
+              padding: '10px 14px',
               borderRadius: '12px',
-              fontSize: '0.86rem',
-              fontWeight: '750',
+              fontSize: '0.84rem',
+              fontWeight: '800',
               color: '#ffffff',
-              background: copied ? 'linear-gradient(135deg, #34c759 0%, #30d158 100%)' : 'linear-gradient(135deg, #007aff 0%, #5856d6 100%)',
-              borderColor: 'rgba(255, 255, 255, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -2025,7 +2084,27 @@ const SystemLogsModal = ({ isOpen, onClose, appContext, customAlert }) => {
               cursor: 'pointer'
             }}
           >
-            <span>{copied ? '✅ 已複製！' : '📋 一鍵複製所有診斷日誌 (貼給 AI)'}</span>
+            <span>{copied ? '✅ 已複製！' : '🤖 一鍵複製 AI 系統健康診斷報告'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCopyReport}
+            className="glass-btn"
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: '12px',
+              fontSize: '0.8rem',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>📋 複製原始日誌</span>
           </button>
 
           <button

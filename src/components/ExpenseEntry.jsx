@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import SegmentedControl from './SegmentedControl';
 import ErrorBoundary from './ErrorBoundary';
 import IOSAccountMenuPicker from './IOSAccountMenuPicker';
+import { logger } from '../utils/logger';
 
 const formatInputMoney = (valStr) => {
   if (valStr === '' || valStr === undefined || valStr === null) return '';
@@ -204,6 +205,9 @@ const ExpenseEntry = ({
 
   const [showCreditCardModal, setShowCreditCardModal] = useState(false);
   const [selectedCcBill, setSelectedCcBill] = useState(null);
+  const [reconcileAmountInput, setReconcileAmountInput] = useState('');
+  const [selectedTxTimestamps, setSelectedTxTimestamps] = useState(new Set());
+  const [reconcileFilterMode, setReconcileFilterMode] = useState('all'); // 'all' | 'beforeCutoff'
   const [helpTooltipConfig, setHelpTooltipConfig] = useState(null);
   const [pendingSubmitConfig, setPendingSubmitConfig] = useState(null);
 
@@ -1108,9 +1112,107 @@ const ExpenseEntry = ({
     });
   }, [assets?.bills, creditCardBills]);
 
+  // --- Unpaid Credit Card Transactions Query ---
+  const unpaidCardTransactions = useMemo(() => {
+    if (!selectedCcBill?.creditCardAccountId) return [];
+    const cardId = selectedCcBill.creditCardAccountId;
+    return (assets?.monthlyExpenses || [])
+      .filter(r => !r.isDeleted && r.accountId === cardId && !r.ccBillSettled)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  }, [assets?.monthlyExpenses, selectedCcBill]);
+
+  // --- Smart Subset-Sum Reconciliation Solver ---
+  const smartMatchResult = useMemo(() => {
+    const rawVal = reconcileAmountInput.trim();
+    if (!rawVal) return { status: 'idle', selectedSet: new Set(), matchedSum: 0, diff: 0, count: 0 };
+    const target = parseMoney(rawVal);
+    if (target <= 0) return { status: 'idle', selectedSet: new Set(), matchedSum: 0, diff: 0, count: 0 };
+
+    const items = unpaidCardTransactions;
+    if (!items || items.length === 0) return { status: 'no_match', selectedSet: new Set(), matchedSum: 0, diff: target, count: 0 };
+
+    // 1. Prefix check (Time-sequential order)
+    let runningSum = 0;
+    const prefixSet = new Set();
+    for (const it of items) {
+      runningSum += (Number(it.total) || 0);
+      prefixSet.add(it.timestamp);
+      if (runningSum === target) {
+        return { status: 'exact_prefix', selectedSet: prefixSet, matchedSum: runningSum, diff: 0, count: prefixSet.size };
+      }
+    }
+
+    // 2. Subset sum recursion
+    const validItems = items.slice(0, 45);
+    const exactSubsets = [];
+    const findSubsets = (index, currentSum, currentSubset) => {
+      if (currentSum === target) {
+        exactSubsets.push([...currentSubset]);
+        return;
+      }
+      if (index >= validItems.length || currentSum > target || exactSubsets.length > 5) return;
+      const item = validItems[index];
+      const val = Number(item.total) || 0;
+      if (currentSum + val <= target) {
+        currentSubset.push(item);
+        findSubsets(index + 1, currentSum + val, currentSubset);
+        currentSubset.pop();
+      }
+      findSubsets(index + 1, currentSum, currentSubset);
+    };
+    findSubsets(0, 0, []);
+
+    if (exactSubsets.length === 1) {
+      const sSet = new Set(exactSubsets[0].map(it => it.timestamp));
+      return { status: 'exact_subset', selectedSet: sSet, matchedSum: target, diff: 0, count: sSet.size };
+    } else if (exactSubsets.length > 1) {
+      const commonTimestamps = exactSubsets[0].filter(it => 
+        exactSubsets.every(sub => sub.some(s => s.timestamp === it.timestamp))
+      ).map(it => it.timestamp);
+      return { status: 'ambiguous', selectedSet: new Set(commonTimestamps), matchedSum: target, diff: 0, candidateSubsets: exactSubsets, count: exactSubsets[0].length };
+    }
+
+    // 3. Closest subset within tolerance <= $30
+    let bestSubset = [];
+    let minDiff = Infinity;
+    const findClosest = (index, currentSum, currentSubset) => {
+      const diff = Math.abs(currentSum - target);
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestSubset = [...currentSubset];
+      }
+      if (index >= validItems.length || currentSum > target + 50) return;
+      const item = validItems[index];
+      const val = Number(item.total) || 0;
+      currentSubset.push(item);
+      findClosest(index + 1, currentSum + val, currentSubset);
+      currentSubset.pop();
+      findClosest(index + 1, currentSum, currentSubset);
+    };
+    findClosest(0, 0, []);
+
+    if (minDiff <= 30 && bestSubset.length > 0) {
+      const bestSum = bestSubset.reduce((s, it) => s + (Number(it.total) || 0), 0);
+      return { status: 'small_diff', selectedSet: new Set(bestSubset.map(it => it.timestamp)), matchedSum: bestSum, diff: target - bestSum, count: bestSubset.length };
+    }
+
+    return { status: 'no_match', selectedSet: new Set(), matchedSum: 0, diff: target, count: 0 };
+  }, [reconcileAmountInput, unpaidCardTransactions]);
+
   const handleCardClick = async (bill) => {
     if (bill.isCreditCard) {
       setSelectedCcBill(bill);
+      const cardExpenses = (assets?.monthlyExpenses || []).filter(r => !r.isDeleted && r.accountId === bill.creditCardAccountId && !r.ccBillSettled);
+      const totalUnpaid = cardExpenses.reduce((s, r) => s + (Number(r.total) || 0), 0);
+      setReconcileAmountInput(totalUnpaid > 0 ? String(totalUnpaid) : '');
+      setSelectedTxTimestamps(new Set(cardExpenses.map(r => r.timestamp)));
+      setReconcileFilterMode('all');
+
+      if (!billPayAccountId && accounts.length > 0) {
+        const linkedAcc = bill.linkedBankAccountId ? accounts.find(a => a.id === bill.linkedBankAccountId) : null;
+        const defaultAcc = linkedAcc || accounts.find(a => a.owner === userKey && a.type !== 'credit') || accounts[0];
+        if (defaultAcc) setBillPayAccountId(defaultAcc.id);
+      }
       setShowCreditCardModal(true);
       return;
     }
@@ -1122,6 +1224,84 @@ const ExpenseEntry = ({
       if (defaultAcc) setBillPayAccountId(defaultAcc.id);
     }
     setShowBillPayModal(true);
+  };
+
+  const handleExecuteCreditCardSettlement = async (paymentAmount, options = {}) => {
+    if (!selectedCcBill) return;
+    const creditAccId = selectedCcBill.creditCardAccountId;
+    const creditAcc = accounts.find(a => a.id === creditAccId);
+    const payingBankAcc = accounts.find(a => a.id === billPayAccountId);
+
+    if (!creditAcc || !payingBankAcc) {
+      await customAlert("❌ 請選擇有效的扣款帳戶！", "錯誤");
+      return;
+    }
+
+    if (payingBankAcc.type !== 'credit' && payingBankAcc.balance < paymentAmount) {
+      await customAlert(`❌ 帳戶【${payingBankAcc.nickname}】餘額不足以支付 $${paymentAmount.toLocaleString()}！\n目前餘額為: $${payingBankAcc.balance.toLocaleString()}`, "餘額不足");
+      return;
+    }
+
+    const { calibrationDiff = 0, customNote = '' } = options;
+    const totalCreditCardDeduct = paymentAmount + calibrationDiff;
+
+    const statementId = `stmt_${Date.now()}`;
+    const targetTimestamp = new Date().toISOString();
+    const txDate = targetTimestamp.split('T')[0];
+
+    const updatedAccounts = accounts.map(a => {
+      if (a.id === billPayAccountId) return { ...a, balance: a.balance - paymentAmount };
+      if (a.id === creditAccId) return { ...a, balance: a.balance + totalCreditCardDeduct };
+      return a;
+    });
+
+    const settledSet = new Set(selectedTxTimestamps);
+    const updatedExpenses = (assets.monthlyExpenses || []).map(r => {
+      if (!r.isDeleted && r.accountId === creditAccId && settledSet.has(r.timestamp)) {
+        return {
+          ...r,
+          ccBillSettled: true,
+          ccStatementId: statementId
+        };
+      }
+      return r;
+    });
+
+    const diffNote = calibrationDiff !== 0 ? ` (微差校正: ${calibrationDiff > 0 ? '+' : ''}$${calibrationDiff})` : '';
+    const txRecord = {
+      date: txDate,
+      month: txDate.slice(0, 7),
+      type: 'transfer',
+      category: '信用卡帳單',
+      total: paymentAmount,
+      sourceAmount: paymentAmount,
+      targetAmount: totalCreditCardDeduct,
+      calibrationDiff: calibrationDiff,
+      statementId: statementId,
+      settledItemCount: settledSet.size,
+      payer: payingBankAcc.owner === 'joint' ? '共同帳戶' : (payingBankAcc.owner === 'userA' ? '大狗狗🐕' : '阿陞🐶'),
+      accountId: billPayAccountId,
+      targetAccountId: creditAccId,
+      note: customNote || `💳 信用卡帳單結清: ${creditAcc.nickname} (自 ${payingBankAcc.nickname} 劃撥，沖銷 ${settledSet.size} 筆)${diffNote}`,
+      timestamp: targetTimestamp
+    };
+
+    const finalAssets = {
+      ...assets,
+      accounts: updatedAccounts,
+      monthlyExpenses: [...updatedExpenses, txRecord]
+    };
+
+    setShowCreditCardModal(false);
+    logger.addLog('TRANSACTION', `信用卡結算完成: ${creditAcc.nickname} 劃撥 $${paymentAmount} (沖銷 ${settledSet.size} 筆)`, { statementId, calibrationDiff });
+    
+    if (onTransaction) {
+      onTransaction(finalAssets, txRecord);
+    } else if (setAssets) {
+      setAssets(finalAssets);
+    }
+
+    await customAlert(`🎉 信用卡【${creditAcc.nickname}】已成功自【${payingBankAcc.nickname}】劃撥繳納 $${paymentAmount.toLocaleString()} TWD！\n共沖銷 ${settledSet.size} 筆刷卡明細。`, "劃撥結清成功");
   };
 
   const safeBills = assets.bills || [];
@@ -2579,137 +2759,417 @@ const ExpenseEntry = ({
         document.body
       )}
 
-      {/* DEDICATED CREDIT CARD BILL MANAGEMENT MODAL */}
+      {/* DEDICATED CREDIT CARD BILL MANAGEMENT MODAL WITH SMART RECONCILIATION */}
       {showCreditCardModal && selectedCcBill && createPortal(
         <div className="liquid-modal-overlay" onClick={() => setShowCreditCardModal(false)} style={{ zIndex: 9999 }}>
-          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', width: '92%', maxHeight: '88vh', overflowY: 'auto', padding: '20px 16px', boxSizing: 'border-box' }}>
+          <div className="liquid-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px', width: '94%', maxHeight: '90vh', overflowY: 'auto', padding: '20px 16px', boxSizing: 'border-box' }}>
 
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div style={{ fontWeight: '850', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>💳</span>
-                <span>{selectedCcBill?.rawAccount?.nickname || selectedCcBill?.note || selectedCcBill?.name || '信用卡'} 信用卡帳單專區</span>
+                <span>{selectedCcBill?.rawAccount?.nickname || selectedCcBill?.name || '信用卡'} 智慧帳單對帳與結清</span>
               </div>
               <button onClick={() => setShowCreditCardModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer' }}>✕</button>
             </div>
 
-            {/* Credit Card Detail Card */}
-            <div className="inset-group-card" style={{ marginBottom: '14px', padding: '14px', background: 'rgba(255,255,255,0.03)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>📊 本期未結算/待繳金額</span>
-                <strong style={{ fontSize: '1.15rem', color: (selectedCcBill?.amount || 0) > 0 ? '#ffb94f' : '#8effa2' }}>
-                  ${(selectedCcBill?.amount || 0).toLocaleString()} {selectedCcBill?.currency || 'TWD'}
+            {/* Card Summary Inset */}
+            <div className="inset-group-card" style={{ marginBottom: '12px', padding: '12px 14px', background: 'rgba(255,255,255,0.03)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>📊 目前未結算刷卡負債</span>
+                <strong style={{ fontSize: '1.18rem', color: (selectedCcBill?.amount || 0) > 0 ? '#ffb94f' : '#8effa2' }}>
+                  -${(selectedCcBill?.amount || 0).toLocaleString()} {selectedCcBill?.currency || 'TWD'}
                 </strong>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.78rem' }}>
-                <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>📅 每月帳單出帳日</span>
-                  <button type="button" onClick={() => setHelpTooltipConfig({
-                    title: "帳單結帳/出帳日說明",
-                    text: "結帳日是計算當期應繳總金額的時間基準點。\n在結帳日前刷卡消費時，金額已即時認列為當月消費費用，並增加信用卡負債。\n到達結帳日當天，系統將結帳日前所有刷卡金額彙整封裝為『本期帳單應繳總金額』，絕不重複扣款。"
-                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
-                </span>
-                <span style={{ color: '#fff', fontWeight: '600' }}>每月 {selectedCcBill?.rawAccount?.billingDay || selectedCcBill?.date || 10} 號</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.78rem' }}>
-                <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>⏰ 繳費截止日</span>
-                  <button type="button" onClick={() => setHelpTooltipConfig({
-                    title: "繳費截止日說明",
-                    text: "繳費截止日是活儲實際劃撥沖銷信用卡負債的時間點。\n劃撥扣繳時：活儲 -$X，信用卡負債 +$X (沖銷歸零)，當月費用 +$0 (避免重複計算)。"
-                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
-                </span>
-                <span style={{ color: (selectedCcBill?.diffDays || 99) <= 3 ? '#ff453a' : '#fff', fontWeight: '700' }}>
-                  {selectedCcBill?.nextDate} (離到期剩 {selectedCcBill?.diffDays} 天)
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>🤖 扣繳方式與狀態</span>
-                  <button type="button" onClick={() => setHelpTooltipConfig({
-                    title: "扣繳方式說明",
-                    text: "自動扣繳：系統將於每月扣繳日自動從指定活儲劃撥結清。\n手動劃撥：需於網銀繳款後，在 App 中點擊『確定劃撥繳清』發起金額沖銷。"
-                  })} style={{ background: 'none', border: 'none', color: '#0a84ff', padding: 0, cursor: 'pointer', fontSize: '0.8rem' }}>❓</button>
-                </span>
-                <span style={{
-                  fontSize: '0.7rem',
-                  padding: '2px 8px',
-                  borderRadius: '6px',
-                  fontWeight: '750',
-                  background: selectedCcBill?.autoPay ? 'rgba(48,209,88,0.15)' : 'rgba(255,185,79,0.15)',
-                  color: selectedCcBill?.autoPay ? '#30d158' : '#ffb94f',
-                  border: `0.5px solid ${selectedCcBill?.autoPay ? 'rgba(48,209,88,0.3)' : 'rgba(255,185,79,0.3)'}`
-                }}>
-                  {selectedCcBill?.autoPay ? `🤖 自動扣繳 (${selectedCcBill?.linkedBankName || '活儲'})` : '🖐️ 手動劃撥繳納'}
-                </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                <span>📅 出帳日: <strong>每月 {selectedCcBill?.rawAccount?.billingDay || 10} 號</strong></span>
+                <span>⏰ 到期: <strong>{selectedCcBill?.nextDate} (剩 {selectedCcBill?.diffDays} 天)</strong></span>
+                <span>{selectedCcBill?.autoPay ? '🤖 自動扣繳' : '🖐️ 手動劃撥'}</span>
               </div>
             </div>
 
-            {/* Real-World Synchronization Alert Box */}
-            <div style={{
-              background: selectedCcBill?.autoPay ? 'rgba(48,209,88,0.08)' : 'rgba(255,185,79,0.08)',
-              border: `1px solid ${selectedCcBill?.autoPay ? 'rgba(48,209,88,0.25)' : 'rgba(255,185,79,0.25)'}`,
-              borderRadius: '12px',
-              padding: '12px 14px',
-              marginBottom: '16px',
-              fontSize: '0.76rem',
-              lineHeight: '1.5',
-              color: 'var(--text-secondary)'
-            }}>
-              <div style={{ fontWeight: '800', color: selectedCcBill?.autoPay ? '#30d158' : '#ffb94f', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span>💡 真實現實同步提醒與會計原則</span>
+            {/* Smart Reconciliation Input Box */}
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span>🔢</span>
+                  <span>輸入網銀本期帳單應繳金額</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const totalUnpaid = unpaidCardTransactions.reduce((s, r) => s + (Number(r.total) || 0), 0);
+                    setReconcileAmountInput(String(totalUnpaid));
+                    setSelectedTxTimestamps(new Set(unpaidCardTransactions.map(r => r.timestamp)));
+                  }}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-joint)', fontSize: '0.72rem', cursor: 'pointer', fontWeight: '700' }}
+                >
+                  帶入全部待繳 (${unpaidCardTransactions.reduce((s, r) => s + (Number(r.total) || 0), 0).toLocaleString()})
+                </button>
               </div>
-              {selectedCcBill?.autoPay ? (
-                <div>
-                  ⚠️ App 已開啟<strong>「自動扣繳」</strong>，將於出帳日自動將【{selectedCcBill?.linkedBankName || '活儲'}】劃撥至信用卡沖銷負債。<br />
-                  <strong>請務必確認</strong>：<br />
-                  1. 您已向發卡銀行開通實體帳戶自動扣繳。<br />
-                  2. 扣繳日當天【{selectedCcBill?.linkedBankName || '活儲'}】活儲餘額足夠。
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="例如: 3450"
+                    value={reconcileAmountInput ? formatInputMoney(reconcileAmountInput) : ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^\d.]/g, '');
+                      setReconcileAmountInput(raw);
+                      if (raw) {
+                        const sol = solveSubsetSum(unpaidCardTransactions, Number(raw) || 0);
+                        if (sol.selectedSet.size > 0) {
+                          setSelectedTxTimestamps(new Set(sol.selectedSet));
+                        }
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      fontSize: '1.05rem',
+                      fontWeight: '800',
+                      borderRadius: '10px',
+                      background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#fff',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  {reconcileAmountInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReconcileAmountInput('');
+                        setSelectedTxTimestamps(new Set(unpaidCardTransactions.map(r => r.timestamp)));
+                      }}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.9rem' }}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div>
-                  🖐️ 本卡片為<strong>「手動劃撥模式」</strong>。<br />
-                  當您在網路銀行完成轉帳繳費後，請點擊下方【🚀 提前手動劃撥繳清】，App 資料庫才會將活儲與信用卡負債同步沖銷更新！
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = parseMoney(reconcileAmountInput);
+                    if (target > 0) {
+                      const sol = solveSubsetSum(unpaidCardTransactions, target);
+                      if (sol.selectedSet.size > 0) {
+                        setSelectedTxTimestamps(new Set(sol.selectedSet));
+                      }
+                    }
+                  }}
+                  className="glass-btn"
+                  style={{ padding: '10px 14px', fontSize: '0.8rem', borderRadius: '10px', fontWeight: '750', whiteSpace: 'nowrap' }}
+                >
+                  ✨ 智慧匹配
+                </button>
+              </div>
+
+              {/* Status Banner */}
+              {reconcileAmountInput && (
+                <div style={{ marginTop: '10px', fontSize: '0.74rem', padding: '8px 10px', borderRadius: '8px', lineHeight: '1.4', ...(
+                  smartMatchResult.status === 'exact_prefix' || smartMatchResult.status === 'exact_subset'
+                    ? { background: 'rgba(48,209,88,0.12)', border: '1px solid rgba(48,209,88,0.25)', color: '#8effa2' }
+                    : (smartMatchResult.status === 'small_diff'
+                        ? { background: 'rgba(10,132,255,0.12)', border: '1px solid rgba(10,132,255,0.25)', color: '#90c8ff' }
+                        : (smartMatchResult.status === 'ambiguous'
+                            ? { background: 'rgba(255,185,79,0.12)', border: '1px solid rgba(255,185,79,0.25)', color: '#ffd591' }
+                            : { background: 'rgba(255,69,58,0.12)', border: '1px solid rgba(255,69,58,0.25)', color: '#ff9b94' }
+                          ))
+                ) }}>
+                  {smartMatchResult.status === 'exact_prefix' && `🟢 完全吻合！已依時間自動選取前 ${smartMatchResult.count} 筆消費（合計 $${smartMatchResult.matchedSum.toLocaleString()}），其餘未請款留至下期。`}
+                  {smartMatchResult.status === 'exact_subset' && `🟢 精確匹配！已自動找出吻合網銀 $${smartMatchResult.matchedSum.toLocaleString()} 的 ${smartMatchResult.count} 筆消費組合。`}
+                  {smartMatchResult.status === 'small_diff' && `🔵 接近匹配！已選取 ${smartMatchResult.count} 筆（合計 $${smartMatchResult.matchedSum.toLocaleString()}），與網銀差額 $${Math.abs(smartMatchResult.diff)} (可一鍵差額結清校正)。`}
+                  {smartMatchResult.status === 'ambiguous' && `🟠 發現多重相同金額組合！已為您勾選無爭議項目，請在下方清單確認其餘項目。`}
+                  {smartMatchResult.status === 'no_match' && `⚪ 未找到完全吻合之組合。您可以直接在下方手動勾選或點擊一鍵全選。`}
                 </div>
               )}
             </div>
 
-            {/* Modal Actions */}
+            {/* Itemized Transactions Section */}
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fff' }}>
+                  📋 待結清刷卡明細 ({unpaidCardTransactions.length} 筆)
+                </span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTxTimestamps(new Set(unpaidCardTransactions.map(r => r.timestamp)))}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-joint)', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}
+                  >
+                    全選
+                  </button>
+                  <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cutoffDay = Number(selectedCcBill?.rawAccount?.billingDay || 10);
+                      const filtered = unpaidCardTransactions.filter(r => {
+                        const d = r.date ? Number(r.date.split('-')[2]) : 0;
+                        return d <= cutoffDay;
+                      });
+                      setSelectedTxTimestamps(new Set(filtered.map(r => r.timestamp)));
+                    }}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-joint)', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}
+                  >
+                    出帳日前
+                  </button>
+                  <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTxTimestamps(new Set())}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}
+                  >
+                    清除
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '2px' }}>
+                {unpaidCardTransactions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                    🎉 此信用卡目前無任何待結算的刷卡消費！
+                  </div>
+                ) : (
+                  unpaidCardTransactions.map((tx) => {
+                    const isChecked = selectedTxTimestamps.has(tx.timestamp);
+                    const bDay = Number(selectedCcBill?.rawAccount?.billingDay || 10);
+                    const txDay = tx.date ? Number(tx.date.split('-')[2]) : 0;
+                    const isAfterCutoff = txDay > bDay;
+
+                    return (
+                      <div
+                        key={tx.timestamp}
+                        onClick={() => {
+                          const next = new Set(selectedTxTimestamps);
+                          if (isChecked) next.delete(tx.timestamp);
+                          else next.add(tx.timestamp);
+                          setSelectedTxTimestamps(next);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          background: isChecked ? 'rgba(48,209,88,0.08)' : 'rgba(255,255,255,0.02)',
+                          border: `1px solid ${isChecked ? 'rgba(48,209,88,0.3)' : 'rgba(255,255,255,0.05)'}`,
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}} // Controlled by outer div click
+                            style={{ accentColor: '#30d158', width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: '750', color: '#fff', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>{tx.note || tx.category || '刷卡消費'}</span>
+                              {isAfterCutoff && (
+                                <span style={{ fontSize: '0.62rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(255,149,0,0.15)', color: '#ffb94f', border: '0.5px solid rgba(255,149,0,0.3)' }}>
+                                  結帳後
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
+                              {tx.date} · {tx.payer || '個人'} · {tx.category}
+                            </div>
+                          </div>
+                        </div>
+                        <span style={{ fontWeight: '800', fontSize: '0.85rem', color: isChecked ? '#8effa2' : '#fff', paddingLeft: '8px' }}>
+                          ${(Number(tx.total) || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Selected Total Bar */}
+              {unpaidCardTransactions.length > 0 && (() => {
+                const selCount = selectedTxTimestamps.size;
+                const selSum = unpaidCardTransactions
+                  .filter(r => selectedTxTimestamps.has(r.timestamp))
+                  .reduce((s, r) => s + (Number(r.total) || 0), 0);
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', padding: '6px 8px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', fontSize: '0.74rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      已選取 <strong>{selCount}</strong> / {unpaidCardTransactions.length} 筆
+                    </span>
+                    <span style={{ color: '#fff', fontWeight: '750' }}>
+                      選取合計: <strong style={{ color: '#30d158', fontSize: '0.88rem' }}>${selSum.toLocaleString()} TWD</strong>
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Paying Bank Account Selector */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '750' }}>
+                🏦 請選擇劃撥扣繳之活儲帳戶
+              </label>
+              <IOSAccountMenuPicker
+                accounts={accounts.filter(a => a.type !== 'credit')}
+                selectedAccountId={billPayAccountId}
+                onSelect={(accId) => setBillPayAccountId(accId)}
+                label="扣繳活儲帳戶"
+              />
+            </div>
+
+            {/* Action Buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreditCardModal(false);
-                  if (onNavigateTab) onNavigateTab('accounts');
-                }}
-                className="glass-btn"
-                style={{ width: '100%', padding: '10px 0', fontSize: '0.8rem', borderRadius: '10px' }}
-              >
-                ⚙️ 至「帳戶管理」修改此信用卡扣繳設定
-              </button>
+              {(() => {
+                const targetInputVal = parseMoney(reconcileAmountInput);
+                const selSum = unpaidCardTransactions
+                  .filter(r => selectedTxTimestamps.has(r.timestamp))
+                  .reduce((s, r) => s + (Number(r.total) || 0), 0);
+                const diff = targetInputVal > 0 ? targetInputVal - selSum : 0;
+
+                // Scenario 1: Exact target match or manual selection match
+                if (targetInputVal > 0 && Math.abs(diff) === 0 && selSum > 0) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteCreditCardSettlement(targetInputVal)}
+                      className="glass-btn primary-gradient-btn"
+                      style={{ width: '100%', padding: '12px 0', borderRadius: '12px', fontWeight: '850', fontSize: '0.92rem' }}
+                    >
+                      🚀 確定以網銀 ${targetInputVal.toLocaleString()} 劃撥結清 (沖銷 {selectedTxTimestamps.size} 筆)
+                    </button>
+                  );
+                }
+
+                // Scenario 2: Small discrepancy tolerance button
+                if (targetInputVal > 0 && Math.abs(diff) > 0 && Math.abs(diff) <= 30 && selSum > 0) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteCreditCardSettlement(targetInputVal, { calibrationDiff: diff })}
+                      className="glass-btn"
+                      style={{
+                        width: '100%',
+                        padding: '12px 0',
+                        borderRadius: '12px',
+                        fontWeight: '850',
+                        fontSize: '0.86rem',
+                        background: 'linear-gradient(135deg, rgba(10,132,255,0.4), rgba(48,209,88,0.4))',
+                        border: '1px solid rgba(10,132,255,0.5)',
+                        color: '#fff'
+                      }}
+                    >
+                      ⚡ 允許 ${Math.abs(diff)} 微差，以網銀 ${targetInputVal.toLocaleString()} 結清並校正
+                    </button>
+                  );
+                }
+
+                // Scenario 3: Regular manual settlement by selected sum
+                if (selSum > 0) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteCreditCardSettlement(selSum)}
+                      className="glass-btn primary-gradient-btn"
+                      style={{ width: '100%', padding: '12px 0', borderRadius: '12px', fontWeight: '850', fontSize: '0.92rem' }}
+                    >
+                      🚀 依勾選合計 ${selSum.toLocaleString()} 劃撥結清 ({selectedTxTimestamps.size} 筆)
+                    </button>
+                  );
+                }
+
+                return (
+                  <button
+                    type="button"
+                    disabled
+                    className="glass-btn"
+                    style={{ width: '100%', padding: '12px 0', borderRadius: '12px', opacity: 0.5, cursor: 'not-allowed', fontSize: '0.86rem' }}
+                  >
+                    請勾選至少一筆明細以執行劃撥
+                  </button>
+                );
+              })()}
 
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => setShowCreditCardModal(false)} className="glass-btn" style={{ flex: 1, padding: '10px 0', borderRadius: '10px' }}>關閉</button>
+                {/* Fast Balance Calibration */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const b = selectedCcBill;
-                    setShowCreditCardModal(false);
-                    setSelectedBill(b);
-                    if (!billPayAccountId && accounts.length > 0) {
-                      const linkedAcc = b.linkedBankAccountId ? accounts.find(a => a.id === b.linkedBankAccountId) : null;
-                      const defaultAcc = linkedAcc || accounts.find(a => a.owner === userKey && a.isDefaultExpense) || accounts[0];
-                      if (defaultAcc) setBillPayAccountId(defaultAcc.id);
+                  onClick={async () => {
+                    const card = accounts.find(a => a.id === selectedCcBill?.creditCardAccountId);
+                    if (!card) return;
+                    const promptVal = await customPrompt?.(
+                      `⚖️ 信用卡餘額直接校正\n\n目前 App 記錄卡片負債為: -$${Math.abs(card.balance || 0).toLocaleString()}\n\n請輸入網銀上看到的「未出帳/未繳總金額」（正整數，例如 3450）：`,
+                      String(Math.abs(card.balance || 0))
+                    );
+                    if (!promptVal || isNaN(Number(promptVal))) return;
+                    const targetDebt = Number(promptVal);
+                    const newBalance = -Math.abs(targetDebt);
+                    const diff = newBalance - (card.balance || 0);
+
+                    if (diff === 0) {
+                      await customAlert("金額無變動，已維持現狀。");
+                      return;
                     }
-                    setShowBillPayModal(true);
+
+                    const updatedAccounts = accounts.map(a => a.id === card.id ? { ...a, balance: newBalance } : a);
+                    const txRecord = {
+                      date: new Date().toISOString().split('T')[0],
+                      month: new Date().toISOString().slice(0, 7),
+                      type: 'calibrate',
+                      category: '餘額校正',
+                      total: Math.abs(diff),
+                      payer: card.nickname,
+                      accountId: card.id,
+                      twdDiff: diff,
+                      note: `⚖️ 信用卡餘額校正: ${card.nickname} (${card.balance} ➔ ${newBalance})`,
+                      timestamp: new Date().toISOString()
+                    };
+
+                    setShowCreditCardModal(false);
+                    if (onTransaction) onTransaction({ ...assets, accounts: updatedAccounts }, txRecord);
+                    else if (setAssets) setAssets({ ...assets, accounts: updatedAccounts });
+                    await customAlert(`✅ 信用卡【${card.nickname}】餘額已成功直接校正為 -$${targetDebt.toLocaleString()} TWD！`);
                   }}
-                  className="glass-btn primary-gradient-btn"
-                  style={{ flex: 2, padding: '10px 0', borderRadius: '10px', fontWeight: '800' }}
+                  className="glass-btn"
+                  style={{ flex: 1, padding: '9px 0', fontSize: '0.74rem', borderRadius: '10px' }}
                 >
-                  🚀 提前手動劃撥繳清
+                  ⚖️ 直接校正餘額
+                </button>
+
+                {/* AI Diagnostic Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const report = logger.generateAiDiagnosticReport(assets, { operatorName, currentUser });
+                    try {
+                      await navigator.clipboard.writeText(report);
+                      await customAlert("🤖 已將此卡片與系統之【AI 全方位健康診斷報告】複製到剪貼簿！\n\n您可以直接將複製的內容貼給 AI 進行分析檢查。", "複製成功");
+                    } catch {
+                      await customAlert("請手動複製報告內容：\n" + report.slice(0, 300) + "...", "診斷報告");
+                    }
+                  }}
+                  className="glass-btn"
+                  style={{ flex: 1, padding: '9px 0', fontSize: '0.74rem', borderRadius: '10px', background: 'rgba(175,82,222,0.12)', border: '1px solid rgba(175,82,222,0.25)', color: '#d896ff' }}
+                >
+                  🤖 複製 AI 診斷報告
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCreditCardModal(false)}
+                  className="glass-btn"
+                  style={{ width: '70px', padding: '9px 0', fontSize: '0.74rem', borderRadius: '10px' }}
+                >
+                  關閉
                 </button>
               </div>
             </div>

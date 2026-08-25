@@ -1329,12 +1329,16 @@ function App() {
                     lastAutoPayMonth: currentMonthStr
                   };
                   
+                  const stmtId = `auto_stmt_${Date.now()}`;
                   const autoPayoffRecord = {
                     date: autoPayDate.toISOString().split('T')[0],
                     month: currentMonthStr,
                     type: 'transfer',
                     category: '信用卡自動扣款',
                     total: payAmount,
+                    sourceAmount: payAmount,
+                    targetAmount: payAmount,
+                    statementId: stmtId,
                     payer: '系統自動扣款',
                     accountId: linkedBank.id,
                     targetAccountId: acc.id,
@@ -1343,6 +1347,12 @@ function App() {
                   };
                   
                   if (!data.monthlyExpenses) data.monthlyExpenses = [];
+                  data.monthlyExpenses = data.monthlyExpenses.map(r => {
+                    if (!r.isDeleted && r.accountId === acc.id && !r.ccBillSettled) {
+                      return { ...r, ccBillSettled: true, ccStatementId: stmtId };
+                    }
+                    return r;
+                  });
                   data.monthlyExpenses.push(autoPayoffRecord);
                   
                   changed = true;
@@ -2520,6 +2530,12 @@ function App() {
     // ★ 如果是「系統結算」類型的紀錄被作廢，必須把 mainList 中對應 settleId 的消費明細還原為未結清
     if (record.type === 'settle' && record.settleId) {
       mainList = mainList.map(r => (r.type === 'spend' && r.settleId === record.settleId) ? { ...r, isSettled: false, settleId: null } : r);
+    }
+
+    // ★ 如果是「信用卡帳單劃撥」類型的紀錄被作廢，必須把對應 statementId 的刷卡明細還原為未結清
+    if (record.statementId || record.ccStatementId) {
+      const targetStmtId = record.statementId || record.ccStatementId;
+      mainList = mainList.map(r => (r.ccStatementId === targetStmtId) ? { ...r, ccBillSettled: false, ccStatementId: null } : r);
     }
 
     mainList.push(calibrateRecord);
