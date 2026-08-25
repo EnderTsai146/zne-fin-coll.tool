@@ -3252,40 +3252,30 @@ const ExpenseEntry = ({
                 );
               })()}
 
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 {/* Fast Balance Calibration */}
                 <button
                   type="button"
                   onClick={() => setShowDirectCalibration(v => !v)}
                   className="glass-btn"
-                  style={{ flex: 1, padding: '8px 0', fontSize: '0.74rem', borderRadius: '10px', color: showDirectCalibration ? '#0a84ff' : '#fff', border: showDirectCalibration ? '1px solid #0a84ff' : undefined }}
+                  style={{
+                    flex: 1,
+                    padding: '10px 0',
+                    fontSize: '0.82rem',
+                    borderRadius: '10px',
+                    color: showDirectCalibration ? '#0a84ff' : '#fff',
+                    border: showDirectCalibration ? '1px solid #0a84ff' : undefined,
+                    fontWeight: '750'
+                  }}
                 >
                   ⚖️ 直接校正餘額
-                </button>
-
-                {/* AI Diagnostic Button */}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const report = logger.generateAiDiagnosticReport(assets, { operatorName, currentUser });
-                    try {
-                      await navigator.clipboard.writeText(report);
-                      await customAlert?.("🤖 已將【全系統 AI 深度健康診斷與審計報告】複製到剪貼簿！\n\n您可以直接將複製的內容貼給 AI 進行分析、測試與排錯。", "複製成功");
-                    } catch {
-                      await customAlert?.("請手動複製報告內容：\n" + report.slice(0, 300) + "...", "診斷報告");
-                    }
-                  }}
-                  className="glass-btn"
-                  style={{ flex: 1.3, padding: '8px 0', fontSize: '0.74rem', borderRadius: '10px', background: 'rgba(175,82,222,0.15)', border: '1px solid rgba(175,82,222,0.3)', color: '#d896ff', fontWeight: '750' }}
-                >
-                  🤖 複製全系統 AI 報告
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowCreditCardModal(false)}
                   className="glass-btn"
-                  style={{ width: '60px', padding: '8px 0', fontSize: '0.74rem', borderRadius: '10px' }}
+                  style={{ width: '80px', padding: '10px 0', fontSize: '0.82rem', borderRadius: '10px' }}
                 >
                   關閉
                 </button>

@@ -1651,39 +1651,43 @@ const SettingsView = ({
                 </div>
               </div>
 
-              {/* AI Diagnostic Report Panel */}
-              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {/* 🤖 Unified AI Deep Health Diagnostic & Session Logs Card */}
+              <div className="glass-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontWeight: '850', fontSize: '0.96rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>🤖</span>
-                  <span>AI 全方位系統健康診斷</span>
+                  <span>AI 全系統深度健檢診斷與日誌中心</span>
                 </div>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                  一鍵產出結構化之系統環境、帳戶資產守恆檢查、信用卡待繳明細與最新操作日誌報告。若遇到任何問題或日常定期檢查，可直接複製傳給 AI 進行分析診斷。
+                  一鍵產出包含全體帳戶資產守恆、股票配置、信用卡與常態帳單矩陣、最新 30 筆詳細交易紀錄及系統 Session 運作日誌之標準化報告。日常定期健檢或遇到任何問題時，可直接複製傳給 AI 進行分析與排錯。
                 </p>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={async () => {
-                      const report = logger.generateAiDiagnosticReport(assets, { operatorName, currentUser: currentUser?.email, fcmToken: fcmDiagnostic?.token });
+                      const report = logger.generateAiDiagnosticReport(assets, {
+                        operatorName,
+                        currentUser: currentUser?.email,
+                        fcmToken: fcmDiagnostic?.token
+                      });
                       try {
                         await navigator.clipboard.writeText(report);
-                        await customAlert("🤖 已成功將【AI 全方位健康診斷報告】複製到剪貼簿！\n\n您可以直接將複製的 Markdown 內容傳給 AI 進行檢查與排查。", "複製成功");
+                        await customAlert("🤖 已成功將【全系統 AI 深度健康診斷與審計報告】複製到剪貼簿！\n\n您可以直接將複製的 Markdown 內容傳給 AI 進行全方位檢查、測試與排錯。", "複製成功");
                       } catch {
                         await customAlert("請手動複製報告內容：\n" + report.slice(0, 300) + "...", "診斷報告");
                       }
                     }}
                     className="glass-btn primary-gradient-btn"
-                    style={{ flex: 2, padding: '10px 0', borderRadius: '10px', fontWeight: '800', fontSize: '0.84rem' }}
+                    style={{ flex: 1.6, padding: '11px 14px', borderRadius: '12px', fontWeight: '850', fontSize: '0.84rem' }}
                   >
-                    📋 一鍵複製 AI 系統健康診斷報告
+                    📋 一鍵複製全系統 AI 診斷報告
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsLogsModalOpen(true)}
                     className="glass-btn"
-                    style={{ flex: 1, padding: '10px 0', borderRadius: '10px', fontSize: '0.8rem' }}
+                    style={{ flex: 1, padding: '11px 12px', borderRadius: '12px', fontSize: '0.82rem', fontWeight: '700' }}
                   >
-                    📜 檢視詳細日誌
+                    📜 檢視詳細日誌視窗
                   </button>
                 </div>
               </div>
@@ -1776,43 +1780,6 @@ const SettingsView = ({
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: 'var(--text-tertiary)', lineHeight: '1.4', fontStyle: 'italic' }}>
                   * 註：iOS 及 macOS 設備需先透過 Safari 將本網站「加入主畫面/加入 Dock (安裝為 PWA)」後，才能完整啟用並接收系統背景推播。
                 </p>
-              </div>
-
-              {/* 🐞 Session Diagnostic Debug Center Card */}
-              <div className="glass-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ fontWeight: '850', fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>🐞</span>
-                  <span>系統除錯與報錯診斷中心</span>
-                </div>
-                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
-                  如果在操作過程或推播時遇到任何異常，可開啟診斷視窗並點擊「一鍵複製」，將當前登入階段的所有系統後台日誌與報錯訊息直接貼給 AI 代理進行秒速排錯。
-                </p>
-
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '4px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setIsLogsModalOpen(true)}
-                    className="glass-btn"
-                    style={{
-                      flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: '12px',
-                      fontSize: '0.82rem',
-                      fontWeight: '700',
-                      color: '#ffffff',
-                      background: 'linear-gradient(135deg, rgba(0,122,255,0.7) 0%, rgba(88,86,214,0.7) 100%)',
-                      borderColor: 'rgba(0,122,255,0.4)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <span>📋</span>
-                    <span>彈出系統日誌與除錯診斷視窗</span>
-                  </button>
-                </div>
               </div>
 
               {/* 💾 Data Backup & Restore Card */}
