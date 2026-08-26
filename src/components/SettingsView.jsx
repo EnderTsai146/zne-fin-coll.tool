@@ -118,6 +118,7 @@ const SettingsView = ({
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
   const broadcastInputRef = useRef(null);
   const broadcastEndRef = useRef(null);
+  const isComposingRef = useRef(false);
 
   const handleSendBroadcast = async () => {
     const trimmed = broadcastInput.trim();
@@ -2491,8 +2492,25 @@ const SettingsView = ({
                 ref={broadcastInputRef}
                 value={broadcastInput}
                 onChange={(e) => setBroadcastInput(e.target.value)}
+                onCompositionStart={() => {
+                  isComposingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  // Delay resetting isComposingRef slightly to prevent the confirmation Enter from triggering submit
+                  setTimeout(() => {
+                    isComposingRef.current = false;
+                  }, 80);
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === 'Enter') {
+                    if (e.shiftKey) {
+                      // Allow Shift+Enter to insert newline
+                      return;
+                    }
+                    // Prevent submission during Chinese/Japanese IME composition (e.g. confirming candidate words with Enter)
+                    if (e.nativeEvent.isComposing || e.isComposing || e.keyCode === 229 || isComposingRef.current) {
+                      return;
+                    }
                     e.preventDefault();
                     handleSendBroadcast();
                   }
