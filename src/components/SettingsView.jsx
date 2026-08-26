@@ -1869,7 +1869,17 @@ const SettingsView = ({
                       const report = logger.generateAiDiagnosticReport(assets, {
                         operatorName,
                         currentUser: currentUser?.email,
-                        fcmToken: fcmDiagnostic?.token
+                        fcmToken: fcmDiagnostic?.token,
+                        currentPage: 'settings',
+                        activeSubTab: currentSubTab,
+                        activeModals: {
+                          showBroadcastModal,
+                          isLogsModalOpen,
+                          isResetting,
+                          isSubscribing,
+                          isTestingPush
+                        },
+                        fcmDiagnostic
                       });
                       try {
                         await navigator.clipboard.writeText(report);
@@ -2109,7 +2119,17 @@ const SettingsView = ({
         appContext={{
           operatorName,
           currentUser: currentUser?.email,
-          fcmToken: fcmDiagnostic?.token
+          fcmToken: fcmDiagnostic?.token,
+          currentPage: 'settings',
+          activeSubTab: currentSubTab,
+          activeModals: {
+            showBroadcastModal,
+            isLogsModalOpen,
+            isResetting,
+            isSubscribing,
+            isTestingPush
+          },
+          fcmDiagnostic
         }}
         customAlert={customAlert}
       />

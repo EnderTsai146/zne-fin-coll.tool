@@ -106,6 +106,7 @@ class SessionLogger {
     const creditCards = accounts.filter(a => a.type === 'credit');
     const ccReportRows = [];
     const ccUnpaidSections = [];
+    let ccHasDiffCount = 0;
 
     creditCards.forEach(card => {
       const cardExpenses = expenses.filter(r => 
@@ -127,6 +128,7 @@ class SessionLogger {
       let statusStr = '🟢 吻合正常';
       if (diff > 0) {
         statusStr = `🟡 差額 $${diff.toLocaleString()} (待校正/含初始負債)`;
+        ccHasDiffCount++;
       }
 
       const ownerLabel = card.owner === 'joint' ? '共同' : (card.owner === 'userA' ? '大狗狗' : '阿陞');
@@ -166,11 +168,42 @@ class SessionLogger {
       return `| ${r.date || '-'} | \`${typeStr}\` | ${r.category || '-'} | $${(Number(r.total) || 0).toLocaleString()} | ${accName} | ${r.note || '-'} | ${isSettledStr} |`;
     });
 
-    // 6. Construct Full-System Markdown Report
+    // 6. Push Notifications Matrix Calculation
+    const userATokens = Array.isArray(assets.fcmTokens?.userA) ? assets.fcmTokens.userA : (assets.fcmTokens?.userA ? [assets.fcmTokens.userA] : []);
+    const userBTokens = Array.isArray(assets.fcmTokens?.userB) ? assets.fcmTokens.userB : (assets.fcmTokens?.userB ? [assets.fcmTokens.userB] : []);
+    const notifSettingsA = assets.notificationSettings?.userA || {};
+    const notifSettingsB = assets.notificationSettings?.userB || {};
+
+    // 7. Error Count in Session Logs
+    const errorLogs = this.logs.filter(l => l.type === 'ERROR');
+    const warnLogs = this.logs.filter(l => l.type === 'WARN');
+
+    // 8. Viewport & Runtime Info
+    const viewportStr = typeof window !== 'undefined'
+      ? `${window.innerWidth}x${window.innerHeight} (DPR: ${window.devicePixelRatio || 1}, Standalone: ${window.matchMedia?.('(display-mode: standalone)')?.matches ? '是' : '否'}, Touch: ${'ontouchstart' in window ? '是' : '否'})`
+      : '未知';
+
+    const activeModalsStr = appContext.activeModals
+      ? Object.entries(appContext.activeModals)
+          .filter(([, v]) => !!v)
+          .map(([k]) => `\`${k}\``)
+          .join(', ') || '無 (全部關閉)'
+      : '未傳入';
+
+    // 9. Construct Optimized Markdown Report with Executive Quick Findings
     const report = `# 🥔 馬鈴薯管家 — 全系統 AI 深度健康診斷與審計報告
 
 > 📋 **用途指引**：本報告包含整個記帳系統的所有帳戶資產、即時股票持股、歷史記帳統計、最新 30 筆詳細交易紀錄、各信用卡與常態帳單狀態、以及完整系統 Session 運行日誌。
-> 🤖 **給 AI 的分析指示**：請檢查本報告中所有帳戶加總是否守恆、是否有非預期負額、各信用卡負債與未結算刷卡明細是否一致、各筆交易之欄位與時間戳是否正常、以及日誌中是否有任何報錯或異常。
+> 🤖 **給 AI 的分析指示**：請優先檢視頂部的【⚡ AI 核心異常速查】，接著檢查資產守恆性、UI 與推播健康度、各信用卡負債與未結算刷卡明細是否一致、以及日誌中是否有任何報錯或異常。
+
+---
+
+## ⚡ AI 核心異常速查 (Executive Quick Findings)
+- 🚨 **未捕捉執行期異常 (JS Errors / Rejections)**: ${errorLogs.length === 0 ? '🟢 無任何執行期錯誤' : `🔴 發現 ${errorLogs.length} 筆錯誤（請直接跳至第 8 節查看 Stack Trace）`}
+- 💰 **資產守恆校驗 (Conservation Audit)**: ${twdDiff <= 1 && usdDiff <= 0.01 ? '🟢 台幣/美金 100% 守恆一致' : `⚠️ 台幣差額 $${twdDiff}，美金差額 $${usdDiff} USD`}
+- 💳 **信用卡負債與待繳明細一致性**: ${ccHasDiffCount === 0 ? '🟢 所有信用卡 100% 吻合' : `🟡 ${ccHasDiffCount} 張卡片存在差額（可能含歷史初始餘額，詳見第 5 節）`}
+- 🔔 **推播與 FCM 鏈路狀態**: ${typeof Notification !== 'undefined' && Notification.permission === 'granted' ? '🟢 本機推播已授權' : '⚠️ 本機推播未授權'} (已綁定: 大狗狗 ${userATokens.length} 台 / 阿陞 ${userBTokens.length} 台)
+- 🖥️ **當前 UI 路由與活躍彈窗**: 頁面 \`${appContext.currentPage || 'settings'}\` ➔ 子頁籤 \`${appContext.activeSubTab || 'notifications'}\` | 活躍彈窗: ${activeModalsStr}
 
 ---
 
@@ -179,14 +212,28 @@ class SessionLogger {
 - **App 版本**: \`v2.5.0 (potato-steward-budget)\`
 - **當前操作者**: ${appContext.operatorName || '未登入'} (${appContext.currentUser || '無'})
 - **網路狀態**: ${typeof navigator !== 'undefined' && navigator.onLine ? '🟢 在線 (Online)' : '🔴 離線 (Offline)'}
+- **視窗規格與模式**: \`${viewportStr}\`
 - **裝置環境**: \`${typeof navigator !== 'undefined' ? navigator.userAgent : '未知'}\`
-- **推播通知權限**: \`${typeof Notification !== 'undefined' ? Notification.permission : '不支援'}\`
-- **FCM Token**: \`${appContext.fcmToken ? (appContext.fcmToken.substring(0, 24) + '...') : '未綁定/無'}\`
 - **資料庫歷史總筆數**: \`${expenses.length} 筆交易紀錄\`
 
 ---
 
-## 2. 全系統資產健全度自動校驗 (Global Integrity Audit)
+## 2. 雙方推播偏好與跨裝置綁定矩陣 (Push Notifications Matrix)
+- **大狗狗 (userA)**:
+  - 📱 已綁定裝置: \`${userATokens.length} 台\`
+  - 🔔 推播總開關: \`${notifSettingsA.enabled !== false ? '開啟' : '關閉'}\`
+  - 偏好開關: 對方日常記帳 (\`${notifSettingsA.partnerExpense !== false ? '開' : '關'}\`), 共同公費 (\`${notifSettingsA.jointExpense !== false ? '開' : '關'}\`), 帳單提醒 (\`${notifSettingsA.billReminders !== false ? '開' : '關'}\`), 信用卡到期 (\`${notifSettingsA.creditCardReminders !== false ? '開' : '關'}\`), 預算超支 (\`${notifSettingsA.budgetOverdraft !== false ? '開' : '關'}\`)
+- **阿陞 (userB)**:
+  - 📱 已綁定裝置: \`${userBTokens.length} 台\`
+  - 🔔 推播總開關: \`${notifSettingsB.enabled !== false ? '開啟' : '關閉'}\`
+  - 偏好開關: 對方日常記帳 (\`${notifSettingsB.partnerExpense !== false ? '開' : '關'}\`), 共同公費 (\`${notifSettingsB.jointExpense !== false ? '開' : '關'}\`), 帳單提醒 (\`${notifSettingsB.billReminders !== false ? '開' : '關'}\`), 信用卡到期 (\`${notifSettingsB.creditCardReminders !== false ? '開' : '關'}\`), 預算超支 (\`${notifSettingsB.budgetOverdraft !== false ? '開' : '關'}\`)
+- **本機 FCM 診斷**:
+  - 權限: \`${typeof Notification !== 'undefined' ? Notification.permission : '不支援'}\`
+  - 連線狀態: \`${appContext.fcmDiagnostic?.status || 'ready'}\` (Token: \`${appContext.fcmToken ? (appContext.fcmToken.substring(0, 24) + '...') : '未取得/無'}\`)
+
+---
+
+## 3. 全系統資產健全度自動校驗 (Global Integrity Audit)
 - **[CHECK 1] 台幣總資產守恆檢查**:
   - 非信用卡帳戶餘額加總: \`$${twdAccTotal.toLocaleString()}\`
   - 頂層資產記帳總額 (userA + userB + jointCash): \`$${twdTopTotal.toLocaleString()}\`
@@ -204,14 +251,14 @@ class SessionLogger {
 
 ---
 
-## 3. 全體帳戶與資產清單 (Full Accounts Breakdown, 共 ${accounts.length} 個)
+## 4. 全體帳戶與資產清單 (Full Accounts Breakdown, 共 ${accounts.length} 個)
 | 帳戶 ID | 帳戶暱稱 | 類型 | 歸屬 | 幣別 | 目前餘額 | 預設支出 | 預設收入 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 ${accountsRows.length > 0 ? accountsRows.join('\n') : '| 無帳戶 | - | - | - | - | - | - | - |'}
 
 ---
 
-## 4. 信用卡帳戶專區深度稽核 (Credit Cards Audit Matrix)
+## 5. 信用卡帳戶專區深度稽核 (Credit Cards Audit Matrix)
 | 卡片暱稱 | 持卡人 | 卡片當前負債 | 結帳日 | 扣繳日 | 扣繳方式 | 綁定活儲 (餘額) | 待繳筆數 | 待繳金額 | 健康狀態 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 ${ccReportRows.length > 0 ? ccReportRows.join('\n') : '| 無任何信用卡 | - | - | - | - | - | - | - | - | - |'}
@@ -220,7 +267,7 @@ ${ccUnpaidSections.length > 0 ? ccUnpaidSections.join('\n\n') : ''}
 
 ---
 
-## 5. 常態固定帳單與預算配置 (Recurring Bills & Budgets)
+## 6. 常態固定帳單與預算配置 (Recurring Bills & Budgets)
 - **每月預算上限**: \`$${(Number(assets.monthlyBudget) || 25000).toLocaleString()} TWD\`
 - **常態帳單清單 (共 ${bills.length} 筆)**:
 | 帳單名稱 | 歸屬 | 金額 | 扣款日 | 下次扣款日 | 屬性 |
@@ -229,23 +276,24 @@ ${billsRows.length > 0 ? billsRows.join('\n') : '| 無常態帳單 | - | - | - |
 
 ---
 
-## 6. 最新 30 筆詳細交易紀錄審計 (Recent 30 Transactions Audit)
+## 7. 最新 30 筆詳細交易紀錄審計 (Recent 30 Transactions Audit)
 | 日期 | 類型 | 分類 | 金額 | 付款人 / 扣款帳戶 | 備註 | 結算狀態 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 ${transactionRows.length > 0 ? transactionRows.join('\n') : '| 無交易紀錄 | - | - | - | - | - | - |'}
 
 ---
 
-## 7. 系統 Session 操作日誌與錯誤追蹤 (System Logs, 共 ${this.logs.length} 筆)
+## 8. 系統 Session 操作日誌與錯誤追蹤 (System Logs, 共 ${this.logs.length} 筆, 錯誤: ${errorLogs.length} 筆, 警告: ${warnLogs.length} 筆)
 \`\`\`text
-${this.logs.length === 0 ? "（本階段尚無系統報錯或日誌紀錄）" : this.logs.slice(-30).map((l, i) => `[#${i + 1}] [${l.timestamp}] [${l.type}] ${l.message}${l.details ? ' -> ' + l.details.replace(/\n/g, ' ') : ''}`).join('\n')}
+${this.logs.length === 0 ? "（本階段尚無系統報錯或日誌紀錄）" : this.logs.slice(-40).map((l, i) => `[#${i + 1}] [${l.timestamp}] [${l.type}] ${l.message}${l.details ? ' -> ' + l.details.replace(/\n/g, ' ') : ''}`).join('\n')}
 \`\`\`
 
 ---
 
-## 8. AI 診斷快速結論
-- **全系統資料庫格式**: 正常，無損毀欄位。
+## 9. AI 診斷快速結論
+- **執行期報錯**: ${errorLogs.length === 0 ? '🟢 正常無錯誤' : `🔴 存在 ${errorLogs.length} 筆錯誤，請檢查上方日誌`}
 - **資產平衡**: ${twdDiff <= 1 && usdDiff <= 0.01 ? '🟢 守恆無誤' : '⚠️ 需關注台幣/美金差額'}。
+- **推播網路鏈路**: ${typeof Notification !== 'undefined' && Notification.permission === 'granted' ? '🟢 正常可接收' : '⚠️ 尚未授權'}。
 - **操作建議**: 系統具備完整的微差容錯與直接餘額校正功能，隨時可進行劃撥或校正。
 ================================================
 `;
