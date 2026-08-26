@@ -84,6 +84,7 @@ const SettingsView = ({
   fcmDiagnostic = { status: 'checking', token: null, error: null },
   onSendTestPush,
   onSendForceBroadcastPush,
+  onSendSingleDeviceTestPush,
   onNavigateWithGuide
 }) => {
   // --- Sub-Tab Navigation State & User Identity ---
@@ -879,9 +880,33 @@ const SettingsView = ({
     }
   };
 
-  // --- Device Tokens Management & Unbind Handlers ---
-  const userDeviceTokens = useMemo(() => {
-    const raw = assets?.fcmTokens?.[userKey];
+  // --- Device Tokens Management & Rich Parsing ---
+  const [deviceViewScope, setDeviceViewScope] = useState('mine'); // 'mine' | 'partner' | 'all'
+  const [testingSingleToken, setTestingSingleToken] = useState(null);
+
+  const formatRelativeTime = (isoString) => {
+    if (!isoString) return '';
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return isoString;
+      const diffMs = Date.now() - date.getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHour = Math.floor(diffMin / 60);
+      const diffDay = Math.floor(diffHour / 24);
+
+      if (diffSec < 60) return '剛剛 (在線)';
+      if (diffMin < 60) return `${diffMin} 分鐘前`;
+      if (diffHour < 24) return `${diffHour} 小時前`;
+      if (diffDay < 7) return `${diffDay} 天前`;
+      return date.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch {
+      return isoString;
+    }
+  };
+
+  const parseTokensForUser = useCallback((uKey) => {
+    const raw = assets?.fcmTokens?.[uKey];
     const currentToken = fcmDiagnostic?.token;
     if (!raw) return [];
 
@@ -899,30 +924,107 @@ const SettingsView = ({
 
     return entries.map(({ token: tokenStr, meta }, idx) => {
       const isCurrent = currentToken && tokenStr === currentToken;
-      const deviceName = meta.deviceName || (isCurrent ? '本機裝置' : `登入裝置 #${idx + 1}`);
-      const icon = meta.icon || (deviceName.includes('iPhone') || deviceName.includes('Mac') ? '🍎' : (deviceName.includes('Android') ? '🤖' : '📱'));
+      const customName = meta.customName || '';
+      const systemName = meta.deviceName || (isCurrent ? '本機裝置' : `登入裝置 #${idx + 1}`);
+      const displayName = customName || systemName;
+      const icon = meta.icon || (displayName.includes('iPhone') || displayName.includes('Mac') || displayName.includes('iPad') ? '🍎' : (displayName.includes('Android') ? '🤖' : '📱'));
       const registeredAtStr = meta.registeredAt ? new Date(meta.registeredAt).toLocaleString('zh-TW', { hour12: false }) : '';
+      const lastSeenStr = meta.lastSeen ? formatRelativeTime(meta.lastSeen) : (meta.registeredAt ? formatRelativeTime(meta.registeredAt) : '時間未記錄');
+      const isPWA = !!meta.isPWA;
+      const screen = meta.screen || '';
+      const rawOs = meta.rawOs || '';
+      const rawBrowser = meta.rawBrowser || '';
 
       return {
         token: tokenStr,
+        userKey: uKey,
+        ownerLabel: uKey === 'userA' ? '🐕 大狗狗' : '🐶 阿陞',
         shortToken: tokenStr.length > 24 ? `${tokenStr.substring(0, 10)}...${tokenStr.substring(tokenStr.length - 6)}` : tokenStr,
         isCurrent,
-        deviceName,
+        customName,
+        systemName,
+        displayName,
         icon,
+        rawOs,
+        rawBrowser,
+        isPWA,
+        screen,
         registeredAtStr,
-        label: isCurrent ? `${icon} ${deviceName} (當前裝置)` : `${icon} ${deviceName}`
+        lastSeenStr,
+        fullRegisteredAt: meta.registeredAt || '',
+        fullLastSeen: meta.lastSeen || ''
       };
     });
-  }, [assets?.fcmTokens, userKey, fcmDiagnostic?.token]);
+  }, [assets?.fcmTokens, fcmDiagnostic?.token]);
 
-  const registeredTokensCount = userDeviceTokens.length;
+  const myDeviceTokens = useMemo(() => parseTokensForUser(userKey), [parseTokensForUser, userKey]);
+  const partnerUserKey = userKey === 'userA' ? 'userB' : 'userA';
+  const partnerUserDisplayName = partnerUserKey === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
+  const partnerDeviceTokens = useMemo(() => parseTokensForUser(partnerUserKey), [parseTokensForUser, partnerUserKey]);
+  const allDeviceTokens = useMemo(() => [...myDeviceTokens, ...partnerDeviceTokens], [myDeviceTokens, partnerDeviceTokens]);
 
-  const handleUnbindToken = async (targetTokenStr) => {
-    if (!await customConfirm("⚠️ 確定要解除綁定此裝置的推播 Token 嗎？\n解除後該裝置將無法接收推播提醒。", "解除裝置綁定確認")) {
+  const displayedDeviceTokens = useMemo(() => {
+    if (deviceViewScope === 'mine') return myDeviceTokens;
+    if (deviceViewScope === 'partner') return partnerDeviceTokens;
+    return allDeviceTokens;
+  }, [deviceViewScope, myDeviceTokens, partnerDeviceTokens, allDeviceTokens]);
+
+  const handleRenameDevice = async (targetUserKey, targetTokenStr, currentName) => {
+    const newName = await customPrompt(
+      `請為此裝置自訂辨識暱稱（例如：大狗狗的 MacBook、阿陞的 iPhone 15、客廳 iPad）：`,
+      currentName || ''
+    );
+    if (newName === null) return;
+
+    const rawUserTokens = assets?.fcmTokens?.[targetUserKey] || {};
+    let updatedUserTokens = {};
+    if (typeof rawUserTokens === 'object' && !Array.isArray(rawUserTokens)) {
+      updatedUserTokens = { ...rawUserTokens };
+      const existingMeta = (typeof updatedUserTokens[targetTokenStr] === 'object' && updatedUserTokens[targetTokenStr])
+        ? updatedUserTokens[targetTokenStr]
+        : {};
+      updatedUserTokens[targetTokenStr] = {
+        ...existingMeta,
+        customName: newName.trim(),
+        deviceName: newName.trim() || existingMeta.deviceName || '自訂裝置'
+      };
+    }
+
+    const updatedAssets = {
+      ...assets,
+      fcmTokens: {
+        ...(assets?.fcmTokens || {}),
+        [targetUserKey]: updatedUserTokens
+      }
+    };
+
+    saveToCloud(updatedAssets);
+    await customAlert(`✅ 裝置暱稱已成功更新為「${newName.trim() || '預設名稱'}」！`);
+  };
+
+  const handleTestSingleDevice = async (targetTokenStr, deviceDisplayName) => {
+    if (!onSendSingleDeviceTestPush) return;
+    setTestingSingleToken(targetTokenStr);
+    try {
+      const res = await onSendSingleDeviceTestPush(targetTokenStr, deviceDisplayName);
+      if (res?.success) {
+        await customAlert(res.message || `🎉 測試推播已發送至【${deviceDisplayName}】！請查看該裝置是否跳出橫幅。`, "測試推播成功");
+      } else {
+        await customAlert(`⚠️ 測試推播發送失敗：\n${res?.error || '未知錯誤'}`, "發送失敗");
+      }
+    } catch (err) {
+      await customAlert(`⚠️ 連線錯誤：${err.message}`, "發送失敗");
+    } finally {
+      setTestingSingleToken(null);
+    }
+  };
+
+  const handleUnbindToken = async (targetUserKey, targetTokenStr, deviceDisplayName) => {
+    if (!await customConfirm(`⚠️ 確定要解除綁定【${deviceDisplayName}】的推播 Token 嗎？\n\n解除後該裝置將無法再接收任何即時記帳與帳單推播提醒。`, "解除裝置綁定確認")) {
       return;
     }
 
-    const rawUserTokens = assets?.fcmTokens?.[userKey] || {};
+    const rawUserTokens = assets?.fcmTokens?.[targetUserKey] || {};
     let updatedUserTokens = {};
 
     if (typeof rawUserTokens === 'object' && !Array.isArray(rawUserTokens)) {
@@ -936,30 +1038,33 @@ const SettingsView = ({
       ...assets,
       fcmTokens: {
         ...(assets?.fcmTokens || {}),
-        [userKey]: updatedUserTokens
+        [targetUserKey]: updatedUserTokens
       }
     };
 
     saveToCloud(updatedAssets);
-    await customAlert("🗑️ 已成功解除該裝置的推播綁定。");
+    await customAlert(`🗑️ 已成功解除【${deviceDisplayName}】的推播綁定。`);
   };
 
-  const handleClearOtherTokens = async () => {
+  const handleClearOtherTokens = async (targetUserKey) => {
     const currentToken = fcmDiagnostic?.token;
     if (!currentToken) {
       await customAlert("⚠️ 本機裝置尚未取得 FCM Token，無法清理其他裝置。");
       return;
     }
 
-    if (!await customConfirm("🧹 確定要清理所有其他離線裝置，僅保留【本機裝置】嗎？")) {
+    if (!await customConfirm("🧹 確定要清理所有其他離線裝置，僅保留【本機裝置】嗎？\n\n這將移除其他歷史登入過的裝置 Token。")) {
       return;
     }
+
+    const rawUserTokens = assets?.fcmTokens?.[targetUserKey] || {};
+    const currentMeta = (typeof rawUserTokens === 'object' && rawUserTokens?.[currentToken]) || true;
 
     const updatedAssets = {
       ...assets,
       fcmTokens: {
         ...(assets?.fcmTokens || {}),
-        [userKey]: { [currentToken]: true }
+        [targetUserKey]: { [currentToken]: currentMeta }
       }
     };
 
@@ -1430,67 +1535,233 @@ const SettingsView = ({
             </div>
 
             {/* Bound Devices Management Card */}
-            <div className="glass-card" style={{ padding: '18px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
-                <div style={{ fontWeight: '850', fontSize: '0.92rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>📱</span>
-                  <span>已綁定推播裝置管理 (共 {registeredTokensCount} 台)</span>
+            <div className="glass-card" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <div style={{ fontWeight: '850', fontSize: '0.96rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>📱</span>
+                    <span>已綁定推播裝置管理 (共 {allDeviceTokens.length} 台)</span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                    清楚識別每台裝置並支援自訂暱稱、單機獨立測試與離線管理
+                  </div>
                 </div>
-                {userDeviceTokens.length > 1 && (
+
+                {myDeviceTokens.length > 1 && (
                   <button
                     type="button"
-                    onClick={handleClearOtherTokens}
+                    onClick={() => handleClearOtherTokens(userKey)}
                     className="glass-btn"
-                    style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '8px', color: '#ffb94f', borderColor: 'rgba(255,185,79,0.3)' }}
+                    style={{ fontSize: '0.74rem', padding: '5px 12px', borderRadius: '10px', color: '#ffb94f', borderColor: 'rgba(255,185,79,0.3)', fontWeight: '700' }}
                   >
-                    🧹 清理其他裝置
+                    🧹 清理其他離線裝置
                   </button>
                 )}
               </div>
 
-              {userDeviceTokens.length === 0 ? (
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', padding: '12px 0', textAlign: 'center' }}>
-                  尚未於任何裝置上註冊 FCM 推播 Token。
+              {/* Scope Switcher Tabs */}
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', background: 'rgba(0,0,0,0.35)', padding: '4px', borderRadius: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setDeviceViewScope('mine')}
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    fontSize: '0.76rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: deviceViewScope === 'mine' ? 'rgba(255,255,255,0.18)' : 'transparent',
+                    color: deviceViewScope === 'mine' ? '#fff' : 'var(--text-tertiary)',
+                    fontWeight: deviceViewScope === 'mine' ? '800' : '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {userDisplayName} ({myDeviceTokens.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeviceViewScope('partner')}
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    fontSize: '0.76rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: deviceViewScope === 'partner' ? 'rgba(255,255,255,0.18)' : 'transparent',
+                    color: deviceViewScope === 'partner' ? '#fff' : 'var(--text-tertiary)',
+                    fontWeight: deviceViewScope === 'partner' ? '800' : '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {partnerUserDisplayName} ({partnerDeviceTokens.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeviceViewScope('all')}
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    fontSize: '0.76rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: deviceViewScope === 'all' ? 'rgba(255,255,255,0.18)' : 'transparent',
+                    color: deviceViewScope === 'all' ? '#fff' : 'var(--text-tertiary)',
+                    fontWeight: deviceViewScope === 'all' ? '800' : '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  🌐 全體總覽 ({allDeviceTokens.length})
+                </button>
+              </div>
+
+              {displayedDeviceTokens.length === 0 ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', padding: '24px 0', textAlign: 'center', lineHeight: '1.6' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📭</div>
+                  此範圍內尚未有任何已綁定的推播裝置。
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {userDeviceTokens.map((item, idx) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {displayedDeviceTokens.map((item, idx) => (
                     <div
-                      key={idx}
+                      key={item.token || idx}
                       style={{
+                        padding: '14px 16px',
+                        background: item.isCurrent ? 'linear-gradient(135deg, rgba(48, 209, 88, 0.12), rgba(48, 209, 88, 0.04))' : 'rgba(255, 255, 255, 0.03)',
+                        border: item.isCurrent ? '1px solid rgba(48, 209, 88, 0.4)' : '1px solid rgba(255, 255, 255, 0.07)',
+                        borderRadius: '14px',
                         display: 'flex',
-                        justify: 'space-between',
-                        alignItems: 'center',
-                        padding: '10px 12px',
-                        background: item.isCurrent ? 'rgba(48, 209, 88, 0.08)' : 'rgba(255, 255, 255, 0.03)',
-                        border: item.isCurrent ? '1px solid rgba(48, 209, 88, 0.3)' : '1px solid rgba(255, 255, 255, 0.06)',
-                        borderRadius: '12px'
+                        flexDirection: 'column',
+                        gap: '10px'
                       }}
                     >
-                      <div>
-                        <div style={{ fontWeight: '750', fontSize: '0.84rem', color: item.isCurrent ? '#8effa2' : '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span>{item.icon}</span>
-                          <span>{item.deviceName}</span>
+                      {/* Device Title & Tags */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '1.25rem' }}>{item.icon}</span>
+                          <span style={{ fontWeight: '850', fontSize: '0.9rem', color: item.isCurrent ? '#8effa2' : '#fff' }}>
+                            {item.displayName}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRenameDevice(item.userKey, item.token, item.customName || item.systemName)}
+                            title="自訂裝置暱稱"
+                            style={{
+                              background: 'rgba(255,255,255,0.08)',
+                              border: '1px solid rgba(255,255,255,0.15)',
+                              borderRadius: '6px',
+                              padding: '2px 6px',
+                              color: '#cbd5e1',
+                              fontSize: '0.68rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ✏️ 暱稱
+                          </button>
+
                           {item.isCurrent && (
-                            <span style={{ fontSize: '0.66rem', background: '#30d158', color: '#000', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>
-                              本機
+                            <span style={{ fontSize: '0.66rem', background: '#30d158', color: '#000', padding: '2px 7px', borderRadius: '6px', fontWeight: '850' }}>
+                              🌟 本機裝置
+                            </span>
+                          )}
+
+                          {deviceViewScope === 'all' && (
+                            <span style={{ fontSize: '0.66rem', background: 'rgba(255,255,255,0.1)', color: '#fff', padding: '2px 7px', borderRadius: '6px', fontWeight: '700' }}>
+                              {item.ownerLabel}
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '3px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontFamily: 'monospace' }}>Token: {item.shortToken}</span>
-                          {item.registeredAtStr && <span>綁定時間: {item.registeredAtStr}</span>}
+
+                        {/* Relative Activity Status */}
+                        <div style={{ fontSize: '0.72rem', color: item.isCurrent ? '#8effa2' : 'var(--text-tertiary)', fontWeight: '600' }}>
+                          ⏱️ {item.lastSeenStr}
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleUnbindToken(item.token)}
-                        className="glass-btn"
-                        style={{ fontSize: '0.74rem', padding: '4px 8px', borderRadius: '8px', color: '#ff453a', borderColor: 'rgba(255,69,58,0.3)', background: 'rgba(255,69,58,0.06)' }}
-                      >
-                        🗑️ 解除綁定
-                      </button>
+                      {/* Specs & Fingerprint Badges */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', fontSize: '0.7rem' }}>
+                        {item.rawOs && (
+                          <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: '5px', color: 'rgba(255,255,255,0.8)' }}>
+                            💻 {item.rawOs}
+                          </span>
+                        )}
+                        {item.rawBrowser && (
+                          <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: '5px', color: 'rgba(255,255,255,0.8)' }}>
+                            🌐 {item.rawBrowser}
+                          </span>
+                        )}
+                        <span style={{ background: item.isPWA ? 'rgba(10, 132, 255, 0.15)' : 'rgba(255,255,255,0.06)', color: item.isPWA ? '#64d2ff' : 'rgba(255,255,255,0.7)', padding: '2px 7px', borderRadius: '5px' }}>
+                          {item.isPWA ? '🚀 PWA 獨立 App' : '📄 瀏覽器分頁'}
+                        </span>
+                        {item.screen && (
+                          <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: '5px', color: 'rgba(255,255,255,0.7)' }}>
+                            🖥️ {item.screen}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Token & Timestamp Info */}
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px' }}>
+                        <span
+                          style={{ fontFamily: 'SF Mono, Consolas, monospace', cursor: 'pointer' }}
+                          title="點擊複製完整 Token"
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(item.token);
+                              if (customAlert) customAlert("📋 已將此裝置之完整 FCM Token 複製至剪貼簿！", "複製成功");
+                            }
+                          }}
+                        >
+                          🔑 Token: {item.shortToken} 📋
+                        </span>
+                        {item.registeredAtStr && (
+                          <span>初次綁定：{item.registeredAtStr}</span>
+                        )}
+                      </div>
+
+                      {/* Actions Toolbar */}
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleTestSingleDevice(item.token, item.displayName)}
+                          disabled={testingSingleToken === item.token}
+                          className="glass-btn"
+                          style={{
+                            fontSize: '0.74rem',
+                            padding: '5px 12px',
+                            borderRadius: '8px',
+                            color: '#64d2ff',
+                            borderColor: 'rgba(100, 210, 255, 0.3)',
+                            background: 'rgba(100, 210, 255, 0.08)',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <span>{testingSingleToken === item.token ? '⏳' : '🎯'}</span>
+                          <span>{testingSingleToken === item.token ? '發送中...' : '測試此裝置'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleUnbindToken(item.userKey, item.token, item.displayName)}
+                          className="glass-btn"
+                          style={{
+                            fontSize: '0.74rem',
+                            padding: '5px 10px',
+                            borderRadius: '8px',
+                            color: '#ff453a',
+                            borderColor: 'rgba(255, 69, 58, 0.3)',
+                            background: 'rgba(255, 69, 58, 0.06)'
+                          }}
+                        >
+                          🗑️ 解除綁定
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -163,34 +163,102 @@ const NAV_ITEMS = [
   { id: 'settings', icon: '⚙️', label: '設定' }
 ];
 
-const getDeviceInfo = () => {
-  if (typeof navigator === 'undefined') return { deviceName: '未知裝置', icon: '📱', os: '未知', browser: 'Web' };
+const getDetailedDeviceInfo = () => {
+  if (typeof navigator === 'undefined') {
+    return {
+      deviceName: '未知裝置',
+      deviceType: 'other',
+      icon: '📱',
+      rawOs: '未知系統',
+      rawBrowser: 'Web Browser',
+      screen: '',
+      isPWA: false,
+      pwaBadge: '瀏覽器分頁',
+      registeredAt: new Date().toISOString()
+    };
+  }
+
   const ua = navigator.userAgent || '';
   let os = '未知設備';
   let icon = '📱';
-  if (/iPhone/i.test(ua)) { os = 'iPhone'; icon = '🍎'; }
-  else if (/iPad/i.test(ua)) { os = 'iPad'; icon = '🍎'; }
-  else if (/Macintosh|Mac OS X/i.test(ua)) { os = 'Mac 電腦'; icon = '💻'; }
-  else if (/Android/i.test(ua)) { os = 'Android'; icon = '🤖'; }
-  else if (/Windows/i.test(ua)) { os = 'Windows PC'; icon = '🖥️'; }
+  let deviceType = 'phone';
 
+  // OS & Form Factor
+  if (/iPad|iPadOS/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    os = 'iPadOS 平板';
+    icon = '📟';
+    deviceType = 'tablet';
+  } else if (/iPhone/i.test(ua)) {
+    const match = ua.match(/OS (\d+[._]\d+)/);
+    const version = match ? match[1].replace('_', '.') : '';
+    os = `iPhone (iOS ${version || ''})`.trim();
+    icon = '🍎';
+    deviceType = 'phone';
+  } else if (/Macintosh|Mac OS X/i.test(ua)) {
+    const match = ua.match(/Mac OS X (\d+[._\d]+)/);
+    const version = match ? match[1].replace(/_/g, '.') : '';
+    os = `Mac (macOS ${version || ''})`.trim();
+    icon = '💻';
+    deviceType = 'desktop';
+  } else if (/Android/i.test(ua)) {
+    const isTablet = /Tablet|Tab/i.test(ua) || (typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerHeight >= 1024);
+    const match = ua.match(/Android\s+([\d.]+)/);
+    const version = match ? match[1] : '';
+    os = isTablet ? `Android 平板 (v${version || ''})`.trim() : `Android 手機 (v${version || ''})`.trim();
+    icon = isTablet ? '📟' : '🤖';
+    deviceType = isTablet ? 'tablet' : 'phone';
+  } else if (/Windows NT/i.test(ua)) {
+    let winVer = 'Windows';
+    if (/Windows NT 10.0/i.test(ua)) winVer = 'Windows 10/11';
+    else if (/Windows NT 6.3/i.test(ua)) winVer = 'Windows 8.1';
+    else if (/Windows NT 6.1/i.test(ua)) winVer = 'Windows 7';
+    os = `${winVer} 電腦`;
+    icon = '🖥️';
+    deviceType = 'desktop';
+  } else if (/Linux/i.test(ua)) {
+    os = 'Linux 電腦';
+    icon = '🐧';
+    deviceType = 'desktop';
+  }
+
+  // Browser Detection
   let browser = 'Web Browser';
-  if (/Edg/i.test(ua)) browser = 'Edge';
-  else if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = 'Chrome';
-  else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
-  else if (/Firefox/i.test(ua)) browser = 'Firefox';
+  if (/Edg\//i.test(ua)) {
+    const ver = ua.match(/Edg\/([\d.]+)/)?.[1]?.split('.')[0] || '';
+    browser = `Edge ${ver}`.trim();
+  } else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua) && !/CriOS/i.test(ua)) {
+    const ver = ua.match(/Chrome\/([\d.]+)/)?.[1]?.split('.')[0] || '';
+    browser = `Chrome ${ver}`.trim();
+  } else if (/CriOS\//i.test(ua)) {
+    const ver = ua.match(/CriOS\/([\d.]+)/)?.[1]?.split('.')[0] || '';
+    browser = `Chrome iOS ${ver}`.trim();
+  } else if (/Version\/([\d.]+).*Safari/i.test(ua)) {
+    const ver = ua.match(/Version\/([\d.]+)/)?.[1]?.split('.')[0] || '';
+    browser = `Safari ${ver}`.trim();
+  } else if (/Firefox\//i.test(ua)) {
+    const ver = ua.match(/Firefox\/([\d.]+)/)?.[1]?.split('.')[0] || '';
+    browser = `Firefox ${ver}`.trim();
+  }
 
   const isPWA = (typeof window !== 'undefined') && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
-  const pwaTag = isPWA ? ' (PWA)' : '';
+  const screen = (typeof window !== 'undefined') ? `${window.screen.width}×${window.screen.height} (${window.devicePixelRatio || 1}x)` : '';
+  const pwaBadge = isPWA ? 'PWA 獨立 App' : '瀏覽器分頁';
+  const defaultDeviceName = `${os} · ${browser} (${pwaBadge})`;
 
   return {
-    deviceName: `${os} · ${browser}${pwaTag}`,
-    os,
-    browser,
+    deviceName: defaultDeviceName,
+    rawOs: os,
+    rawBrowser: browser,
     icon,
+    deviceType,
+    isPWA,
+    screen,
+    pwaBadge,
     registeredAt: new Date().toISOString()
   };
 };
+
+const getDeviceInfo = () => getDetailedDeviceInfo();
 
 const cleanPushTitle = (rawTitle) => {
   if (!rawTitle) return '';
@@ -218,7 +286,7 @@ const getTokensArray = (field) => {
   return [];
 };
 
-const addTokenToDict = (field, newToken) => {
+const addTokenToDict = (field, newToken, customName = null) => {
   let dict = {};
   if (typeof field === 'string' && field) {
     dict[field] = { deviceName: '舊登入裝置', icon: '📱', registeredAt: '' };
@@ -226,14 +294,20 @@ const addTokenToDict = (field, newToken) => {
     dict = { ...field };
   }
   if (newToken) {
-    const meta = getDeviceInfo();
+    const meta = getDetailedDeviceInfo();
+    const existing = dict[newToken] || {};
     dict[newToken] = {
-      deviceName: meta.deviceName,
-      icon: meta.icon,
-      os: meta.os,
-      browser: meta.browser,
-      registeredAt: dict[newToken]?.registeredAt || meta.registeredAt,
-      lastSeen: meta.registeredAt
+      ...existing,
+      deviceName: customName || existing.customName || existing.deviceName || meta.deviceName,
+      customName: customName || existing.customName || null,
+      rawOs: meta.rawOs,
+      rawBrowser: meta.rawBrowser,
+      icon: existing.icon || meta.icon,
+      deviceType: meta.deviceType,
+      isPWA: meta.isPWA,
+      screen: meta.screen,
+      registeredAt: existing.registeredAt || meta.registeredAt,
+      lastSeen: new Date().toISOString()
     };
   }
   return dict;
@@ -2022,6 +2096,58 @@ function App() {
     }
   }, [assets, operatorName, handleRemoveBadToken]);
 
+  // 發送單一指定裝置精確測試推播
+  const sendSingleDeviceTestPush = useCallback(async (targetToken, deviceName) => {
+    if (!targetToken) return { success: false, error: '缺少目標裝置 Token' };
+    try {
+      const finalTitle = cleanPushTitle("🎯 單機推播測試");
+      const body = `這是一則發送到【${deviceName || '指定裝置'}】的單機專屬測試推播！`;
+      logger.addLog('PUSH', `[單機測試] [${deviceName}] - ${body}`, { sender: operatorName });
+
+      // 本機原生 Web Notification 立即觸發 (若測試的是本機)
+      if (fcmDiagnostic?.token === targetToken && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(finalTitle, {
+            body: body,
+            icon: '/apple-touch-icon.png',
+            badge: '/apple-touch-icon.png'
+          });
+        } catch (err) {
+          console.warn("[Push] Native Web Notification error:", err);
+        }
+      }
+
+      const res = await fetch(MY_GOOGLE_API_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'push',
+          token: targetToken,
+          title: finalTitle,
+          body: body
+        })
+      });
+
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch {}
+
+      if (json && json.status === 'success') {
+        return { success: true, message: `已成功送出測試推播至【${deviceName}】！` };
+      } else if (json && json.errorType === 'UNREGISTERED') {
+        handleRemoveBadToken(targetToken);
+        return { success: false, error: '該裝置的推播 Token 已過期或失效，系統已自動清除該離線裝置。' };
+      } else {
+        return { success: false, error: json?.message || text || '發送失敗' };
+      }
+    } catch (e) {
+      console.error("[Push] sendSingleDeviceTestPush error:", e);
+      return { success: false, error: e.message || String(e) };
+    }
+  }, [operatorName, fcmDiagnostic?.token, handleRemoveBadToken]);
+
   // 檢查常態帳單與信用卡帳單到期推播提醒 (全域每日最多僅發送一次，避免每次開啟 App 重複打擾)
   const checkAndTriggerBillReminders = React.useCallback(async (currentAssets) => {
     if (!currentAssets || !currentUser) return;
@@ -3186,6 +3312,7 @@ function App() {
                 fcmDiagnostic={fcmDiagnostic}
                 onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`, true)}
                 onSendForceBroadcastPush={sendForceBroadcastPush}
+                onSendSingleDeviceTestPush={sendSingleDeviceTestPush}
                 onNavigateWithGuide={handleNavigateWithGuide}
               />
             )}
