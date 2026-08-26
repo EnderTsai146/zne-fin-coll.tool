@@ -1942,14 +1942,29 @@ function App() {
     }
   }, [assets, operatorName, handleRemoveBadToken, isNotificationEnabledForUser]);
 
-  // 檢查常態帳單與信用卡帳單到期推播提醒
-  const checkAndTriggerBillReminders = React.useCallback((currentAssets) => {
-    if (!currentAssets) return;
+  // 檢查常態帳單與信用卡帳單到期推播提醒 (全域每日最多僅發送一次，避免每次開啟 App 重複打擾)
+  const checkAndTriggerBillReminders = React.useCallback(async (currentAssets) => {
+    if (!currentAssets || !currentUser) return;
     const todayStr = new Date().toISOString().split('T')[0];
     const today = new Date();
 
-    // 1. 檢查常態帳單
+    // 1. 檢查今日全域/遠端是否已經發送過推播提醒 (同一天內最多發送一次)
+    const remoteNotifiedMap = currentAssets.billReminderNotifiedMap || {};
+    const localNotifiedKey = `daily_bill_reminder_sent_${todayStr}`;
+    
+    // 如果今天本地或雲端已經有發送紀錄，當天完全不再重複發送
+    if (localStorage.getItem(localNotifiedKey) || remoteNotifiedMap[todayStr]) {
+      return;
+    }
+
+    let hasSentAny = false;
     const bills = currentAssets.bills || [];
+    const ccAccounts = (currentAssets.accounts || []).filter(a => a.type === 'credit');
+
+    const pendingBillReminders = [];
+    const pendingCcReminders = [];
+
+    // 檢查常態帳單
     bills.forEach(bill => {
       if (!bill.nextDate) return;
       const due = new Date(bill.nextDate);
@@ -1957,18 +1972,11 @@ function App() {
       const reminderDays = bill.reminderDays || 3;
 
       if (diffDays >= 0 && diffDays <= reminderDays) {
-        const notifKey = `notified_bill_${bill.id}_${todayStr}`;
-        if (!localStorage.getItem(notifKey)) {
-          localStorage.setItem(notifKey, '1');
-          const title = `⏰ 常態帳單到期提醒：${bill.note || bill.category || bill.name}`;
-          const body = `帳單【${bill.note || bill.name}】應繳金額 $${(bill.amount || 0).toLocaleString()} TWD，離到期日剩 ${diffDays} 天 (${bill.nextDate})！`;
-          sendTransactionPush(title, body, false, 'both', 'billReminders');
-        }
+        pendingBillReminders.push({ bill, diffDays });
       }
     });
 
-    // 2. 檢查信用卡帳單
-    const ccAccounts = (currentAssets.accounts || []).filter(a => a.type === 'credit');
+    // 檢查信用卡帳單
     ccAccounts.forEach(cc => {
       const bDay = cc.billingDay || 10;
       let nextDue = new Date(today.getFullYear(), today.getMonth(), bDay);
@@ -1980,20 +1988,61 @@ function App() {
       const amount = Math.abs(cc.balance || 0);
 
       if (amount > 0 && diffDays >= 0 && diffDays <= 3) {
-        const notifKey = `notified_cc_${cc.id}_${todayStr}`;
-        if (!localStorage.getItem(notifKey)) {
-          localStorage.setItem(notifKey, '1');
-          const autoPayStr = cc.autoPay ? `🤖 自動扣繳 (${cc.linkedBankName || '活儲'})` : '🖐️ 手動劃撥';
-          const title = `💳 信用卡帳單到期提醒：${cc.nickname}`;
-          const body = `信用卡【${cc.nickname}】本期待繳 $${amount.toLocaleString()} TWD，離結帳/扣款日剩 ${diffDays} 天 (${dueStr})！扣繳方式：${autoPayStr}。`;
-          sendTransactionPush(title, body, false, 'both', 'creditCardReminders');
-        }
+        pendingCcReminders.push({ cc, diffDays, dueStr, amount });
       }
     });
-  }, [sendTransactionPush]);
 
+    // 如果今天沒有任何需要提醒的帳單，也將今天標記為已確認過，避免每次打開 App 一直重複計算
+    if (pendingBillReminders.length === 0 && pendingCcReminders.length === 0) {
+      localStorage.setItem(localNotifiedKey, '1');
+      return;
+    }
+
+    // 立即先在本地上鎖，防止快速重複渲染觸發並行請求
+    localStorage.setItem(localNotifiedKey, '1');
+
+    // 逐筆發送推播
+    for (const { bill, diffDays } of pendingBillReminders) {
+      const title = `⏰ 常態帳單到期提醒：${bill.note || bill.category || bill.name}`;
+      const body = `帳單【${bill.note || bill.name}】應繳金額 $${(bill.amount || 0).toLocaleString()} TWD，離到期日剩 ${diffDays} 天 (${bill.nextDate})！`;
+      sendTransactionPush(title, body, false, 'both', 'billReminders');
+      hasSentAny = true;
+    }
+
+    for (const { cc, diffDays, dueStr, amount } of pendingCcReminders) {
+      const autoPayStr = cc.autoPay ? `🤖 自動扣繳 (${cc.linkedBankName || '活儲'})` : '🖐️ 手動劃撥';
+      const title = `💳 信用卡帳單到期提醒：${cc.nickname}`;
+      const body = `信用卡【${cc.nickname}】本期待繳 $${amount.toLocaleString()} TWD，離結帳/扣款日剩 ${diffDays} 天 (${dueStr})！扣繳方式：${autoPayStr}。`;
+      sendTransactionPush(title, body, false, 'both', 'creditCardReminders');
+      hasSentAny = true;
+    }
+
+    // 將今日已發送標記同步寫入雲端 Firestore，讓另一位使用者或另一台裝置今天打開時「絕對不再重複發送」
+    if (hasSentAny && currentUser && window.location.hostname !== 'localhost') {
+      try {
+        const nextNotifiedMap = {
+          ...remoteNotifiedMap,
+          [todayStr]: new Date().toISOString()
+        };
+        // 保留最近 30 天紀錄，避免 map 無限膨脹
+        const keys = Object.keys(nextNotifiedMap).sort();
+        if (keys.length > 30) {
+          keys.slice(0, keys.length - 30).forEach(k => delete nextNotifiedMap[k]);
+        }
+        const docRef = doc(db, "finance", "data");
+        setDoc(docRef, { billReminderNotifiedMap: nextNotifiedMap }, { merge: true }).catch(err => {
+          console.warn("[Push] Error syncing billReminderNotifiedMap to Firestore:", err);
+        });
+      } catch (err) {
+        console.warn("[Push] Failed to persist bill reminder map:", err);
+      }
+    }
+  }, [currentUser, sendTransactionPush]);
+
+  const billReminderCheckedRef = useRef(false);
   useEffect(() => {
-    if (assets) {
+    if (assets && !billReminderCheckedRef.current) {
+      billReminderCheckedRef.current = true;
       checkAndTriggerBillReminders(assets);
     }
   }, [assets, checkAndTriggerBillReminders]);
