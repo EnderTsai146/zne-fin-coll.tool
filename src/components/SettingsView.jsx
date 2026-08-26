@@ -2113,6 +2113,139 @@ const SettingsView = ({
         }}
         customAlert={customAlert}
       />
+
+      {/* DOGGY BROADCAST CHAT MODAL */}
+      {showBroadcastModal && createPortal(
+        <div className="liquid-modal-overlay" onClick={() => setShowBroadcastModal(false)} style={{ zIndex: 11000 }}>
+          <div
+            className="liquid-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '460px',
+              width: '92%',
+              height: '80vh',
+              maxHeight: '620px',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '18px 16px',
+              boxSizing: 'border-box'
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+              <div>
+                <div style={{ fontWeight: '850', fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🐕💬</span>
+                  <span>大狗狗即時全域推播廣播室</span>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#ff375f', marginTop: '2px', fontWeight: '700' }}>
+                  ⚡ 強制發送推播至所有裝置（忽視任何通知開關設定）
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBroadcastModal(false)}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Chat message body (Scrollable) */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 2px', touchAction: 'pan-y' }}>
+              {broadcastHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.82rem', padding: '50px 14px', lineHeight: '1.6', margin: 'auto' }}>
+                  <div style={{ fontSize: '2.4rem', marginBottom: '10px' }}>📢</div>
+                  <strong style={{ color: '#fff', fontSize: '0.95rem' }}>輸入即時推播訊息</strong>
+                  <br />
+                  在此輸入內容並按下送出，系統將以「🐕 大狗狗」名義直接推播給所有已綁定的手機、平板與電腦！
+                </div>
+              ) : (
+                broadcastHistory.map((item) => (
+                  <div key={item.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(10, 132, 255, 0.35), rgba(88, 86, 214, 0.4))',
+                      border: '1px solid rgba(10, 132, 255, 0.45)',
+                      borderRadius: '16px 16px 4px 16px',
+                      padding: '10px 14px',
+                      color: '#fff',
+                      fontSize: '0.9rem',
+                      lineHeight: '1.45',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      maxWidth: '85%',
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
+                    }}>
+                      {item.text}
+                    </div>
+                    <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span>{item.time}</span>
+                      {item.status === 'sending' ? (
+                        <span style={{ color: '#ff9500' }}>發送中...</span>
+                      ) : item.status === 'success' ? (
+                        <span style={{ color: '#30d158' }}>✅ 已推播至 {item.targetCount} 台裝置</span>
+                      ) : (
+                        <span style={{ color: '#ff453a' }}>❌ {item.error || '發送失敗'}</span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={broadcastEndRef} />
+            </div>
+
+            {/* Input Bar (Fixed at bottom) */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+              <textarea
+                ref={broadcastInputRef}
+                value={broadcastInput}
+                onChange={(e) => setBroadcastInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendBroadcast();
+                  }
+                }}
+                placeholder="輸入推播訊息 (Enter 送出，Shift+Enter 換行)..."
+                rows={2}
+                style={{
+                  flex: 1,
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '12px',
+                  padding: '9px 12px',
+                  color: '#fff',
+                  fontSize: '0.88rem',
+                  fontFamily: 'var(--font-family)',
+                  resize: 'none',
+                  outline: 'none',
+                  lineHeight: '1.4'
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSendBroadcast}
+                disabled={!broadcastInput.trim() || isSendingBroadcast}
+                className="glass-btn primary-gradient-btn"
+                style={{
+                  height: '46px',
+                  padding: '0 16px',
+                  borderRadius: '12px',
+                  fontWeight: '800',
+                  fontSize: '0.88rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  flexShrink: 0
+                }}
+              >
+                {isSendingBroadcast ? '...' : '✈️ 送出'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
@@ -2349,140 +2482,6 @@ const SystemLogsModal = ({ isOpen, onClose, assets, appContext, customAlert }) =
           )}
         </div>
       </div>
-
-      {/* DOGGY BROADCAST CHAT MODAL */}
-      {showBroadcastModal && createPortal(
-        <div className="liquid-modal-overlay" onClick={() => setShowBroadcastModal(false)} style={{ zIndex: 11000 }}>
-          <div
-            className="liquid-modal-card"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: '460px',
-              width: '92%',
-              height: '80vh',
-              maxHeight: '620px',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '18px 16px',
-              boxSizing: 'border-box'
-            }}
-          >
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-              <div>
-                <div style={{ fontWeight: '850', fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>🐕💬</span>
-                  <span>大狗狗即時全域推播廣播室</span>
-                </div>
-                <div style={{ fontSize: '0.72rem', color: '#ff375f', marginTop: '2px', fontWeight: '700' }}>
-                  ⚡ 強制發送推播至所有裝置（忽視任何通知開關設定）
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowBroadcastModal(false)}
-                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Chat message body (Scrollable) */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 2px', touchAction: 'pan-y' }}>
-              {broadcastHistory.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.82rem', padding: '50px 14px', lineHeight: '1.6', margin: 'auto' }}>
-                  <div style={{ fontSize: '2.4rem', marginBottom: '10px' }}>📢</div>
-                  <strong style={{ color: '#fff', fontSize: '0.95rem' }}>輸入即時推播訊息</strong>
-                  <br />
-                  在此輸入內容並按下送出，系統將以「🐕 大狗狗」名義直接推播給所有已綁定的手機、平板與電腦！
-                </div>
-              ) : (
-                broadcastHistory.map((item) => (
-                  <div key={item.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <div style={{
-                      background: 'linear-gradient(135deg, rgba(10, 132, 255, 0.35), rgba(88, 86, 214, 0.4))',
-                      border: '1px solid rgba(10, 132, 255, 0.45)',
-                      borderRadius: '16px 16px 4px 16px',
-                      padding: '10px 14px',
-                      color: '#fff',
-                      fontSize: '0.9rem',
-                      lineHeight: '1.45',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      maxWidth: '85%',
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
-                    }}>
-                      {item.text}
-                    </div>
-                    <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <span>{item.time}</span>
-                      {item.status === 'sending' ? (
-                        <span style={{ color: '#ff9500' }}>發送中...</span>
-                      ) : item.status === 'success' ? (
-                        <span style={{ color: '#30d158' }}>✅ 已推播至 {item.targetCount} 台裝置</span>
-                      ) : (
-                        <span style={{ color: '#ff453a' }}>❌ {item.error || '發送失敗'}</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-              <div ref={broadcastEndRef} />
-            </div>
-
-            {/* Input Bar (Fixed at bottom) */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-              <textarea
-                ref={broadcastInputRef}
-                value={broadcastInput}
-                onChange={(e) => setBroadcastInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendBroadcast();
-                  }
-                }}
-                placeholder="輸入推播訊息 (Enter 送出，Shift+Enter 換行)..."
-                rows={2}
-                style={{
-                  flex: 1,
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: '12px',
-                  padding: '9px 12px',
-                  color: '#fff',
-                  fontSize: '0.88rem',
-                  fontFamily: 'var(--font-family)',
-                  resize: 'none',
-                  outline: 'none',
-                  lineHeight: '1.4'
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleSendBroadcast}
-                disabled={!broadcastInput.trim() || isSendingBroadcast}
-                className="glass-btn primary-gradient-btn"
-                style={{
-                  height: '46px',
-                  padding: '0 16px',
-                  borderRadius: '12px',
-                  fontWeight: '800',
-                  fontSize: '0.88rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  flexShrink: 0
-                }}
-              >
-                {isSendingBroadcast ? '...' : '✈️ 送出'}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
     </div>
   );
 };
