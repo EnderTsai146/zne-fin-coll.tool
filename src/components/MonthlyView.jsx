@@ -66,6 +66,7 @@ const MonthlyView = ({
     const [syncBatchDate, setSyncBatchDate] = useState(true);
     const [batchItemsState, setBatchItemsState] = useState([]);
     const [explanationModalData, setExplanationModalData] = useState(null);
+    const [itemizedModalRecord, setItemizedModalRecord] = useState(null);
 
     // Infinite scroll & lazy load states
     const [renderCount, setRenderCount] = useState(30);
@@ -907,9 +908,36 @@ const MonthlyView = ({
                                                     )}
                                                 </div>
                                                 
-                                                {/* Line 2: Note / Description */}
-                                                <div style={{ fontWeight: '700', fontSize: '0.88rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {record.note || record.category}
+                                                {/* Line 2: Note / Description & Itemized Link */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <span style={{ fontWeight: '700', fontSize: '0.88rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {record.note || record.category}
+                                                    </span>
+                                                    {Array.isArray(record.itemizedBreakdown) && record.itemizedBreakdown.length > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setItemizedModalRecord(record);
+                                                            }}
+                                                            style={{
+                                                                background: 'none',
+                                                                border: 'none',
+                                                                padding: '0 2px',
+                                                                color: '#64d2ff',
+                                                                fontSize: '0.74rem',
+                                                                textDecoration: 'underline',
+                                                                cursor: 'pointer',
+                                                                fontWeight: '700',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '2px'
+                                                            }}
+                                                        >
+                                                            <span>📋</span>
+                                                            <span>查看細項 ({record.itemizedBreakdown.length}項)</span>
+                                                        </button>
+                                                    )}
                                                 </div>
 
                                                 {/* Line 3: Account info change */}
@@ -1438,6 +1466,30 @@ const MonthlyView = ({
                                             </span>
                                         </div>
                                     </div>
+
+                                    {/* Itemized Breakdown Section in Detail Modal */}
+                                    {Array.isArray(detailModalRecord.itemizedBreakdown) && detailModalRecord.itemizedBreakdown.length > 0 && (
+                                        <div style={{
+                                            background: 'rgba(10, 132, 255, 0.06)',
+                                            border: '1px solid rgba(10, 132, 255, 0.2)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            marginTop: '6px'
+                                        }}>
+                                            <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64d2ff', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <span>🧾</span>
+                                                <span>小票分項明細 (共 {detailModalRecord.itemizedBreakdown.length} 項)</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                {detailModalRecord.itemizedBreakdown.map((it, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.06)' }}>
+                                                        <span style={{ color: '#fff' }}>#{idx + 1} {it.name}</span>
+                                                        <span style={{ fontWeight: '750', color: '#8effa2', fontFamily: 'monospace' }}>${Number(it.amount).toLocaleString()} TWD</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </>
                             )}
 
@@ -1834,6 +1886,89 @@ const MonthlyView = ({
                                 style={{ width: '100%', padding: '11px', fontSize: '0.88rem', fontWeight: '750', borderRadius: '12px' }}
                             >
                                 我知道了
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* 🧾 Itemized Breakdown Modal (小票分項明細彈窗) */}
+            {itemizedModalRecord && createPortal(
+                <div className="liquid-modal-overlay" style={{ zIndex: 12000 }} onClick={() => setItemizedModalRecord(null)}>
+                    <div
+                        className="liquid-modal-card"
+                        style={{ maxWidth: '440px', width: '92%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: 0 }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '1.3rem' }}>🧾</span>
+                                <div>
+                                    <div style={{ fontWeight: '850', fontSize: '1rem', color: '#fff' }}>消費分項小票明細</div>
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>{itemizedModalRecord.date} · {itemizedModalRecord.category}</div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setItemizedModalRecord(null)}
+                                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', color: '#fff', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Content List */}
+                        <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {itemizedModalRecord.note && (
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px' }}>
+                                    📝 備註：<strong>{itemizedModalRecord.note}</strong>
+                                </div>
+                            )}
+
+                            <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {(itemizedModalRecord.itemizedBreakdown || []).map((item, idx) => (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                padding: '8px 10px',
+                                                background: 'rgba(255,255,255,0.03)',
+                                                borderRadius: '8px',
+                                                fontSize: '0.84rem'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem', fontWeight: '700' }}>#{idx + 1}</span>
+                                                <span style={{ color: '#fff', fontWeight: '600' }}>{item.name}</span>
+                                            </div>
+                                            <span style={{ fontWeight: '850', color: '#8effa2', fontFamily: 'monospace' }}>
+                                                ${Number(item.amount).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed rgba(255,255,255,0.15)', fontWeight: '850', fontSize: '0.94rem' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>小票合計 (共 {itemizedModalRecord.itemizedBreakdown?.length || 0} 項)</span>
+                                    <span style={{ color: '#8effa2', fontSize: '1.1rem' }}>${Number(itemizedModalRecord.total).toLocaleString()} TWD</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                                type="button"
+                                onClick={() => setItemizedModalRecord(null)}
+                                className="glass-btn primary-gradient-btn"
+                                style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '0.82rem', fontWeight: '800' }}
+                            >
+                                關閉
                             </button>
                         </div>
                     </div>

@@ -24,6 +24,204 @@ const parseMoney = (valStr) => {
   return Number(clean) || 0;
 };
 
+// 🧾 小票分項明細組件 (極速鍵盤連打與智慧名稱金額解析)
+const ItemizedReceiptSection = ({
+  items = [],
+  setItems,
+  isOpen,
+  setIsOpen,
+  themeColor = '#0a84ff',
+  onItemsChange
+}) => {
+  const [quickInput, setQuickInput] = useState('');
+  const quickInputRef = useRef(null);
+
+  const totalSum = useMemo(() => {
+    return items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  }, [items]);
+
+  const handleQuickAdd = () => {
+    const raw = quickInput.trim();
+    if (!raw) return;
+
+    // 智慧解析：支援「乾麵 60」或「60 乾麵」或「小菜 $90」或「$150 飲料」
+    const matchAmtFirst = raw.match(/^[$￥]?\s*(\d+(?:\.\d+)?)\s*(.*)$/);
+    const matchAmtLast = raw.match(/^(.*?)\s*[$￥]?\s*(\d+(?:\.\d+)?)$/);
+
+    let finalName = '';
+    let finalAmt = 0;
+
+    if (matchAmtLast && matchAmtLast[2] && matchAmtLast[1]) {
+      finalName = matchAmtLast[1].trim();
+      finalAmt = Number(matchAmtLast[2]);
+    } else if (matchAmtFirst && matchAmtFirst[1] && matchAmtFirst[2]) {
+      finalName = matchAmtFirst[2].trim();
+      finalAmt = Number(matchAmtFirst[1]);
+    } else {
+      const numOnly = Number(raw.replace(/[^\d.]/g, ''));
+      if (numOnly > 0) {
+        finalName = `項目 #${items.length + 1}`;
+        finalAmt = numOnly;
+      }
+    }
+
+    if (finalAmt > 0) {
+      const newItems = [...items, { id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, name: finalName || `項目 #${items.length + 1}`, amount: finalAmt }];
+      setItems(newItems);
+      if (onItemsChange) onItemsChange(newItems);
+      setQuickInput('');
+      setTimeout(() => {
+        if (quickInputRef.current) quickInputRef.current.focus();
+      }, 30);
+    }
+  };
+
+  const handleRemoveItem = (id) => {
+    const newItems = items.filter(i => i.id !== id);
+    setItems(newItems);
+    if (onItemsChange) onItemsChange(newItems);
+  };
+
+  return (
+    <div style={{ marginTop: '8px', marginBottom: '8px' }}>
+      {/* Toggle Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          style={{
+            background: isOpen ? `${themeColor}22` : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${isOpen ? themeColor : 'rgba(255,255,255,0.12)'}`,
+            borderRadius: '10px',
+            padding: '5px 12px',
+            color: isOpen ? themeColor : 'var(--text-secondary)',
+            fontSize: '0.76rem',
+            fontWeight: '750',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <span>🧾</span>
+          <span>{isOpen ? '收合小票分項' : '展開小票細項累加'}</span>
+          {items.length > 0 && (
+            <span style={{ background: themeColor, color: '#fff', fontSize: '0.66rem', padding: '1px 6px', borderRadius: '6px', fontWeight: '850' }}>
+              {items.length} 項 · ${totalSum.toLocaleString()}
+            </span>
+          )}
+        </button>
+
+        {items.length > 0 && isOpen && (
+          <button
+            type="button"
+            onClick={() => { setItems([]); if (onItemsChange) onItemsChange([]); }}
+            style={{ background: 'none', border: 'none', color: '#ff453a', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            清空細項
+          </button>
+        )}
+      </div>
+
+      {/* Expanded Receipt Section */}
+      {isOpen && (
+        <div style={{
+          marginTop: '10px',
+          background: 'rgba(0, 0, 0, 0.28)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '14px',
+          padding: '12px 14px'
+        }}>
+          {/* Quick Input Bar */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <input
+              ref={quickInputRef}
+              type="text"
+              value={quickInput}
+              onChange={(e) => setQuickInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (e.nativeEvent.isComposing || e.isComposing || e.keyCode === 229) return;
+                  e.preventDefault();
+                  handleQuickAdd();
+                }
+              }}
+              placeholder="快速鍵入，如「乾麵 60」按 Enter 新增..."
+              style={{
+                flex: 1,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                borderRadius: '9px',
+                padding: '8px 12px',
+                color: '#fff',
+                fontSize: '0.84rem',
+                outline: 'none'
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleQuickAdd}
+              disabled={!quickInput.trim()}
+              className="glass-btn"
+              style={{ padding: '8px 14px', fontSize: '0.78rem', fontWeight: '800', color: themeColor, borderColor: `${themeColor}55`, flexShrink: 0 }}
+            >
+              ➕ 新增
+            </button>
+          </div>
+
+          <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginTop: '5px', marginBottom: '8px' }}>
+            💡 提示：打完「品名 金額」（如 <strong>貢丸湯 40</strong>）直接按 <strong>Enter</strong> 即可連續極速新增下一項！
+          </div>
+
+          {/* Render Items List */}
+          {items.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '8px' }}>
+              {items.map((item, idx) => (
+                <div
+                  key={item.id || idx}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'rgba(255,255,255,0.04)',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>#{idx + 1}</span>
+                    <span style={{ color: '#fff', fontWeight: '600' }}>{item.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontWeight: '800', color: '#8effa2', fontFamily: 'monospace' }}>
+                      ${Number(item.amount).toLocaleString()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(item.id)}
+                      style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '0 2px', fontSize: '0.9rem' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Total Row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.1)', fontWeight: '850', fontSize: '0.86rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>小票合計 (共 {items.length} 項)</span>
+                <span style={{ color: '#8effa2', fontSize: '1rem' }}>${totalSum.toLocaleString()} TWD</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ExpenseEntry = ({
   assets,
   setAssets,
@@ -59,6 +257,8 @@ const ExpenseEntry = ({
   const [persNote, setPersNote] = useState('');
   const [persAccountId, setPersAccountId] = useState('');
   const [persCart, setPersCart] = useState([]);
+  const [persItems, setPersItems] = useState([]);
+  const [showPersItemized, setShowPersItemized] = useState(false);
 
   const lastUserKeyRef = useRef(userKey);
 
@@ -85,6 +285,8 @@ const ExpenseEntry = ({
   const [jointNote, setJointNote] = useState('');
   const [jointAccountId, setJointAccountId] = useState('');
   const [jointCart, setJointCart] = useState([]);
+  const [jointItems, setJointItems] = useState([]);
+  const [showJointItemized, setShowJointItemized] = useState(false);
 
   // Pre-select default joint account (prefer joint cash/bank account)
   useEffect(() => {
@@ -102,6 +304,8 @@ const ExpenseEntry = ({
   const [incNote, setIncNote] = useState('');
   const [incAccountId, setIncAccountId] = useState('');
   const [incomeCart, setIncomeCart] = useState([]);
+  const [incItems, setIncItems] = useState([]);
+  const [showIncItemized, setShowIncItemized] = useState(false);
 
   const lastUserKeyIncRef = useRef(userKey);
 
@@ -386,13 +590,15 @@ const ExpenseEntry = ({
       accountNickname: acc.nickname,
       accountType: acc.type,
       owner: acc.owner,
-      date: txDate
+      date: txDate,
+      itemizedBreakdown: persItems.length > 0 ? persItems : undefined
     };
 
     setPersCart([...persCart, payload]);
     setPersAmount('');
     setPersNote('');
     setPersCat(''); // Reset category to force explicit tap for next item
+    setPersItems([]);
   };
 
   const handlePersSubmit = async () => {
@@ -422,7 +628,8 @@ const ExpenseEntry = ({
         accountNickname: acc.nickname,
         accountType: acc.type,
         owner: acc.owner,
-        date: txDate
+        date: txDate,
+        itemizedBreakdown: persItems.length > 0 ? persItems : undefined
       });
     }
 
@@ -484,6 +691,7 @@ const ExpenseEntry = ({
         note: item.note || item.cat,
         subCategory: item.cat,
         necessity: 'need',
+        itemizedBreakdown: item.itemizedBreakdown,
         batchId,
         batchCount: isBatch ? finalItems.length : undefined,
         batchIndex: isBatch ? (idx + 1) : undefined,
@@ -508,6 +716,8 @@ const ExpenseEntry = ({
         setPersNote('');
         setPersCat('');
         setPersAccountId('');
+        setPersItems([]);
+        setShowPersItemized(false);
       }
     });
   };
@@ -545,13 +755,15 @@ const ExpenseEntry = ({
       accountNickname: acc.nickname,
       accountType: acc.type,
       owner: acc.owner,
-      date: txDate
+      date: txDate,
+      itemizedBreakdown: jointItems.length > 0 ? jointItems : undefined
     };
 
     setJointCart([...jointCart, payload]);
     setJointAmount('');
     setJointNote('');
     setJointCat(''); // Reset category
+    setJointItems([]);
   };
 
   const handleJointSubmit = async () => {
@@ -581,7 +793,8 @@ const ExpenseEntry = ({
         accountNickname: acc.nickname,
         accountType: acc.type,
         owner: acc.owner,
-        date: txDate
+        date: txDate,
+        itemizedBreakdown: jointItems.length > 0 ? jointItems : undefined
       });
     }
 
@@ -637,6 +850,7 @@ const ExpenseEntry = ({
         isSettled: false,
         necessity: 'need',
         subCategory: item.cat,
+        itemizedBreakdown: item.itemizedBreakdown,
         batchId,
         batchCount: isBatch ? finalItems.length : undefined,
         batchIndex: isBatch ? (idx + 1) : undefined,
@@ -661,6 +875,8 @@ const ExpenseEntry = ({
         setJointNote('');
         setJointCat('');
         setJointAccountId('');
+        setJointItems([]);
+        setShowJointItemized(false);
       }
     });
   };
@@ -700,12 +916,14 @@ const ExpenseEntry = ({
       accountId: incAccountId,
       accountNickname: acc.nickname,
       incomeScope: incomeTab,
-      date: txDate
+      date: txDate,
+      itemizedBreakdown: incItems.length > 0 ? incItems : undefined
     };
 
     setIncomeCart([...incomeCart, payload]);
     setIncAmount('');
     setIncNote('');
+    setIncItems([]);
   };
 
   const handleIncomeSubmit = async () => {
@@ -738,7 +956,8 @@ const ExpenseEntry = ({
         accountId: incAccountId,
         accountNickname: acc.nickname,
         incomeScope: incomeTab,
-        date: txDate
+        date: txDate,
+        itemizedBreakdown: incItems.length > 0 ? incItems : undefined
       });
     }
 
@@ -787,6 +1006,7 @@ const ExpenseEntry = ({
       operator: loggedInUserName,
       note: item.note || item.cat,
       incomeScope: item.incomeScope || incomeTab,
+      itemizedBreakdown: item.itemizedBreakdown,
       timestamp: new Date().toISOString(),
       batchId,
       batchCount: isBatch ? finalItems.length : undefined,
@@ -809,6 +1029,8 @@ const ExpenseEntry = ({
         setIncomeCart([]);
         setIncAmount('');
         setIncNote('');
+        setIncItems([]);
+        setShowIncItemized(false);
       }
     });
   };
@@ -1506,6 +1728,23 @@ const ExpenseEntry = ({
                   </span>
                 </div>
 
+                {/* 🧾 Itemized Receipt Breakdown Section */}
+                <div style={{ padding: '0 14px' }}>
+                  <ItemizedReceiptSection
+                    items={persItems}
+                    setItems={setPersItems}
+                    isOpen={showPersItemized}
+                    setIsOpen={setShowPersItemized}
+                    themeColor="#0a84ff"
+                    onItemsChange={(newItems) => {
+                      if (newItems.length > 0) {
+                        const sum = newItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+                        setPersAmount(formatInputMoney(sum));
+                      }
+                    }}
+                  />
+                </div>
+
                 {/* Note */}
                 <div className="inset-group-row">
                   <span className="inset-group-label">📝 備註 (選填)</span>
@@ -1698,6 +1937,23 @@ const ExpenseEntry = ({
                   <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
                     <input type="text" inputMode="numeric" className="inset-group-input tabular-nums" value={jointAmount} onChange={(e) => setJointAmount(formatInputMoney(e.target.value))} placeholder="$0" style={{ fontSize: '1.2rem', fontWeight: '800' }} />
                   </span>
+                </div>
+
+                {/* 🧾 Itemized Receipt Breakdown Section */}
+                <div style={{ padding: '0 14px' }}>
+                  <ItemizedReceiptSection
+                    items={jointItems}
+                    setItems={setJointItems}
+                    isOpen={showJointItemized}
+                    setIsOpen={setShowJointItemized}
+                    themeColor="#30d158"
+                    onItemsChange={(newItems) => {
+                      if (newItems.length > 0) {
+                        const sum = newItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+                        setJointAmount(formatInputMoney(sum));
+                      }
+                    }}
+                  />
                 </div>
 
                 {/* Note */}
@@ -2170,6 +2426,23 @@ const ExpenseEntry = ({
                 <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
                   <input type="text" inputMode="numeric" className="inset-group-input" value={incAmount} onChange={(e) => setIncAmount(formatInputMoney(e.target.value))} placeholder="$0" />
                 </span>
+              </div>
+
+              {/* 🧾 Itemized Receipt Breakdown Section */}
+              <div style={{ padding: '0 14px' }}>
+                <ItemizedReceiptSection
+                  items={incItems}
+                  setItems={setIncItems}
+                  isOpen={showIncItemized}
+                  setIsOpen={setShowIncItemized}
+                  themeColor={incomeTab === 'joint' ? '#30d158' : '#0a84ff'}
+                  onItemsChange={(newItems) => {
+                    if (newItems.length > 0) {
+                      const sum = newItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+                      setIncAmount(formatInputMoney(sum));
+                    }
+                  }}
+                />
               </div>
 
               {/* Note */}

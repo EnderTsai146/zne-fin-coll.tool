@@ -1074,49 +1074,60 @@ function App() {
     document.body.setAttribute('data-page', currentPage);
   }, [currentPage]);
 
-  // ★ 馬鈴薯進度條動畫引擎
+  // ★ 馬鈴薯進度條動畫引擎 (極速快充與平滑過場)
   useEffect(() => {
     if (splashPhase === 'done' || splashPhase === 'exit') return;
     const interval = setInterval(() => {
       setLoadProgress(prev => {
         if (prev >= 100) return 100;
-        if (dataReadyForSplash.current) return Math.min(100, prev + 12);
-        if (prev < 30) return prev + 0.8;
-        if (prev < 55) return prev + 0.4;
-        if (prev < 75) return prev + 0.12;
-        if (prev < 85) return prev + 0.03;
+        if (dataReadyForSplash.current) return 100;
+        if (prev < 40) return prev + 4;
+        if (prev < 70) return prev + 2;
+        if (prev < 90) return prev + 0.8;
         return prev;
       });
-    }, 50);
+    }, 25);
     return () => clearInterval(interval);
   }, [splashPhase]);
 
-  // ★ 追蹤實際載入狀態 → 驅動進度條衝刺
+  // ★ 追蹤實際載入狀態 → 立即解鎖過場
   useEffect(() => {
-    if (!loading && !currentUser) setSplashPhase('done');
-    if (!loading && currentUser && dataReady) dataReadyForSplash.current = true;
+    if (!loading && !currentUser) {
+      setSplashPhase('done');
+    }
+    if (!loading && currentUser && dataReady) {
+      dataReadyForSplash.current = true;
+      setLoadProgress(100);
+      setSplashPhase('filled');
+    }
   }, [loading, currentUser, dataReady]);
 
   // ★ 進度到 100% → 觸發過場
   useEffect(() => {
-    if (loadProgress >= 100 && splashPhase === 'loading') setSplashPhase('filled');
+    if (loadProgress >= 100 && splashPhase === 'loading') {
+      setSplashPhase('filled');
+    }
   }, [loadProgress, splashPhase]);
 
-  // ★ 過場動畫時間軸
+  // ★ 極速過場動畫時間軸 (由原本的 1200ms 壓縮至 280ms，流暢無感知)
   useEffect(() => {
     if (splashPhase === 'filled') {
-      const t = setTimeout(() => setSplashPhase('exit'), 800);
+      const t = setTimeout(() => setSplashPhase('exit'), 180);
       return () => clearTimeout(t);
     }
     if (splashPhase === 'exit') {
-      const t = setTimeout(() => setSplashPhase('done'), 400);
+      const t = setTimeout(() => setSplashPhase('done'), 120);
       return () => clearTimeout(t);
     }
   }, [splashPhase]);
 
-  // ★ 超時安全閥：15 秒後強制完成
+  // ★ 超時安全閥：若網路或快取稍微延遲，2.5 秒後立即解鎖畫面
   useEffect(() => {
-    const timeout = setTimeout(() => { dataReadyForSplash.current = true; }, 15000);
+    const timeout = setTimeout(() => {
+      dataReadyForSplash.current = true;
+      setLoadProgress(100);
+      setSplashPhase('filled');
+    }, 2500);
     return () => clearTimeout(timeout);
   }, []);
 
@@ -1661,15 +1672,20 @@ function App() {
       try {
         const updated = JSON.parse(JSON.stringify(holdings));
         const now = new Date();
-        const allRecs = [...(assets.monthlyExpenses || [])];
+        const monthPromises = [];
         for (let i = 18; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          try {
-            const snap = await getDoc(doc(db, "finance", `arc_${m}`));
-            if (snap.exists() && snap.data().records) allRecs.push(...snap.data().records);
-          } catch { /* skip */ }
+          monthPromises.push(
+            getDoc(doc(db, "finance", `arc_${m}`)).catch(() => null)
+          );
         }
+        const snaps = await Promise.all(monthPromises);
+        snaps.forEach(snap => {
+          if (snap && snap.exists && snap.exists() && snap.data().records) {
+            allRecs.push(...snap.data().records);
+          }
+        });
         allRecs.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timestamp || '').localeCompare(b.timestamp || ''));
         let changed = false;
         for (const [key] of broken) {
