@@ -546,7 +546,7 @@ const MonthlyView = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
                     <div>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>👤 收支對象</label>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>收支對象</label>
                         <select
                             value={filterUser}
                             onChange={(e) => setFilterUser(e.target.value)}
@@ -568,8 +568,8 @@ const MonthlyView = ({
                             style={{ width: '100%', margin: 0, padding: '0 8px', height: '38px', fontSize: '0.82rem' }}
                         >
                             <option value="all">全部</option>
-                            <option value="need">🍲 必要 (Need)</option>
-                            <option value="want">✨ 選擇性 (Want)</option>
+                            <option value="need">必要 (Need)</option>
+                            <option value="want">選擇性 (Want)</option>
                         </select>
                     </div>
                 </div>
@@ -749,11 +749,11 @@ const MonthlyView = ({
                                                                 const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
                                                                 return (
                                                                     <span>
-                                                                        💳 交易帳戶：<strong style={{ color: '#8effa2' }}>{sourceAcc.icon || '🏦'} {sourceAcc.nickname}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
+                                                                        交易帳戶：<strong style={{ color: '#8effa2' }}>{sourceAcc.icon || '🏦'} {sourceAcc.nickname}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
                                                                     </span>
                                                                 );
                                                             }
-                                                            return <span>💳 交易帳戶：<strong style={{ color: 'var(--text-tertiary)' }}>{record.payer || '無'}</strong></span>;
+                                                            return <span>交易帳戶：<strong style={{ color: 'var(--text-tertiary)' }}>{record.payer || '無'}</strong></span>;
                                                         })()}
                                                     </div>
                                                 </div>
@@ -764,7 +764,7 @@ const MonthlyView = ({
                                                         -${record.total.toLocaleString()}
                                                     </div>
                                                     <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '3px' }}>
-                                                        👤 {record.payer || '無'}
+                                                        {record.payer || '無'}
                                                     </div>
                                                 </div>
                                             </div>
@@ -820,7 +820,7 @@ const MonthlyView = ({
                                                                 style={{ background: 'rgba(52,199,89,0.1)', color: '#30d158', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(52,199,89,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                                                                 title="點擊查看預算判定原因與分析"
                                                             >
-                                                                <span>🍲 必要 ${bNeed.toLocaleString()}</span>
+                                                                <span>必要 ${bNeed.toLocaleString()}</span>
                                                                 <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
                                                             </button>
                                                         )}
@@ -831,7 +831,7 @@ const MonthlyView = ({
                                                                 style={{ background: 'rgba(255,45,85,0.1)', color: '#ff2d55', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(255,45,85,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                                                                 title="點擊查看預算判定原因與分析"
                                                             >
-                                                                <span>✨ 選擇 ${bWant.toLocaleString()}</span>
+                                                                <span>選擇 ${bWant.toLocaleString()}</span>
                                                                 <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
                                                             </button>
                                                         )}
@@ -936,7 +936,7 @@ const MonthlyView = ({
                                                     {sign}{formatMoney(record.total)}
                                                 </div>
                                                 <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                                                    👤 {record.payer || '無'}
+                                                    {record.payer || '無'}
                                                 </div>
                                             </div>
                                         </div>
@@ -954,7 +954,7 @@ const MonthlyView = ({
                                                         style={{ background: 'rgba(52,199,89,0.1)', color: '#30d158', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(52,199,89,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                                                         title="點擊查看預算判定原因與分析"
                                                     >
-                                                        <span>🍲 必要 ${itemNec.needAmount.toLocaleString()}</span>
+                                                        <span>必要 ${itemNec.needAmount.toLocaleString()}</span>
                                                         <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
                                                     </button>
                                                 )}
@@ -968,7 +968,7 @@ const MonthlyView = ({
                                                         style={{ background: 'rgba(255,45,85,0.1)', color: '#ff2d55', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '0.66rem', border: '0.5px solid rgba(255,45,85,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                                                         title="點擊查看預算判定原因與分析"
                                                     >
-                                                        <span>✨ 選擇 ${itemNec.wantAmount.toLocaleString()}</span>
+                                                        <span>選擇 ${itemNec.wantAmount.toLocaleString()}</span>
                                                         <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>ℹ️</span>
                                                     </button>
                                                 )}
@@ -993,7 +993,7 @@ const MonthlyView = ({
                 <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                     {/* Category Distribution Chart */}
                     <div className="glass-card" style={{ padding: '18px' }}>
-                        <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', marginBottom: '14px' }}>🍕 支出分類佔比 ({currentMonthLabel})</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', marginBottom: '14px' }}>支出分類佔比 ({currentMonthLabel})</div>
                         {categoryDistribution.labels.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>本月無支出數據</div>
                         ) : (
@@ -1005,7 +1005,7 @@ const MonthlyView = ({
 
                     {/* Daily Spending Trend Chart */}
                     <div className="glass-card" style={{ padding: '18px' }}>
-                        <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', marginBottom: '14px' }}>📈 每日支出趨勢 ({currentMonthLabel})</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#fff', marginBottom: '14px' }}>每日支出趨勢 ({currentMonthLabel})</div>
                         {dailySpendingData.labels.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>本月無每日趨勢數據</div>
                         ) : (
@@ -1029,7 +1029,7 @@ const MonthlyView = ({
                             <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-purple)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                     <div>
-                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>🐕 大狗狗 🐕</h4>
+                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>大狗狗</h4>
                                         <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>大狗狗為「共同支出」代墊的未結算明細</span>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
@@ -1063,7 +1063,7 @@ const MonthlyView = ({
                             <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-green)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                     <div>
-                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>🐶 阿陞 🐶</h4>
+                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>阿陞</h4>
                                         <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>阿陞為「共同支出」代墊的未結算明細</span>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
@@ -1099,7 +1099,7 @@ const MonthlyView = ({
                         <div className="card-sheet-indicator" />
                         <div className="card-sheet-header">
                             <button className="card-sheet-btn-text" onClick={() => setShowSettlementModal(false)}>關閉</button>
-                            <span className="card-sheet-title">{settlementTarget === 'userA' ? '大狗狗 🐕' : '阿陞 🐶'} 的代墊明細</span>
+                            <span className="card-sheet-title">{settlementTarget === 'userA' ? '大狗狗' : '阿陞'} 的代墊明細</span>
                             <span style={{ width: '40px' }} />
                         </div>
 
@@ -1145,7 +1145,7 @@ const MonthlyView = ({
                         {/* Modal Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                             <div style={{ fontWeight: '850', fontSize: '1.12rem', color: '#fff' }} className="liquid-modal-title">
-                                🔍 {batchItemsState.length > 1 ? '購物車批次明細 & 管理' : '交易詳細資訊 & 管理'}
+                                {batchItemsState.length > 1 ? '購物車批次明細 & 管理' : '交易詳細資訊 & 管理'}
                             </div>
                             <button onClick={() => setDetailModalRecord(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
                         </div>
@@ -1157,7 +1157,7 @@ const MonthlyView = ({
                             <div className="inset-group-card" style={{ flexShrink: 0, padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
-                                        {batchItemsState.length > 1 ? '🛒 批次總金額' : '💰 交易金額'}
+                                        {batchItemsState.length > 1 ? '批次總金額' : '交易金額'}
                                     </span>
                                     <strong style={{ fontSize: '1.12rem', color: detailModalRecord.type === 'income' ? '#30d158' : (batchItemsState.length > 1 ? '#ff9f0a' : '#fff') }}>
                                         {(() => {
@@ -1170,13 +1170,13 @@ const MonthlyView = ({
                                     </strong>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
-                                    <span style={{ color: 'var(--text-tertiary)' }}>🏷️ 交易分類</span>
+                                    <span style={{ color: 'var(--text-tertiary)' }}>交易分類</span>
                                     <span style={{ color: '#fff', fontWeight: '600' }}>
                                         {detailModalRecord.category} {batchItemsState.length > 1 ? `(共 ${batchItemsState.filter(it => !it.isDeleted).length}/${batchItemsState.length} 筆有效明細)` : ''}
                                     </span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
-                                    <span style={{ color: 'var(--text-tertiary)' }}>👤 記錄成員</span>
+                                    <span style={{ color: 'var(--text-tertiary)' }}>記錄成員</span>
                                     <span style={{ color: '#fff' }}>{detailModalRecord.payer || '無'} {detailModalRecord.operator ? `(${detailModalRecord.operator})` : ''}</span>
                                 </div>
                             </div>
@@ -1187,7 +1187,7 @@ const MonthlyView = ({
                                     {/* Batch Date & Sync Switch */}
                                     <div className="inset-group-card" style={{ flexShrink: 0, padding: '12px 14px', background: 'rgba(255,255,255,0.02)', marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '750' }}>📅 批次同步日期</span>
+                                            <span style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '750' }}>批次同步日期</span>
                                             <input 
                                                 type="date"
                                                 value={editDate}
@@ -1214,14 +1214,14 @@ const MonthlyView = ({
                                                 }}
                                                 style={{ cursor: 'pointer', accentColor: '#ff9f0a' }}
                                             />
-                                            <span>🔄 自動同步此日期至各筆明細（或於下方各別選擇不同日期）</span>
+                                            <span>自動同步此日期至各筆明細</span>
                                         </label>
                                     </div>
 
                                     {/* Itemized Note & Detail Inputs */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
                                         <div style={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750', display: 'flex', justifyContent: 'space-between', padding: '0 2px' }}>
-                                            <span>📝 批次各項目明細 (可個別修改日期、備註或單獨作廢)</span>
+                                            <span>批次各項目明細</span>
                                             <span>共 {batchItemsState.length} 筆</span>
                                         </div>
 
@@ -1265,7 +1265,7 @@ const MonthlyView = ({
                                                                                 style={{ fontSize: '0.6rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '2px 6px', borderRadius: '4px', fontWeight: '750', border: '0.5px solid rgba(52,199,89,0.25)', cursor: 'pointer' }}
                                                                                 title="點擊查看此明細判定原因"
                                                                             >
-                                                                                🍲 必要 ${subNec.needAmount.toLocaleString()} ℹ️
+                                                                                必要 ${subNec.needAmount.toLocaleString()} ℹ️
                                                                             </button>
                                                                         )}
                                                                         {subNec.wantAmount > 0 && (
@@ -1278,7 +1278,7 @@ const MonthlyView = ({
                                                                                 style={{ fontSize: '0.6rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '2px 6px', borderRadius: '4px', fontWeight: '750', border: '0.5px solid rgba(255,45,85,0.25)', cursor: 'pointer' }}
                                                                                 title="點擊查看此明細判定原因"
                                                                             >
-                                                                                ✨ 選擇 ${subNec.wantAmount.toLocaleString()} ℹ️
+                                                                                選擇 ${subNec.wantAmount.toLocaleString()} ℹ️
                                                                             </button>
                                                                         )}
                                                                     </div>
@@ -1297,7 +1297,7 @@ const MonthlyView = ({
                                                                     type="button"
                                                                     onClick={async (e) => {
                                                                         e.stopPropagation();
-                                                                        const msg = `⚠️ 確定要單獨作廢此筆明細？\n\n• 第 ${idx + 1} 筆：【${item.cat} $${item.amount.toLocaleString()} TWD】\n  📝 備註：${item.note || '(無)'}\n\n系統將自動退款 $${item.amount.toLocaleString()} TWD 回原帳戶，其他購物車項目將保持不變。`;
+                                                                        const msg = `確定要單獨作廢此筆明細？\n\n• 第 ${idx + 1} 筆：【${item.cat} $${item.amount.toLocaleString()} TWD】\n  備註：${item.note || '(無)'}\n\n系統將自動退款 $${item.amount.toLocaleString()} TWD 回原帳戶，其他購物車項目將保持不變。`;
                                                                         if (await customConfirm(msg, "單獨作廢明細確認")) {
                                                                             await onDelete(item._context);
                                                                             setBatchItemsState(prev => prev.map((it, i) => i === idx ? { ...it, isDeleted: true } : it));
@@ -1314,7 +1314,7 @@ const MonthlyView = ({
                                                                         borderRadius: '6px'
                                                                     }}
                                                                 >
-                                                                    🗑️ 單獨作廢
+                                                                    單獨作廢
                                                                 </button>
                                                             )}
                                                         </div>
@@ -1322,7 +1322,7 @@ const MonthlyView = ({
                                                     
                                                     {/* Row 2: Note Input */}
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.25)', padding: '7px 10px', borderRadius: '8px', border: '0.5px solid rgba(255,255,255,0.08)' }}>
-                                                        <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>📝 備註:</span>
+                                                        <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>備註:</span>
                                                         <input 
                                                             type="text"
                                                             disabled={isItemDeleted}
@@ -1339,7 +1339,6 @@ const MonthlyView = ({
                                                     {/* Row 3: Individual Date Input */}
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', padding: '4px 6px', background: 'rgba(255,255,255,0.015)', borderRadius: '6px' }}>
                                                         <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <span>📅</span>
                                                             <span>明細日期:</span>
                                                         </span>
                                                         <input 
@@ -1373,13 +1372,13 @@ const MonthlyView = ({
                                         return (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750' }}>🎯 預算需求分析</div>
+                                                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.55)', fontWeight: '750' }}>預算需求分析</div>
                                                     <button
                                                         type="button"
                                                         onClick={() => openNecessityExplanation(itemNec, { title: detailModalRecord.category, note: detailModalRecord.note, date: detailModalRecord.date })}
                                                         style={{ background: 'none', border: 'none', color: '#0a84ff', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                                                     >
-                                                        <span>🧠 點擊查看智慧解讀</span>
+                                                        <span>點擊查看智慧解讀</span>
                                                         <span>➔</span>
                                                     </button>
                                                 </div>
@@ -1390,7 +1389,7 @@ const MonthlyView = ({
                                                             onClick={() => openNecessityExplanation(itemNec, { title: detailModalRecord.category, note: detailModalRecord.note, date: detailModalRecord.date })}
                                                             style={{ fontSize: '0.76rem', background: 'rgba(52,199,89,0.12)', color: '#30d158', padding: '5px 12px', borderRadius: 'var(--radius-pill)', fontWeight: '750', border: '0.5px solid rgba(52,199,89,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                                                         >
-                                                            <span>🍲 必要支出: ${itemNec.needAmount.toLocaleString()} TWD</span>
+                                                            <span>必要支出: ${itemNec.needAmount.toLocaleString()} TWD</span>
                                                             <span style={{ fontSize: '0.65rem' }}>ℹ️</span>
                                                         </button>
                                                     )}
@@ -1400,7 +1399,7 @@ const MonthlyView = ({
                                                             onClick={() => openNecessityExplanation(itemNec, { title: detailModalRecord.category, note: detailModalRecord.note, date: detailModalRecord.date })}
                                                             style={{ fontSize: '0.76rem', background: 'rgba(255,45,85,0.12)', color: '#ff2d55', padding: '5px 12px', borderRadius: 'var(--radius-pill)', fontWeight: '750', border: '0.5px solid rgba(255,45,85,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                                                         >
-                                                            <span>✨ 選擇性支出: ${itemNec.wantAmount.toLocaleString()} TWD</span>
+                                                            <span>選擇性支出: ${itemNec.wantAmount.toLocaleString()} TWD</span>
                                                             <span style={{ fontSize: '0.65rem' }}>ℹ️</span>
                                                         </button>
                                                     )}
@@ -1412,11 +1411,10 @@ const MonthlyView = ({
                                     {/* Editable Fields */}
                                     <div className="inset-group-card" style={{ marginBottom: 0, background: 'rgba(255,255,255,0.02)' }}>
                                         <div style={{ padding: '8px 12px', fontSize: '0.74rem', color: 'var(--text-tertiary)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                            <span>✏️</span>
                                             <span>編輯交易屬性 (金額與帳戶屬唯讀)</span>
                                         </div>
                                         <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span className="inset-group-label" style={{ fontSize: '0.82rem' }}>📅 交易日期</span>
+                                            <span className="inset-group-label" style={{ fontSize: '0.82rem' }}>交易日期</span>
                                             <span className="inset-group-value">
                                                 <input 
                                                     type="date" 
@@ -1427,7 +1425,7 @@ const MonthlyView = ({
                                             </span>
                                         </div>
                                         <div className="inset-group-row" style={{ padding: '12px 14px', minHeight: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span className="inset-group-label" style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>📝 交易備註</span>
+                                            <span className="inset-group-label" style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>交易備註</span>
                                             <span className="inset-group-value" style={{ flex: 1, marginLeft: '16px' }}>
                                                 <input 
                                                     type="text" 
@@ -1498,7 +1496,7 @@ const MonthlyView = ({
 
                                 return (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: '750' }}>📊 帳戶餘額變動軌跡</div>
+                                        <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: '750' }}>帳戶餘額變動軌跡</div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                             {changes.map((c, i) => {
                                                 const diffColor = c.diff > 0 ? '#30d158' : '#ff453a';
@@ -1544,7 +1542,7 @@ const MonthlyView = ({
                                     background: 'rgba(255,255,255,0.05)',
                                     border: '1px solid rgba(255,255,255,0.08)'
                                 }}>
-                                    🗑️ 此交易（或全批次項目）已被作廢
+                                    此交易（或全批次項目）已被作廢
                                 </div>
                             ) : detailModalRecord.category === '作廢退款' ? (
                                 <div style={{
@@ -1558,7 +1556,7 @@ const MonthlyView = ({
                                     background: 'rgba(255,255,255,0.05)',
                                     border: '1px solid rgba(255,255,255,0.08)'
                                 }}>
-                                    🚫 作廢退款紀錄不可再次作廢
+                                    作廢退款紀錄不可再次作廢
                                 </div>
                             ) : (
                                 <button
@@ -1566,12 +1564,12 @@ const MonthlyView = ({
                                         if (batchItemsState.length > 1) {
                                             const activeItems = batchItemsState.filter(it => !it.isDeleted);
                                             if (activeItems.length === 0) {
-                                                await customAlert("❌ 本批次所有項目皆已被作廢！");
+                                                await customAlert("本批次所有項目皆已被作廢！");
                                                 return;
                                             }
                                             const activeTotal = activeItems.reduce((s, it) => s + it.amount, 0);
                                             const batchContexts = activeItems.map(it => it._context);
-                                            if (await customConfirm(`⚠️ 確定要作廢此購物車剩餘之整批交易 (共 ${activeItems.length} 筆，合計 $${activeTotal.toLocaleString()} TWD)？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
+                                            if (await customConfirm(`確定要作廢此購物車剩餘之整批交易 (共 ${activeItems.length} 筆，合計 $${activeTotal.toLocaleString()} TWD)？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
                                                 await onDelete({
                                                     batchContexts
                                                 });
@@ -1580,10 +1578,10 @@ const MonthlyView = ({
                                         } else {
                                             const rec = detailModalRecord;
                                             if (rec.isSettled && rec.advancedBy) {
-                                                await customAlert("❌ 此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
+                                                await customAlert("此筆消費已被「結清」！\n請先在流水帳中作廢「系統結算」紀錄，才能作廢此筆消費。");
                                                 return;
                                             }
-                                            if (await customConfirm(`⚠️ 確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
+                                            if (await customConfirm(`確定要作廢此筆紀錄？\n系統將自動反向退款沖銷，恢復到交易前狀態。`)) {
                                                 await onDelete(rec._context);
                                                 setDetailModalRecord(null);
                                             }
@@ -1599,7 +1597,7 @@ const MonthlyView = ({
                                         background: 'rgba(255,69,58,0.08)'
                                     }}
                                 >
-                                    🗑️ {batchItemsState.length > 1 ? '作廢剩餘整批' : '作廢此交易'}
+                                    {batchItemsState.length > 1 ? '作廢剩餘整批' : '作廢此交易'}
                                 </button>
                             )}
 
@@ -1620,8 +1618,8 @@ const MonthlyView = ({
 
                                             if (dateChanged || noteChanged) {
                                                 const itemChanges = [];
-                                                if (dateChanged) itemChanges.push(`📅 日期：${item.originalDate} ➡️ ${finalDate}`);
-                                                if (noteChanged) itemChanges.push(`📝 備註：${item.originalNote || '(無)'} ➡️ ${finalNote || '(無)'}`);
+                                                if (dateChanged) itemChanges.push(`日期：${item.originalDate} ➡️ ${finalDate}`);
+                                                if (noteChanged) itemChanges.push(`備註：${item.originalNote || '(無)'} ➡️ ${finalNote || '(無)'}`);
                                                 changes.push(`• 第 ${idx + 1} 筆【${item.cat} $${item.amount}】：\n  ` + itemChanges.join('\n  '));
                                             }
 
@@ -1634,7 +1632,7 @@ const MonthlyView = ({
                                         });
 
                                         if (changes.length === 0) {
-                                            await customAlert("⚠️ 您尚未修改任何有效項目的日期或備註內容。", "提示");
+                                            await customAlert("您尚未修改任何有效項目的日期或備註內容。", "提示");
                                             return;
                                         }
 
@@ -1766,10 +1764,10 @@ const MonthlyView = ({
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
                                         <span style={{ color: '#30d158', fontWeight: '750' }}>
-                                            🍲 必要: ${explanationModalData.needAmount?.toLocaleString()} ({Math.round((explanationModalData.needAmount / (explanationModalData.total || 1)) * 100)}%)
+                                            必要: ${explanationModalData.needAmount?.toLocaleString()} ({Math.round((explanationModalData.needAmount / (explanationModalData.total || 1)) * 100)}%)
                                         </span>
                                         <span style={{ color: '#ff2d55', fontWeight: '750' }}>
-                                            ✨ 選擇: ${explanationModalData.wantAmount?.toLocaleString()} ({Math.round((explanationModalData.wantAmount / (explanationModalData.total || 1)) * 100)}%)
+                                            選擇: ${explanationModalData.wantAmount?.toLocaleString()} ({Math.round((explanationModalData.wantAmount / (explanationModalData.total || 1)) * 100)}%)
                                         </span>
                                     </div>
                                 </div>

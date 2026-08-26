@@ -28,7 +28,10 @@ const Login = ({ autoLogoutReason, clearAutoLogoutReason }) => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-logo">🥔</div>
-        <div className="login-title">馬鈴薯管家</div>
+        <div className="login-title" style={{ marginBottom: '6px' }}>馬鈴薯管家</div>
+        <div style={{ fontSize: '0.86rem', color: 'rgba(255, 255, 255, 0.45)', marginBottom: '26px', fontWeight: '600', letterSpacing: '0.04em' }}>
+          余珈陞屌很大
+        </div>
 
         {autoLogoutReason && (
           <div style={{
