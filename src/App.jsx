@@ -1942,6 +1942,86 @@ function App() {
     }
   }, [assets, operatorName, handleRemoveBadToken, isNotificationEnabledForUser]);
 
+  // 強制全域推播廣播 (忽視任何推播開關設定，一律發送至所有已綁定裝置)
+  const sendForceBroadcastPush = useCallback(async (title, body) => {
+    try {
+      const finalTitle = cleanPushTitle(title);
+      logger.addLog('PUSH', `[強制全域廣播] [${finalTitle}] - ${body}`, { sender: operatorName });
+
+      // 1. 本地原生 Web Notification 立即觸發
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(finalTitle, {
+            body: body,
+            icon: '/apple-touch-icon.png',
+            badge: '/apple-touch-icon.png'
+          });
+        } catch (err) {
+          console.warn("[Push] Native Web Notification error:", err);
+        }
+      }
+
+      // 2. 收集雙方所有裝置的 FCM tokens (強制全發，忽視偏好開關)
+      const allTokens = [
+        ...getTokensArray(assets?.fcmTokens?.userA),
+        ...getTokensArray(assets?.fcmTokens?.userB)
+      ];
+      const uniqueTokens = Array.from(new Set(allTokens));
+
+      if (uniqueTokens.length === 0) {
+        return { success: true, targetCount: 1, message: "本機已彈出通知（無其他已註冊裝置）" };
+      }
+
+      let successCount = 0;
+      let errorList = [];
+
+      const promises = uniqueTokens.map(token => {
+        return fetch(MY_GOOGLE_API_URL, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'push',
+            token: token,
+            title: finalTitle,
+            body: body
+          })
+        })
+          .then(async (res) => {
+            const text = await res.text();
+            try {
+              const json = JSON.parse(text);
+              if (json && json.status === 'success') {
+                successCount++;
+              } else if (json && json.errorType === 'UNREGISTERED') {
+                handleRemoveBadToken(json.token);
+              } else {
+                errorList.push(json?.message || text);
+              }
+            } catch {
+              // Ignore
+            }
+          })
+          .catch(err => {
+            errorList.push(err.message);
+          });
+      });
+
+      await Promise.all(promises);
+
+      return {
+        success: successCount > 0,
+        targetCount: successCount,
+        totalTokens: uniqueTokens.length,
+        message: `已推播至 ${successCount}/${uniqueTokens.length} 台裝置！`
+      };
+    } catch (e) {
+      console.error("[Push] sendForceBroadcastPush error:", e);
+      return { success: false, targetCount: 0, error: e.message || String(e) };
+    }
+  }, [assets, operatorName, handleRemoveBadToken]);
+
   // 檢查常態帳單與信用卡帳單到期推播提醒 (全域每日最多僅發送一次，避免每次開啟 App 重複打擾)
   const checkAndTriggerBillReminders = React.useCallback(async (currentAssets) => {
     if (!currentAssets || !currentUser) return;
@@ -3105,6 +3185,7 @@ function App() {
                 onRequestNotificationPermission={handleRegisterNotification}
                 fcmDiagnostic={fcmDiagnostic}
                 onSendTestPush={() => sendTransactionPush("🎉 測試推播通知", `這是一筆由 ${operatorName} 手動發送的測試推播！收到代表推播網路鏈路完全正常！`, true)}
+                onSendForceBroadcastPush={sendForceBroadcastPush}
                 onNavigateWithGuide={handleNavigateWithGuide}
               />
             )}
