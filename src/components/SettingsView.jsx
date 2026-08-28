@@ -959,6 +959,7 @@ const SettingsView = ({
   }, [assets?.fcmTokens, fcmDiagnostic?.token]);
 
   const myDeviceTokens = useMemo(() => parseTokensForUser(userKey), [parseTokensForUser, userKey]);
+  const registeredTokensCount = myDeviceTokens.length;
   const partnerUserKey = userKey === 'userA' ? 'userB' : 'userA';
   const partnerUserDisplayName = partnerUserKey === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
   const partnerDeviceTokens = useMemo(() => parseTokensForUser(partnerUserKey), [parseTokensForUser, partnerUserKey]);
