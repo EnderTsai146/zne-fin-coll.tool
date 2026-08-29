@@ -958,12 +958,24 @@ function App() {
 
     setupNotifications();
 
-    // Listen for foreground push notifications (silently record to log, avoid blocking in-app popup dialog)
+    // Listen for foreground push notifications (display native banner and record to log)
     onFcmMessage((payload) => {
       const rawTitle = payload.notification?.title || payload.data?.title || "🎉 收到推播通知";
       const title = cleanPushTitle(rawTitle) || "🎉 收到推播通知";
       const body = payload.notification?.body || payload.data?.body || "";
       logger.addLog('INFO', `[FCM Foreground Notification] ${title}: ${body}`);
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(title, {
+            body: body,
+            icon: '/apple-touch-icon.png',
+            badge: '/apple-touch-icon.png'
+          });
+        } catch (err) {
+          console.warn("[Push] Foreground notification display error:", err);
+        }
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, dataReady, operatorName]);
