@@ -118,7 +118,7 @@ const AccountsManager = ({
     setIsDefaultSettle(false);
     setLinkedBankId('');
     setBillingDay('10');
-    setAutoPay(true);
+    setAutoPay(false);
     setEditingAccount(null);
     setIsReadOnly(false);
   };
@@ -155,13 +155,27 @@ const AccountsManager = ({
   // Save Account
   const handleSaveAccount = async () => {
     if (isReadOnly) return;
-    if (!accName.trim() || !accNickname.trim()) {
-      await customAlert("請輸入帳戶名稱與暱稱！");
+
+    const finalNickname = accNickname.trim() || accName.trim();
+    const finalName = accName.trim() || accNickname.trim() || (accType === 'cash' ? '現金錢包' : '一般帳戶');
+
+    if (!finalNickname) {
+      await customAlert("請輸入帳戶暱稱或名稱！", "欄位未填寫");
       return;
     }
-    if (accType === 'credit' && autoPay && !linkedBankId) {
-      await customAlert("⚠️ 開啟信用卡「自動扣款」功能時，必須選擇綁定扣款活儲帳戶！");
-      return;
+
+    let isAutoPay = autoPay;
+    if (accType === 'credit' && isAutoPay && !linkedBankId) {
+      const confirmDisableAutoPay = await customConfirm(
+        "⚠️ 您開啟了信用卡「自動扣繳」，但尚未選擇綁定扣款活儲帳戶。\n\n是否先【關閉自動扣繳】並繼續儲存帳戶？（日後可隨時再編輯綁定）",
+        "自動扣款設定提示"
+      );
+      if (confirmDisableAutoPay) {
+        isAutoPay = false;
+        setAutoPay(false);
+      } else {
+        return;
+      }
     }
     
     let val = parseMoney(accBalance);
@@ -245,8 +259,8 @@ const AccountsManager = ({
             ...a,
             owner: accOwner,
             type: accType,
-            name: accName.trim(),
-            nickname: accNickname.trim(),
+            name: finalName,
+            nickname: finalNickname,
             icon: finalIcon,
             accountNumber: accNumber.trim(),
             balance: val,
@@ -254,9 +268,9 @@ const AccountsManager = ({
             isDefaultExpense,
             isDefaultIncome,
             isDefaultSettle,
-            linkedBankAccountId: accType === 'credit' ? linkedBankId : null,
+            linkedBankAccountId: accType === 'credit' ? (isAutoPay ? linkedBankId : null) : null,
             billingDay: accType === 'credit' ? Number(billingDay) : null,
-            autoPay: accType === 'credit' ? autoPay : null
+            autoPay: accType === 'credit' ? isAutoPay : null
           };
         }
         return a;
@@ -268,8 +282,8 @@ const AccountsManager = ({
         id: nextId,
         owner: accOwner,
         type: accType,
-        name: accName.trim(),
-        nickname: accNickname.trim(),
+        name: finalName,
+        nickname: finalNickname,
         icon: finalIcon,
         accountNumber: accNumber.trim(),
         balance: val,
@@ -277,9 +291,9 @@ const AccountsManager = ({
         isDefaultExpense,
         isDefaultIncome,
         isDefaultSettle,
-        linkedBankAccountId: accType === 'credit' ? linkedBankId : null,
+        linkedBankAccountId: accType === 'credit' ? (isAutoPay ? linkedBankId : null) : null,
         billingDay: accType === 'credit' ? Number(billingDay) : null,
-        autoPay: accType === 'credit' ? autoPay : null,
+        autoPay: accType === 'credit' ? isAutoPay : null,
         createdAt: new Date().toISOString()
       };
       updatedAccounts.push(newAcc);

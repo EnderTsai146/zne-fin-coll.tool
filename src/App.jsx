@@ -658,6 +658,7 @@ const formatTransactionDetail = (r) => {
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [operatorName, setOperatorName] = useState('');
+  const [authResolved, setAuthResolved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
@@ -1236,6 +1237,7 @@ function App() {
         setCurrentUser(user);
         setOperatorName(USER_MAPPING[user.uid] || USER_MAPPING[user.email] || (user.email ? user.email.split('@')[0] : '阿陞🐶'));
         setAutoLogoutReason('');
+        setAuthResolved(true);
         // ★ 不要在此設 loading=false，等 Firestore 資料到位後再解鎖
 
       } else {
@@ -1245,6 +1247,7 @@ function App() {
         setDataReady(false);
         setLoading(false); // 未登入時直接解鎖，讓 Login 頁面顯示
         setSplashPhase('done'); // 確保立刻關閉 Splash Screen 直接呈現 Login
+        setAuthResolved(true);
       }
     });
     return () => unsubscribeAuth();
@@ -3040,7 +3043,7 @@ function App() {
 
 
 
-  if (splashPhase !== 'done' && (loading || currentUser)) return (
+  if (!authResolved || (splashPhase !== 'done' && (loading || currentUser))) return (
     <div className={`splash-screen splash-phase-${splashPhase}`}>
       {/* Background aurora */}
       <div className="splash-aurora" />

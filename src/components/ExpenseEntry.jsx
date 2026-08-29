@@ -335,6 +335,30 @@ const ExpenseEntry = ({
     }
   }, [accounts, userKey, incomeTab, incAccountId]);
 
+  // ★ 切換個人支出與共同支出時，雙向智慧同步已輸入的金額、備註、分類與小票明細，避免切換時輸入內容消失
+  const handleExpenseTabChange = (newTab) => {
+    if (activeTab === 'personal' && newTab === 'joint') {
+      // 個人 -> 共同 同步
+      if (persAmount) setJointAmount(persAmount);
+      if (persNote) setJointNote(persNote);
+      if (persCat) setJointCat(persCat);
+      if (persItems && persItems.length > 0) {
+        setJointItems([...persItems]);
+        setShowJointItemized(showPersItemized);
+      }
+    } else if (activeTab === 'joint' && newTab === 'personal') {
+      // 共同 -> 個人 同步
+      if (jointAmount) setPersAmount(jointAmount);
+      if (jointNote) setPersNote(jointNote);
+      if (jointCat) setPersCat(jointCat);
+      if (jointItems && jointItems.length > 0) {
+        setPersItems([...jointItems]);
+        setShowPersItemized(showJointItemized);
+      }
+    }
+    setActiveTab(newTab);
+  };
+
   // ==========================================
   // 4. Transfer (劃撥) States
   // ==========================================
@@ -1685,7 +1709,7 @@ const ExpenseEntry = ({
                 { label: `📅 帳單 ${safeBills.some(b => isApproaching(b.nextDate)) ? '⚠️' : ''}`, value: 'bills', activeColor: '#ffd60a' },
               ]}
               value={activeTab}
-              onChange={setActiveTab}
+              onChange={handleExpenseTabChange}
             />
           </div>
 
