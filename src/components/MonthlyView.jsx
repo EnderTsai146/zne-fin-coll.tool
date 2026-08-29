@@ -1481,12 +1481,27 @@ const MonthlyView = ({
                                                 <span>小票分項明細 (共 {detailModalRecord.itemizedBreakdown.length} 項)</span>
                                             </div>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                {detailModalRecord.itemizedBreakdown.map((it, idx) => (
-                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.06)' }}>
-                                                        <span style={{ color: '#fff' }}>#{idx + 1} {it.name}</span>
-                                                        <span style={{ fontWeight: '750', color: '#8effa2', fontFamily: 'monospace' }}>${Number(it.amount).toLocaleString()} TWD</span>
-                                                    </div>
-                                                ))}
+                                                {detailModalRecord.itemizedBreakdown.map((it, idx) => {
+                                                    const itAmt = Number(it.amount) || 0;
+                                                    return (
+                                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.06)' }}>
+                                                            <span style={{ color: '#fff' }}>#{idx + 1} {it.name}</span>
+                                                            {itAmt === 0 ? (
+                                                                <span style={{ fontWeight: '750', color: '#64d2ff', fontFamily: 'monospace', fontSize: '0.76rem', background: 'rgba(100,210,255,0.12)', padding: '1px 6px', borderRadius: '5px' }}>
+                                                                    🎁 $0 (贈品)
+                                                                </span>
+                                                            ) : itAmt < 0 ? (
+                                                                <span style={{ fontWeight: '750', color: '#ff453a', fontFamily: 'monospace', fontSize: '0.76rem', background: 'rgba(255,69,58,0.12)', padding: '1px 6px', borderRadius: '5px' }}>
+                                                                    🏷️ -${Math.abs(itAmt).toLocaleString()} (折扣)
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{ fontWeight: '750', color: '#8effa2', fontFamily: 'monospace' }}>
+                                                                    +${itAmt.toLocaleString()} TWD
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     )}
@@ -1929,28 +1944,41 @@ const MonthlyView = ({
 
                             <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {(itemizedModalRecord.itemizedBreakdown || []).map((item, idx) => (
-                                        <div
-                                            key={idx}
-                                            style={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                padding: '8px 10px',
-                                                background: 'rgba(255,255,255,0.03)',
-                                                borderRadius: '8px',
-                                                fontSize: '0.84rem'
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem', fontWeight: '700' }}>#{idx + 1}</span>
-                                                <span style={{ color: '#fff', fontWeight: '600' }}>{item.name}</span>
+                                    {(itemizedModalRecord.itemizedBreakdown || []).map((item, idx) => {
+                                        const itemAmt = Number(item.amount) || 0;
+                                        return (
+                                            <div
+                                                key={idx}
+                                                style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    padding: '8px 10px',
+                                                    background: 'rgba(255,255,255,0.03)',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.84rem'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem', fontWeight: '700' }}>#{idx + 1}</span>
+                                                    <span style={{ color: '#fff', fontWeight: '600' }}>{item.name}</span>
+                                                </div>
+                                                {itemAmt === 0 ? (
+                                                    <span style={{ fontWeight: '850', color: '#64d2ff', fontFamily: 'monospace', fontSize: '0.78rem', background: 'rgba(100,210,255,0.12)', padding: '2px 8px', borderRadius: '6px' }}>
+                                                        🎁 $0 (贈品)
+                                                    </span>
+                                                ) : itemAmt < 0 ? (
+                                                    <span style={{ fontWeight: '850', color: '#ff453a', fontFamily: 'monospace', fontSize: '0.78rem', background: 'rgba(255,69,58,0.12)', padding: '2px 8px', borderRadius: '6px' }}>
+                                                        🏷️ -${Math.abs(itemAmt).toLocaleString()} (折扣)
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ fontWeight: '850', color: '#8effa2', fontFamily: 'monospace' }}>
+                                                        +${itemAmt.toLocaleString()}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <span style={{ fontWeight: '850', color: '#8effa2', fontFamily: 'monospace' }}>
-                                                ${Number(item.amount).toLocaleString()}
-                                            </span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed rgba(255,255,255,0.15)', fontWeight: '850', fontSize: '0.94rem' }}>

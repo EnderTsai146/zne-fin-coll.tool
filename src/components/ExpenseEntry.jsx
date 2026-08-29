@@ -44,29 +44,46 @@ const ItemizedReceiptSection = ({
     const raw = quickInput.trim();
     if (!raw) return;
 
-    // 智慧解析：支援「乾麵 60」或「60 乾麵」或「小菜 $90」或「$150 飲料」
-    const matchAmtFirst = raw.match(/^[$￥]?\s*(\d+(?:\.\d+)?)\s*(.*)$/);
-    const matchAmtLast = raw.match(/^(.*?)\s*[$￥]?\s*(\d+(?:\.\d+)?)$/);
+    // 智慧解析：支援「乾麵 60」、「小菜 $90」、「折價券 -50」、「會員折扣 -$30」、「贈品 0」、「-50 折價券」、「0 贈品紅茶」
+    // 支援半形負號 - 與全形負號 －
+    const normalized = raw.replace(/－/g, '-');
+
+    // Pattern 1: 金額在最後 (例: "乾麵 60", "折價券 -50", "贈品 0", "飲料 $0", "滿減 -$100")
+    const matchAmtLast = normalized.match(/^(.*?)\s*[$￥]?\s*(-?\s*[$￥]?\s*\d+(?:\.\d+)?)$/);
+    // Pattern 2: 金額在最前 (例: "60 乾麵", "-50 折價券", "0 贈品", "-$100 滿額優惠")
+    const matchAmtFirst = normalized.match(/^[$￥]?\s*(-?\s*[$￥]?\s*\d+(?:\.\d+)?)\s*[$￥]?\s*(.*)$/);
 
     let finalName = '';
-    let finalAmt = 0;
+    let finalAmt = null;
 
-    if (matchAmtLast && matchAmtLast[2] && matchAmtLast[1]) {
+    if (matchAmtLast && matchAmtLast[2] && matchAmtLast[1].trim()) {
       finalName = matchAmtLast[1].trim();
-      finalAmt = Number(matchAmtLast[2]);
-    } else if (matchAmtFirst && matchAmtFirst[1] && matchAmtFirst[2]) {
+      const numStr = matchAmtLast[2].replace(/[^\d.-]/g, '');
+      finalAmt = Number(numStr);
+    } else if (matchAmtFirst && matchAmtFirst[1] && matchAmtFirst[2].trim()) {
       finalName = matchAmtFirst[2].trim();
-      finalAmt = Number(matchAmtFirst[1]);
+      const numStr = matchAmtFirst[1].replace(/[^\d.-]/g, '');
+      finalAmt = Number(numStr);
     } else {
-      const numOnly = Number(raw.replace(/[^\d.]/g, ''));
-      if (numOnly > 0) {
-        finalName = `項目 #${items.length + 1}`;
-        finalAmt = numOnly;
+      // 純數字輸入 (例: "60", "-50", "0")
+      const numStr = normalized.replace(/[^\d.-]/g, '');
+      if (numStr !== '' && !isNaN(Number(numStr))) {
+        finalAmt = Number(numStr);
+        if (finalAmt === 0) finalName = `贈品 #${items.length + 1}`;
+        else if (finalAmt < 0) finalName = `折扣優惠 #${items.length + 1}`;
+        else finalName = `項目 #${items.length + 1}`;
       }
     }
 
-    if (finalAmt > 0) {
-      const newItems = [...items, { id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, name: finalName || `項目 #${items.length + 1}`, amount: finalAmt }];
+    if (finalAmt !== null && !isNaN(finalAmt) && isFinite(finalAmt)) {
+      const newItems = [
+        ...items,
+        {
+          id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          name: finalName || (finalAmt === 0 ? `贈品 #${items.length + 1}` : (finalAmt < 0 ? `折扣 #${items.length + 1}` : `項目 #${items.length + 1}`)),
+          amount: finalAmt
+        }
+      ];
       setItems(newItems);
       if (onItemsChange) onItemsChange(newItems);
       setQuickInput('');
@@ -147,7 +164,7 @@ const ItemizedReceiptSection = ({
                   handleQuickAdd();
                 }
               }}
-              placeholder="快速鍵入，如「乾麵 60」按 Enter 新增..."
+              placeholder="快速鍵入，如「乾麵 60」、「折價券 -50」、「贈品 0」按 Enter..."
               style={{
                 flex: 1,
                 background: 'rgba(255,255,255,0.06)',
@@ -171,48 +188,63 @@ const ItemizedReceiptSection = ({
           </div>
 
           <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginTop: '5px', marginBottom: '8px' }}>
-            💡 提示：打完「品名 金額」（如 <strong>貢丸湯 40</strong>）直接按 <strong>Enter</strong> 即可連續極速新增下一項！
+            💡 提示：輸入「品名 金額」（如 <strong>貢丸湯 40</strong>、<strong>折價券 -50</strong>、<strong>贈品 0</strong>）直接按 <strong>Enter</strong> 極速新增！
           </div>
 
           {/* Render Items List */}
           {items.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '8px' }}>
-              {items.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.04)',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    fontSize: '0.82rem'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>#{idx + 1}</span>
-                    <span style={{ color: '#fff', fontWeight: '600' }}>{item.name}</span>
+              {items.map((item, idx) => {
+                const amt = Number(item.amount) || 0;
+                return (
+                  <div
+                    key={item.id || idx}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'rgba(255,255,255,0.04)',
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      fontSize: '0.82rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem' }}>#{idx + 1}</span>
+                      <span style={{ color: '#fff', fontWeight: '600' }}>{item.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {amt === 0 ? (
+                        <span style={{ fontWeight: '800', color: '#64d2ff', fontFamily: 'monospace', fontSize: '0.78rem', background: 'rgba(100,210,255,0.12)', padding: '2px 8px', borderRadius: '6px' }}>
+                          🎁 贈品 ($0)
+                        </span>
+                      ) : amt < 0 ? (
+                        <span style={{ fontWeight: '800', color: '#ff453a', fontFamily: 'monospace', fontSize: '0.78rem', background: 'rgba(255,69,58,0.12)', padding: '2px 8px', borderRadius: '6px' }}>
+                          🏷️ -${Math.abs(amt).toLocaleString()} (折扣)
+                        </span>
+                      ) : (
+                        <span style={{ fontWeight: '800', color: '#8effa2', fontFamily: 'monospace' }}>
+                          +${amt.toLocaleString()}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item.id)}
+                        style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '0 2px', fontSize: '0.9rem' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontWeight: '800', color: '#8effa2', fontFamily: 'monospace' }}>
-                      ${Number(item.amount).toLocaleString()}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(item.id)}
-                      style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '0 2px', fontSize: '0.9rem' }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Total Row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.1)', fontWeight: '850', fontSize: '0.86rem' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>小票合計 (共 {items.length} 項)</span>
-                <span style={{ color: '#8effa2', fontSize: '1rem' }}>${totalSum.toLocaleString()} TWD</span>
+                <span style={{ color: totalSum >= 0 ? '#8effa2' : '#ff453a', fontSize: '1rem' }}>
+                  {totalSum < 0 ? `-$${Math.abs(totalSum).toLocaleString()}` : `$${totalSum.toLocaleString()}`} TWD
+                </span>
               </div>
             </div>
           )}
