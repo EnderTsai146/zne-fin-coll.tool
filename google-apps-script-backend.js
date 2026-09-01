@@ -126,6 +126,7 @@ function doPost(e) {
       }
 
       var accessToken = getFirebaseAccessToken();
+      var tagStr = "pot_" + Utilities.base64EncodeWebSafe(title + "_" + body).substring(0, 24);
       var fcmPayload = {
         "message": {
           "token": token,
@@ -135,7 +136,8 @@ function doPost(e) {
           },
           "data": {
             "title": title,
-            "body": body
+            "body": body,
+            "tag": tagStr
           },
           "webpush": {
             "headers": {
@@ -143,7 +145,8 @@ function doPost(e) {
             },
             "notification": {
               "icon": "/apple-touch-icon.png",
-              "badge": "/apple-touch-icon.png"
+              "badge": "/apple-touch-icon.png",
+              "tag": tagStr
             }
           }
         }

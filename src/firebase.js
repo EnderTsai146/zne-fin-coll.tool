@@ -33,13 +33,26 @@ export const getFcmToken = async (vapidKey) => {
 };
 
 export const onFcmMessage = (callback) => {
+  let unsubscribe = null;
+  let isCancelled = false;
+
   try {
     isSupported().then(supported => {
-      if (!supported) return;
+      if (!supported || isCancelled) return;
       const messaging = getMessaging(app);
-      onMessage(messaging, callback);
+      unsubscribe = onMessage(messaging, callback);
+      if (isCancelled && typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
     });
   } catch (err) {
     console.error("Failed to register onMessage handler. ", err);
   }
+
+  return () => {
+    isCancelled = true;
+    if (typeof unsubscribe === 'function') {
+      unsubscribe();
+    }
+  };
 };

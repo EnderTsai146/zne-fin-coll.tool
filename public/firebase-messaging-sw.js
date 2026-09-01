@@ -13,6 +13,9 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// ★ SW 端推播防重去重快取 (防止多重事件引發重複彈窗)
+const swRecentNotifs = new Map();
+
 messaging.onBackgroundMessage((payload) => {
   console.log('[SW] Received background message payload: ', payload);
   const rawTitle = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || '系統通知';
@@ -29,10 +32,31 @@ messaging.onBackgroundMessage((payload) => {
     .replace(/[\s\-–—:：【】()[\]]+$/, '')
     .trim() || '系統通知';
   const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || '';
+
+  const dedupKey = `${title}_${body}`;
+  const now = Date.now();
+  const lastTime = swRecentNotifs.get(dedupKey);
+
+  if (lastTime && (now - lastTime < 8000)) {
+    console.log('[SW Dedup] Suppressed duplicate background push notification:', title);
+    return Promise.resolve();
+  }
+
+  swRecentNotifs.set(dedupKey, now);
+  if (swRecentNotifs.size > 30) {
+    for (const [k, ts] of swRecentNotifs.entries()) {
+      if (now - ts > 60000) swRecentNotifs.delete(k);
+    }
+  }
+
+  const deterministicTag = payload.data?.tag || ('pot_' + Math.abs(dedupKey.split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)).toString(36));
+
   const options = {
     body: body,
     icon: '/apple-touch-icon.png',
     badge: '/apple-touch-icon.png',
+    tag: deterministicTag,
+    renotify: false,
     data: payload.data || {}
   };
   return self.registration.showNotification(title, options);

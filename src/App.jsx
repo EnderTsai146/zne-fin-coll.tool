@@ -276,6 +276,52 @@ const cleanPushTitle = (rawTitle) => {
     .trim();
 };
 
+// ★ 全域推播通知防重去重管理器 (防止 8 秒內相同推播重複跳出 2-3 通)
+const recentNotificationCache = new Map();
+
+const showDeduplicatedNotification = (rawTitle, rawBody, extraOptions = {}) => {
+  const title = cleanPushTitle(rawTitle) || "系統通知";
+  const body = rawBody || "";
+  const key = `${title}_${body}`;
+  const now = Date.now();
+  const lastShown = recentNotificationCache.get(key);
+
+  // 8 秒內完全相同的推播內容不重複彈窗
+  if (lastShown && (now - lastShown < 8000)) {
+    console.log(`[Push Dedup] 攔截重複推播 (${Math.round((now - lastShown) / 1000)}s 內已顯示):`, title);
+    return null;
+  }
+
+  recentNotificationCache.set(key, now);
+  // 清理超過 60 秒的舊記錄
+  if (recentNotificationCache.size > 50) {
+    for (const [k, ts] of recentNotificationCache.entries()) {
+      if (now - ts > 60000) recentNotificationCache.delete(k);
+    }
+  }
+
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    return null;
+  }
+
+  const deterministicTag = 'pot_' + Math.abs(key.split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)).toString(36);
+
+  try {
+    const notif = new Notification(title, {
+      body,
+      icon: '/apple-touch-icon.png',
+      badge: '/apple-touch-icon.png',
+      tag: deterministicTag,
+      renotify: false,
+      ...extraOptions
+    });
+    return notif;
+  } catch (err) {
+    console.warn("[Push] Native Notification creation error:", err);
+    return null;
+  }
+};
+
 const getTokensArray = (field) => {
   if (!field) return [];
   if (typeof field === 'string') return [field];
@@ -958,25 +1004,21 @@ function App() {
 
     setupNotifications();
 
-    // Listen for foreground push notifications (display native banner and record to log)
-    onFcmMessage((payload) => {
+    // Listen for foreground push notifications (display native banner with dedup and record to log)
+    const unsubscribeFcm = onFcmMessage((payload) => {
       const rawTitle = payload.notification?.title || payload.data?.title || "🎉 收到推播通知";
       const title = cleanPushTitle(rawTitle) || "🎉 收到推播通知";
       const body = payload.notification?.body || payload.data?.body || "";
       logger.addLog('INFO', `[FCM Foreground Notification] ${title}: ${body}`);
 
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(title, {
-            body: body,
-            icon: '/apple-touch-icon.png',
-            badge: '/apple-touch-icon.png'
-          });
-        } catch (err) {
-          console.warn("[Push] Foreground notification display error:", err);
-        }
-      }
+      showDeduplicatedNotification(title, body);
     });
+
+    return () => {
+      if (typeof unsubscribeFcm === 'function') {
+        unsubscribeFcm();
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, dataReady, operatorName]);
 
@@ -1632,30 +1674,8 @@ function App() {
             .catch(err => console.error("Auto-migration / sanitize setDoc error:", err));
         }
 
-        // --- Real-time Cross-Device Notification Trigger ---
         if (data.monthlyExpenses && data.monthlyExpenses.length > 0) {
-          const newExpensesList = data.monthlyExpenses;
-          const prevCount = prevExpensesCountRef.current;
-          if (prevCount !== null && newExpensesList.length > prevCount) {
-            const latestRec = newExpensesList[newExpensesList.length - 1];
-            if (latestRec && latestRec.operator && !latestRec.operator.includes(operatorName)) {
-              const notifTitle = latestRec.category === '個人支出' ? '💰 伴侶個人支出異動' : '🤝 共同支出異動';
-              const notifBody = `${latestRec.operator} 登錄了交易：${latestRec.note || latestRec.category} - $${(latestRec.total || 0).toLocaleString()}`;
-              if ('Notification' in window && Notification.permission === 'granted') {
-                try {
-                  new Notification(notifTitle, {
-                    body: notifBody,
-                    icon: '/apple-touch-icon.png',
-                    badge: '/apple-touch-icon.png'
-                  });
-                  console.log("[Realtime Sync Notif] Native Web Notification triggered for incoming partner transaction!");
-                } catch (err) {
-                  console.warn("[Realtime Sync Notif] Dispatch error:", err);
-                }
-              }
-            }
-          }
-          prevExpensesCountRef.current = newExpensesList.length;
+          prevExpensesCountRef.current = data.monthlyExpenses.length;
         }
 
         setAssets(data);
@@ -1935,18 +1955,12 @@ function App() {
 
       logger.addLog('PUSH', `廣播推播: [${finalTitle}] - ${body}`, { targetScope, notifCategory, sender: operatorName });
 
-      // 1. 本地/裝置原生 Web Notification 觸發 (點擊測試推播或日常發送時均立即彈窗)
-      if ((isTest || isNotificationEnabledForUser(currentUserKey, notifCategory)) && ('Notification' in window && Notification.permission === 'granted')) {
-        try {
-          new Notification(finalTitle, {
-            body: body,
-            icon: '/apple-touch-icon.png',
-            badge: '/apple-touch-icon.png'
-          });
+      // 1. 本地/裝置原生 Web Notification 觸發 (使用去重管理器，防止與 FCM 重複彈窗)
+      if (isTest || isNotificationEnabledForUser(currentUserKey, notifCategory)) {
+        const notifResult = showDeduplicatedNotification(finalTitle, body);
+        if (notifResult) {
           localNativeTriggered = true;
-          console.log("[Push] Native Web Notification successfully dispatched locally!");
-        } catch (err) {
-          console.warn("[Push] Native Web Notification dispatch error:", err);
+          console.log("[Push] Native Web Notification dispatched locally with dedup!");
         }
       }
 
@@ -2053,18 +2067,8 @@ function App() {
       const finalTitle = cleanPushTitle(title);
       logger.addLog('PUSH', `[強制全域廣播] [${finalTitle}] - ${body}`, { sender: operatorName });
 
-      // 1. 本地原生 Web Notification 立即觸發
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(finalTitle, {
-            body: body,
-            icon: '/apple-touch-icon.png',
-            badge: '/apple-touch-icon.png'
-          });
-        } catch (err) {
-          console.warn("[Push] Native Web Notification error:", err);
-        }
-      }
+      // 1. 本地原生 Web Notification 立即觸發 (使用去重防重)
+      showDeduplicatedNotification(finalTitle, body);
 
       // 2. 收集雙方所有裝置的 FCM tokens (強制全發，忽視偏好開關)
       const allTokens = [
@@ -2135,17 +2139,9 @@ function App() {
       const body = `這是一則發送到【${deviceName || '指定裝置'}】的單機專屬測試推播！`;
       logger.addLog('PUSH', `[單機測試] [${deviceName}] - ${body}`, { sender: operatorName });
 
-      // 本機原生 Web Notification 立即觸發 (若測試的是本機)
-      if (fcmDiagnostic?.token === targetToken && 'Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(finalTitle, {
-            body: body,
-            icon: '/apple-touch-icon.png',
-            badge: '/apple-touch-icon.png'
-          });
-        } catch (err) {
-          console.warn("[Push] Native Web Notification error:", err);
-        }
+      // 本機原生 Web Notification 立即觸發 (若測試的是本機，使用去重防重)
+      if (fcmDiagnostic?.token === targetToken) {
+        showDeduplicatedNotification(finalTitle, body);
       }
 
       const res = await fetch(MY_GOOGLE_API_URL, {

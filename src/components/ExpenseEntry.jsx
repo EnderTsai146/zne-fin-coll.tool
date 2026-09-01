@@ -723,7 +723,7 @@ const ExpenseEntry = ({
     const isBatch = finalItems.length > 1;
     const batchId = isBatch ? `batch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : undefined;
     const batchTotal = isBatch ? finalItems.reduce((s, i) => s + i.amount, 0) : undefined;
-    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname })) : undefined;
+    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname, itemizedBreakdown: i.itemizedBreakdown })) : undefined;
 
     // Generate separate history records
     const historyRecords = finalItems.map((item, idx) => {
@@ -886,7 +886,7 @@ const ExpenseEntry = ({
     const isBatch = finalItems.length > 1;
     const batchId = isBatch ? `batch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : undefined;
     const batchTotal = isBatch ? finalItems.reduce((s, i) => s + i.amount, 0) : undefined;
-    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname })) : undefined;
+    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname, itemizedBreakdown: i.itemizedBreakdown })) : undefined;
 
     const historyRecords = finalItems.map((item, idx) => {
       const sampleAcc = accounts.find(a => a.id === item.accountId);
@@ -1048,7 +1048,7 @@ const ExpenseEntry = ({
     const isBatch = finalItems.length > 1;
     const batchId = isBatch ? `batch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : undefined;
     const batchTotal = isBatch ? finalItems.reduce((s, i) => s + i.amount, 0) : undefined;
-    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname })) : undefined;
+    const batchItems = isBatch ? finalItems.map(i => ({ cat: i.cat, amount: i.amount, note: i.note, accountNickname: i.accountNickname, itemizedBreakdown: i.itemizedBreakdown })) : undefined;
 
     // Create income record list
     const newIncomes = finalItems.map((item, idx) => ({
@@ -1920,6 +1920,12 @@ const ExpenseEntry = ({
                             📝 {item.note}
                           </div>
                         )}
+
+                        {Array.isArray(item.itemizedBreakdown) && item.itemizedBreakdown.length > 0 && (
+                          <div style={{ fontSize: '0.68rem', color: '#64d2ff', paddingLeft: '36px', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontWeight: '750' }}>
+                            <span>🧾 含小票細項 ({item.itemizedBreakdown.length}項)</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2129,6 +2135,12 @@ const ExpenseEntry = ({
                         {item.note && (
                           <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontStyle: 'italic', paddingLeft: '36px' }}>
                             📝 {item.note}
+                          </div>
+                        )}
+
+                        {Array.isArray(item.itemizedBreakdown) && item.itemizedBreakdown.length > 0 && (
+                          <div style={{ fontSize: '0.68rem', color: '#64d2ff', paddingLeft: '36px', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontWeight: '750' }}>
+                            <span>🧾 含小票細項 ({item.itemizedBreakdown.length}項)</span>
                           </div>
                         )}
                       </div>
@@ -2618,6 +2630,12 @@ const ExpenseEntry = ({
                       {item.note && (
                         <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', fontStyle: 'italic', paddingLeft: '36px' }}>
                           📝 {item.note}
+                        </div>
+                      )}
+
+                      {Array.isArray(item.itemizedBreakdown) && item.itemizedBreakdown.length > 0 && (
+                        <div style={{ fontSize: '0.68rem', color: '#64d2ff', paddingLeft: '36px', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontWeight: '750' }}>
+                          <span>🧾 含小票細項 ({item.itemizedBreakdown.length}項)</span>
                         </div>
                       )}
                     </div>

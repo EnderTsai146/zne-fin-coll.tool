@@ -96,6 +96,7 @@ const MonthlyView = ({
                 originalDate: r.date,
                 originalNote: r.note || '',
                 isDeleted: !!(r.isDeleted || r.category === '作廢退款'),
+                itemizedBreakdown: r.itemizedBreakdown,
                 rawRecord: r
             })));
         } else {
@@ -115,6 +116,7 @@ const MonthlyView = ({
                     originalNote: r.note || '',
                     isDeleted: !!(r.isDeleted || r.category === '作廢退款'),
                     isCurrentTarget: r.originalIndex === item.originalIndex,
+                    itemizedBreakdown: r.itemizedBreakdown,
                     rawRecord: r
                 })));
             } else {
@@ -726,13 +728,43 @@ const MonthlyView = ({
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', margin: '6px 0 8px 0', background: 'rgba(0,0,0,0.22)', padding: '8px 10px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)' }}>
                                                         {record.records.map((sub, sIdx) => {
                                                             const isSubDeleted = sub.isDeleted || sub.category === '作廢退款';
+                                                            const hasItemized = Array.isArray(sub.itemizedBreakdown) && sub.itemizedBreakdown.length > 0;
                                                             return (
                                                                 <div key={sIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', opacity: isSubDeleted ? 0.45 : 1 }}>
-                                                                    <span style={{ color: isSubDeleted ? '#8e8e93' : '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isSubDeleted ? 'line-through' : 'none' }}>
-                                                                        <span style={{ color: isSubDeleted ? '#8e8e93' : '#ff9f0a', marginRight: '4px' }}>•</span>
-                                                                        <strong style={{ opacity: 0.9 }}>{sub.subCategory || sub.category}</strong>
-                                                                        {sub.note && sub.note !== (sub.subCategory || sub.category) ? <span style={{ opacity: 0.7, marginLeft: '4px' }}>({sub.note.replace(`${sub.subCategory} - `, '')})</span> : ''}
-                                                                        {isSubDeleted && <span style={{ fontSize: '0.62rem', color: '#8e8e93', marginLeft: '4px' }}>(已作廢)</span>}
+                                                                    <span style={{ color: isSubDeleted ? '#8e8e93' : '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isSubDeleted ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                                                        <span>
+                                                                            <span style={{ color: isSubDeleted ? '#8e8e93' : '#ff9f0a', marginRight: '4px' }}>•</span>
+                                                                            <strong style={{ opacity: 0.9 }}>{sub.subCategory || sub.category}</strong>
+                                                                            {sub.note && sub.note !== (sub.subCategory || sub.category) ? <span style={{ opacity: 0.7, marginLeft: '4px' }}>({sub.note.replace(`${sub.subCategory} - `, '')})</span> : ''}
+                                                                            {isSubDeleted && <span style={{ fontSize: '0.62rem', color: '#8e8e93', marginLeft: '4px' }}>(已作廢)</span>}
+                                                                        </span>
+                                                                        {hasItemized && !isSubDeleted && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setItemizedModalRecord(sub);
+                                                                                }}
+                                                                                style={{
+                                                                                    background: 'rgba(100, 210, 255, 0.12)',
+                                                                                    border: '0.5px solid rgba(100, 210, 255, 0.3)',
+                                                                                    borderRadius: '4px',
+                                                                                    padding: '1px 5px',
+                                                                                    color: '#64d2ff',
+                                                                                    fontSize: '0.65rem',
+                                                                                    cursor: 'pointer',
+                                                                                    fontWeight: '750',
+                                                                                    display: 'inline-flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '2px',
+                                                                                    marginLeft: '4px'
+                                                                                }}
+                                                                                title="查看此明細小票分項"
+                                                                            >
+                                                                                <span>🧾</span>
+                                                                                <span>小票 ({sub.itemizedBreakdown.length}項)</span>
+                                                                            </button>
+                                                                        )}
                                                                     </span>
                                                                     <span style={{ color: isSubDeleted ? '#8e8e93' : 'rgba(255,255,255,0.9)', fontWeight: '700', marginLeft: '8px', flexShrink: 0, textDecoration: isSubDeleted ? 'line-through' : 'none' }}>
                                                                         ${sub.total.toLocaleString()}
@@ -1370,7 +1402,7 @@ const MonthlyView = ({
                                                             <span>明細日期:</span>
                                                         </span>
                                                         <input 
-                                                            type="date"
+                                                            type="date" 
                                                             disabled={isItemDeleted}
                                                             value={item.date}
                                                             onChange={e => {
@@ -1383,6 +1415,62 @@ const MonthlyView = ({
                                                             style={{ background: 'none', border: 'none', color: isItemDeleted ? '#8e8e93' : '#fff', textAlign: 'right', outline: 'none', fontSize: '0.78rem', fontFamily: 'var(--font-family)', cursor: isItemDeleted ? 'default' : 'pointer' }}
                                                         />
                                                     </div>
+
+                                                    {/* Row 4: Itemized Breakdown if present */}
+                                                    {(() => {
+                                                        const rawBreakdown = item.itemizedBreakdown || item.rawRecord?.itemizedBreakdown;
+                                                        if (!Array.isArray(rawBreakdown) || rawBreakdown.length === 0) return null;
+                                                        return (
+                                                            <div style={{
+                                                                background: 'rgba(10, 132, 255, 0.06)',
+                                                                border: '1px solid rgba(10, 132, 255, 0.2)',
+                                                                borderRadius: '10px',
+                                                                padding: '10px 12px',
+                                                                marginTop: '4px'
+                                                            }}>
+                                                                <div style={{ fontSize: '0.76rem', fontWeight: '800', color: '#64d2ff', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                        <span>🧾</span>
+                                                                        <span>小票分項明細 (共 {rawBreakdown.length} 項)</span>
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setItemizedModalRecord({
+                                                                                ...item,
+                                                                                itemizedBreakdown: rawBreakdown,
+                                                                                category: item.cat,
+                                                                                total: item.amount,
+                                                                                note: item.note,
+                                                                                date: item.date
+                                                                            });
+                                                                        }}
+                                                                        style={{ background: 'none', border: 'none', color: '#64d2ff', fontSize: '0.7rem', textDecoration: 'underline', cursor: 'pointer', fontWeight: '750' }}
+                                                                    >
+                                                                        彈窗查看
+                                                                    </button>
+                                                                </div>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                    {rawBreakdown.map((it, sIdx) => {
+                                                                        const itAmt = Number(it.amount) || 0;
+                                                                        return (
+                                                                            <div key={sIdx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', padding: '3px 0', borderBottom: '1px dashed rgba(255,255,255,0.06)' }}>
+                                                                                <span style={{ color: '#fff' }}>#{sIdx + 1} {it.name}</span>
+                                                                                {itAmt === 0 ? (
+                                                                                    <span style={{ fontWeight: '750', color: '#64d2ff', fontFamily: 'monospace', fontSize: '0.72rem', background: 'rgba(100,210,255,0.12)', padding: '1px 5px', borderRadius: '4px' }}>🎁 $0</span>
+                                                                                ) : itAmt < 0 ? (
+                                                                                    <span style={{ fontWeight: '750', color: '#ff453a', fontFamily: 'monospace', fontSize: '0.72rem', background: 'rgba(255,69,58,0.12)', padding: '1px 5px', borderRadius: '4px' }}>🏷️ -${Math.abs(itAmt).toLocaleString()}</span>
+                                                                                ) : (
+                                                                                    <span style={{ fontWeight: '750', color: '#8effa2', fontFamily: 'monospace' }}>+${itAmt.toLocaleString()}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             );
                                         })}
@@ -1922,7 +2010,7 @@ const MonthlyView = ({
                                 <span style={{ fontSize: '1.3rem' }}>🧾</span>
                                 <div>
                                     <div style={{ fontWeight: '850', fontSize: '1rem', color: '#fff' }}>消費分項小票明細</div>
-                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>{itemizedModalRecord.date} · {itemizedModalRecord.category}</div>
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>{itemizedModalRecord.date} · {itemizedModalRecord.subCategory || itemizedModalRecord.category}</div>
                                 </div>
                             </div>
                             <button
@@ -1983,7 +2071,7 @@ const MonthlyView = ({
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed rgba(255,255,255,0.15)', fontWeight: '850', fontSize: '0.94rem' }}>
                                     <span style={{ color: 'var(--text-secondary)' }}>小票合計 (共 {itemizedModalRecord.itemizedBreakdown?.length || 0} 項)</span>
-                                    <span style={{ color: '#8effa2', fontSize: '1.1rem' }}>${Number(itemizedModalRecord.total).toLocaleString()} TWD</span>
+                                    <span style={{ color: '#8effa2', fontSize: '1.1rem' }}>${Number(itemizedModalRecord.total !== undefined ? itemizedModalRecord.total : itemizedModalRecord.amount).toLocaleString()} TWD</span>
                                 </div>
                             </div>
                         </div>
