@@ -524,11 +524,12 @@ const SettingsView = ({
 
 
 
-  // --- 3. Operation Logs State & Logic (High-Performance Refactored) ---
+  // --- 3. Operation Logs State & Logic (High-Performance Refactored & Visual Audit Center) ---
   const [dbLogs, setDbLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
   const [visibleLogCount, setVisibleLogCount] = useState(40);
+  const [selectedAuditLog, setSelectedAuditLog] = useState(null); // Selected log for deep audit inspector modal
 
   // Search & Filter state variables
   const [logSearchText, setLogSearchText] = useState('');
@@ -536,39 +537,122 @@ const SettingsView = ({
   const [logFilterOperator, setLogFilterOperator] = useState('all');
   const [logStartDate, setLogStartDate] = useState('');
   const [logEndDate, setLogEndDate] = useState('');
+  const [quickDatePreset, setQuickDatePreset] = useState('all'); // 'all' | 'today' | 'yesterday' | '7days' | 'thisMonth'
 
   const isFetchingLogsRef = useRef(false);
   const lastDocRef = useRef(null);
   const logsFetchedInitialRef = useRef(false);
+
+  // 智慧判斷動作類型、圖示、顏色與標籤
+  const getActionMeta = useCallback((log) => {
+    const action = (log?.action || '').toLowerCase();
+    const detail = (typeof log?.detail === 'string' ? log.detail : '').toLowerCase();
+
+    if (action === 'delete' || action.includes('delete') || action.includes('void') || detail.includes('作廢') || detail.includes('刪除') || detail.includes('註銷')) {
+      return { label: '作廢刪除', icon: '🗑️', color: '#ff453a', bg: 'rgba(255, 69, 58, 0.15)', dotClass: 'timeline-dot delete' };
+    }
+    if (action === 'calibrate' || detail.includes('校正')) {
+      return { label: '餘額校正', icon: '⚖️', color: '#ff9f0a', bg: 'rgba(255, 159, 10, 0.15)', dotClass: 'timeline-dot calibrate' };
+    }
+    if (action === 'transfer' || action === 'exchange' || detail.includes('劃撥') || detail.includes('換匯')) {
+      return { label: '資產劃撥', icon: '🔄', color: '#5e5ce6', bg: 'rgba(94, 92, 230, 0.15)', dotClass: 'timeline-dot transfer' };
+    }
+    if (action === 'settle' || detail.includes('結算') || detail.includes('撥付')) {
+      return { label: '代墊結算', icon: '🤝', color: '#30d158', bg: 'rgba(48, 209, 88, 0.15)', dotClass: 'timeline-dot settle' };
+    }
+    if (action === 'income' || action === 'income_add' || detail.includes('收入入帳') || detail.includes('薪資')) {
+      return { label: '收入入帳', icon: '💰', color: '#30d158', bg: 'rgba(48, 209, 88, 0.15)', dotClass: 'timeline-dot income' };
+    }
+    if (action.includes('budget') || detail.includes('預算')) {
+      return { label: '預算設定', icon: '📊', color: '#ff375f', bg: 'rgba(255, 55, 95, 0.15)', dotClass: 'timeline-dot budget' };
+    }
+    if (action === 'edit' || action.includes('edit') || detail.includes('修改') || detail.includes('更新')) {
+      return { label: '修改紀錄', icon: '✏️', color: '#64d2ff', bg: 'rgba(100, 210, 255, 0.15)', dotClass: 'timeline-dot edit' };
+    }
+    if (action === 'expense_add' || action === 'transaction' || detail.includes('支出') || detail.includes('記帳') || detail.includes('餐費') || detail.includes('購物')) {
+      return { label: '登錄支出', icon: '🛒', color: '#64d2ff', bg: 'rgba(100, 210, 255, 0.15)', dotClass: 'timeline-dot' };
+    }
+    if (action === 'login' || action === 'auth' || detail.includes('登入')) {
+      return { label: '帳號登入', icon: '🔑', color: '#bf5af2', bg: 'rgba(191, 90, 242, 0.15)', dotClass: 'timeline-dot' };
+    }
+    if (action === 'reset_data' || detail.includes('重設') || detail.includes('歸零')) {
+      return { label: '資料重設', icon: '🧹', color: '#ff453a', bg: 'rgba(255, 69, 58, 0.15)', dotClass: 'timeline-dot delete' };
+    }
+    if (action === 'backup' || detail.includes('備份')) {
+      return { label: '雲端備份', icon: '☁️', color: '#0a84ff', bg: 'rgba(10, 132, 255, 0.15)', dotClass: 'timeline-dot' };
+    }
+    return { label: log?.action ? `操作 (${log.action})` : '系統審計', icon: '📜', color: '#98989d', bg: 'rgba(152, 152, 157, 0.15)', dotClass: 'timeline-dot' };
+  }, []);
+
+  // 智慧補足歷史軌跡中缺少或為空內容的文字 (徹底解決空白問題)
+  const getResolvedLogDetail = useCallback((log) => {
+    if (!log) return '無內容';
+    if (typeof log.detail === 'string' && log.detail.trim()) {
+      return log.detail.trim();
+    }
+    if (typeof log.message === 'string' && log.message.trim()) {
+      return log.message.trim();
+    }
+    if (typeof log.desc === 'string' && log.desc.trim()) {
+      return log.desc.trim();
+    }
+    if (typeof log.note === 'string' && log.note.trim()) {
+      return log.note.trim();
+    }
+    if (typeof log.detail === 'object' && log.detail !== null) {
+      try { return JSON.stringify(log.detail); } catch {}
+    }
+
+    const act = (log.action || '').toLowerCase();
+    if (act === 'budget_update') return log.month ? `更新【${log.month}】類別預算設定` : '更新每月類別預算設定';
+    if (act === 'budget_delete') return log.month ? `刪除【${log.month}】預算設定` : '刪除每月類別預算設定';
+    if (act === 'transaction' || act === 'expense_add') return '登錄新帳務明細變動';
+    if (act === 'edit') return '編輯修改歷史帳務內容';
+    if (act === 'delete') return '作廢撤銷交易明細';
+    if (act === 'calibrate') return '帳戶餘額校正調整';
+    if (act === 'transfer') return '跨帳戶資產劃撥';
+    if (act === 'settle') return '共同支出代墊款結算撥付';
+    if (act === 'login') return '使用者登入系統';
+    if (act === 'reset_data') return '重設帳務測試資料';
+    if (act === 'backup') return '手動雲端資料庫備份';
+    if (log.action) return `執行「${log.action}」操作紀錄`;
+    return '一般操作審計紀錄';
+  }, []);
 
   const filteredLogs = useMemo(() => {
     const rawSearch = (logSearchText || '').trim().toLowerCase();
     const searchTokens = rawSearch ? rawSearch.split(/\s+/).filter(Boolean) : [];
 
     return dbLogs.filter(log => {
+      const resolvedDetail = getResolvedLogDetail(log);
+      const meta = getActionMeta(log);
+
       // 1. Search filter with tokens
       if (searchTokens.length > 0) {
-        const detailStr = (log.detail || '').toLowerCase();
+        const detailStr = resolvedDetail.toLowerCase();
         const operatorStr = (log.operator || '').toLowerCase();
         const actionStr = (log.action || '').toLowerCase();
+        const labelStr = meta.label.toLowerCase();
         const tsStr = (log.timestamp || '').toLowerCase();
-        const combined = `${detailStr} ${operatorStr} ${actionStr} ${tsStr}`;
+        const combined = `${detailStr} ${operatorStr} ${actionStr} ${labelStr} ${tsStr}`;
         const allMatch = searchTokens.every(tok => combined.includes(tok));
         if (!allMatch) return false;
       }
 
       // 2. Action filter
       if (logFilterAction !== 'all') {
-        const act = log.action || '';
-        const det = log.detail || '';
+        const act = (log.action || '').toLowerCase();
+        const det = resolvedDetail.toLowerCase();
         if (logFilterAction === 'calibrate') {
           if (act !== 'calibrate' && !det.includes('校正')) return false;
         } else if (logFilterAction === 'transaction') {
           if (act !== 'transaction' && act !== 'expense_add' && !det.includes('記帳') && !det.includes('支出') && !det.includes('收入') && !det.includes('劃撥')) return false;
         } else if (logFilterAction === 'delete') {
           if (act !== 'delete' && act !== 'budget_delete' && !det.includes('作廢') && !det.includes('刪除') && !det.includes('註銷')) return false;
-        } else if (logFilterAction === 'expense_add') {
-          if (act !== 'expense_add' && !det.includes('新增支出')) return false;
+        } else if (logFilterAction === 'edit') {
+          if (act !== 'edit' && !det.includes('修改') && !det.includes('更新')) return false;
+        } else if (logFilterAction === 'budget') {
+          if (!act.includes('budget') && !det.includes('預算')) return false;
         } else if (logFilterAction === 'login') {
           if (act !== 'login' && !det.includes('登入')) return false;
         } else {
@@ -590,7 +674,7 @@ const SettingsView = ({
 
       return true;
     });
-  }, [dbLogs, logSearchText, logFilterAction, logFilterOperator]);
+  }, [dbLogs, logSearchText, logFilterAction, logFilterOperator, getResolvedLogDetail, getActionMeta]);
 
   const fetchLogs = useCallback(async (isInitial = false) => {
     if (isFetchingLogsRef.current) return;
@@ -663,12 +747,45 @@ const SettingsView = ({
     }
   }, [currentSubTab, logStartDate, logEndDate, fetchLogs]);
 
+  // 設定快捷日期區間
+  const handleApplyQuickDate = (preset) => {
+    setQuickDatePreset(preset);
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const toYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (preset === 'today') {
+      const todayStr = toYMD(now);
+      setLogStartDate(todayStr);
+      setLogEndDate(todayStr);
+    } else if (preset === 'yesterday') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = toYMD(yest);
+      setLogStartDate(yestStr);
+      setLogEndDate(yestStr);
+    } else if (preset === '7days') {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 7);
+      setLogStartDate(toYMD(past));
+      setLogEndDate(toYMD(now));
+    } else if (preset === 'thisMonth') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      setLogStartDate(toYMD(firstDay));
+      setLogEndDate(toYMD(now));
+    } else {
+      setLogStartDate('');
+      setLogEndDate('');
+    }
+  };
+
   const resetLogFilters = () => {
     setLogSearchText('');
     setLogFilterAction('all');
     setLogFilterOperator('all');
     setLogStartDate('');
     setLogEndDate('');
+    setQuickDatePreset('all');
   };
 
   const formatTimestamp = (isoStr) => {
@@ -683,12 +800,39 @@ const SettingsView = ({
     return `${y}-${m}-${dateVal} ${h}:${min}:${s}`;
   };
 
-  const getTimelineDotClass = (action) => {
-    if (action === 'delete') return 'timeline-dot delete';
-    if (action === 'settle' || action === 'income') return 'timeline-dot settle';
-    if (action === 'transfer' || action === 'exchange') return 'timeline-dot transfer';
-    if (action === 'calibrate') return 'timeline-dot calibrate';
-    return 'timeline-dot';
+  const getTimelineDotClass = (log) => {
+    const meta = getActionMeta(log);
+    return meta.dotClass || 'timeline-dot';
+  };
+
+  // 匯出審計日誌至 CSV
+  const handleExportLogsCsv = () => {
+    if (filteredLogs.length === 0) {
+      customAlert("⚠️ 目前無符合篩選條件的軌跡可供匯出。");
+      return;
+    }
+    const headers = ["時間戳記 (ISO)", "本地時間", "操作者", "動作代碼", "動作分類", "詳細審計內容"];
+    const rows = filteredLogs.map(l => {
+      const meta = getActionMeta(l);
+      const detail = getResolvedLogDetail(l).replace(/"/g, '""');
+      return [
+        `"${l.timestamp || ''}"`,
+        `"${formatTimestamp(l.timestamp)}"`,
+        `"${l.operator || '系統'}"`,
+        `"${l.action || ''}"`,
+        `"${meta.label}"`,
+        `"${detail}"`
+      ].join(',');
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `馬鈴薯管家_審計軌跡匯出_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // --- Test Push Diagnostic State ---
@@ -1048,30 +1192,57 @@ const SettingsView = ({
     await customAlert(`🗑️ 已成功解除【${deviceDisplayName}】的推播綁定。`);
   };
 
-  const handleClearOtherTokens = async (targetUserKey) => {
-    const currentToken = fcmDiagnostic?.token;
-    if (!currentToken) {
-      await customAlert("⚠️ 本機裝置尚未取得 FCM Token，無法清理其他裝置。");
+  const handleDeduplicateAllTokens = async () => {
+    if (!await customConfirm("🧹 確定要一鍵整理並清理所有重複、過期的裝置 Token 嗎？\n\n系統將自動分析雙方所有已註冊裝置，每台實體裝置/瀏覽器僅保留最新的一組有效 Token，徹底解決重複推播問題。")) {
       return;
     }
 
-    if (!await customConfirm("🧹 確定要清理所有其他離線裝置，僅保留【本機裝置】嗎？\n\n這將移除其他歷史登入過的裝置 Token。")) {
-      return;
-    }
+    const currentFcmTokens = assets?.fcmTokens || {};
+    let totalRemoved = 0;
+    const cleanedFcmTokens = {};
 
-    const rawUserTokens = assets?.fcmTokens?.[targetUserKey] || {};
-    const currentMeta = (typeof rawUserTokens === 'object' && rawUserTokens?.[currentToken]) || true;
+    ['userA', 'userB'].forEach(uKey => {
+      const rawUserField = currentFcmTokens[uKey];
+      if (typeof rawUserField === 'object' && rawUserField !== null && !Array.isArray(rawUserField)) {
+        const deviceMap = new Map();
+        Object.entries(rawUserField).forEach(([tok, meta]) => {
+          if (typeof tok !== 'string' || tok.length <= 5) {
+            totalRemoved++;
+            return;
+          }
+          const m = (typeof meta === 'object' && meta !== null) ? meta : {};
+          const sig = (m.rawOs || m.rawBrowser || m.screen)
+            ? `${m.rawOs || ''}_${m.rawBrowser || ''}_${m.screen || ''}_${m.isPWA ? 'pwa' : 'web'}`
+            : tok;
+          const existing = deviceMap.get(sig);
+          const tokTime = new Date(m.lastSeen || m.registeredAt || 0).getTime();
+          if (!existing) {
+            deviceMap.set(sig, { token: tok, meta: m, time: tokTime });
+          } else if (tokTime > existing.time) {
+            totalRemoved++;
+            deviceMap.set(sig, { token: tok, meta: m, time: tokTime });
+          } else {
+            totalRemoved++;
+          }
+        });
+
+        const newDict = {};
+        for (const { token, meta } of deviceMap.values()) {
+          newDict[token] = meta;
+        }
+        cleanedFcmTokens[uKey] = newDict;
+      } else {
+        cleanedFcmTokens[uKey] = rawUserField;
+      }
+    });
 
     const updatedAssets = {
       ...assets,
-      fcmTokens: {
-        ...(assets?.fcmTokens || {}),
-        [targetUserKey]: { [currentToken]: currentMeta }
-      }
+      fcmTokens: cleanedFcmTokens
     };
 
     saveToCloud(updatedAssets);
-    await customAlert("🧹 已清理完畢，目前僅保留本機裝置。");
+    await customAlert(`🎉 裝置 Token 整理完成！共清理了 ${totalRemoved} 組重複/舊版 Token，雙方推播裝置已達最精簡乾淨狀態。`);
   };
 
   return (
@@ -1549,16 +1720,16 @@ const SettingsView = ({
                   </div>
                 </div>
 
-                {myDeviceTokens.length > 1 && (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    onClick={() => handleClearOtherTokens(userKey)}
+                    onClick={handleDeduplicateAllTokens}
                     className="glass-btn"
-                    style={{ fontSize: '0.74rem', padding: '5px 12px', borderRadius: '10px', color: '#ffb94f', borderColor: 'rgba(255,185,79,0.3)', fontWeight: '700' }}
+                    style={{ fontSize: '0.74rem', padding: '5px 12px', borderRadius: '10px', color: '#64d2ff', borderColor: 'rgba(100,210,255,0.3)', fontWeight: '700' }}
                   >
-                    🧹 清理其他離線裝置
+                    🧹 一鍵整理去重裝置
                   </button>
-                )}
+                </div>
               </div>
 
               {/* Scope Switcher Tabs */}
@@ -1902,32 +2073,42 @@ const SettingsView = ({
           <HelpWizard onNavigateWithGuide={onNavigateWithGuide} />
         )}
 
-        {/* === 5. 歷史軌跡 === */}
+        {/* === 5. 歷史軌跡 (升級版視覺化系統審計中心) === */}
         {currentSubTab === 'logs' && (
-          <div className="glass-card" style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div className="glass-card" style={{ padding: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               
-              {/* Header & Quick Refresh */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '4px' }}>
-                <div style={{ fontSize: '0.86rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>📜 操作審計軌跡</span>
-                  {loadingLogs && <span style={{ fontSize: '0.7rem', color: '#007aff', animation: 'pulse 1s infinite' }}>● 載入中...</span>}
+              {/* Header & Quick Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '4px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ fontSize: '0.94rem', fontWeight: '850', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📜</span>
+                  <span>操作審計軌跡中心</span>
+                  {loadingLogs && <span style={{ fontSize: '0.72rem', color: '#007aff', animation: 'pulse 1s infinite' }}>● 載入中...</span>}
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {(logSearchText || logFilterAction !== 'all' || logFilterOperator !== 'all' || logStartDate || logEndDate) && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleExportLogsCsv}
+                    className="glass-btn"
+                    style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#64d2ff', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    title="匯出符合目前篩選條件的軌跡為 CSV"
+                  >
+                    <span>📥</span>
+                    <span>匯出 CSV</span>
+                  </button>
+                  {(logSearchText || logFilterAction !== 'all' || logFilterOperator !== 'all' || logStartDate || logEndDate || quickDatePreset !== 'all') && (
                     <button
                       onClick={resetLogFilters}
                       className="glass-btn"
-                      style={{ padding: '3px 8px', fontSize: '0.72rem', color: '#ff9f0a', borderRadius: '6px' }}
+                      style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#ff9f0a', borderRadius: '8px' }}
                     >
-                      ✕ 清除篩選
+                      ✕ 重設篩選
                     </button>
                   )}
                   <button
                     onClick={() => fetchLogs(true)}
                     disabled={loadingLogs}
                     className="glass-btn"
-                    style={{ padding: '3px 8px', fontSize: '0.72rem', borderRadius: '6px' }}
+                    style={{ padding: '4px 10px', fontSize: '0.74rem', borderRadius: '8px' }}
                     title="重新整理歷史軌跡"
                   >
                     🔄 重新整理
@@ -1935,8 +2116,40 @@ const SettingsView = ({
                 </div>
               </div>
 
+              {/* Quick Date Presets Bar */}
+              <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+                {[
+                  { key: 'all', label: '📅 全部時間' },
+                  { key: 'today', label: '⚡ 今日' },
+                  { key: 'yesterday', label: '⏮️ 昨日' },
+                  { key: '7days', label: '🗓️ 近 7 天' },
+                  { key: 'thisMonth', label: '📊 本月' }
+                ].map(preset => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => handleApplyQuickDate(preset.key)}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.72rem',
+                      fontWeight: quickDatePreset === preset.key ? '800' : '500',
+                      borderRadius: '8px',
+                      border: '1px solid',
+                      borderColor: quickDatePreset === preset.key ? 'rgba(0, 122, 255, 0.6)' : 'rgba(255, 255, 255, 0.08)',
+                      background: quickDatePreset === preset.key ? 'rgba(0, 122, 255, 0.22)' : 'rgba(255, 255, 255, 0.03)',
+                      color: quickDatePreset === preset.key ? '#64d2ff' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Filters grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '2px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <select 
                   value={logFilterOperator} 
                   onChange={(e) => setLogFilterOperator(e.target.value)} 
@@ -1955,36 +2168,38 @@ const SettingsView = ({
                   className="glass-input" 
                   style={{ margin: 0, padding: '6px 10px', fontSize: '0.78rem', height: '36px', borderRadius: '8px' }}
                 >
-                  <option value="all">🛠️ 所有動作</option>
-                  <option value="transaction">🔄 記帳變動</option>
+                  <option value="all">🛠️ 所有動作類型</option>
+                  <option value="transaction">🛒 登錄支出 / 記帳</option>
+                  <option value="income">💰 收入入帳</option>
+                  <option value="edit">✏️ 修改紀錄</option>
                   <option value="delete">🗑️ 作廢刪除</option>
-                  <option value="expense_add">💰 新增支出</option>
-                  <option value="login">🔑 登入異動</option>
                   <option value="calibrate">⚖️ 餘額校正</option>
+                  <option value="budget">📊 預算設定</option>
+                  <option value="login">🔑 登入異動</option>
                 </select>
               </div>
 
-              {/* Date range pickers */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '2px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 起始日期</span>
+              {/* Custom Date range pickers (Collapsible / Compact) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 自訂起始日</span>
                   <input 
                     type="date" 
                     value={logStartDate} 
-                    onChange={(e) => setLogStartDate(e.target.value)} 
+                    onChange={(e) => { setLogStartDate(e.target.value); setQuickDatePreset('custom'); }} 
                     className="glass-input" 
-                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.78rem', height: '36px', borderRadius: '8px' }}
+                    style={{ margin: 0, padding: '5px 8px', fontSize: '0.76rem', height: '34px', borderRadius: '8px' }}
                   />
                 </div>
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 結束日期</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 自訂結束日</span>
                   <input 
                     type="date" 
                     value={logEndDate} 
-                    onChange={(e) => setLogEndDate(e.target.value)} 
+                    onChange={(e) => { setLogEndDate(e.target.value); setQuickDatePreset('custom'); }} 
                     className="glass-input" 
-                    style={{ margin: 0, padding: '6px 8px', fontSize: '0.78rem', height: '36px', borderRadius: '8px' }}
+                    style={{ margin: 0, padding: '5px 8px', fontSize: '0.76rem', height: '34px', borderRadius: '8px' }}
                   />
                 </div>
               </div>
@@ -1993,7 +2208,7 @@ const SettingsView = ({
               <div style={{ position: 'relative' }}>
                 <input 
                   type="text" 
-                  placeholder="🔍 即時搜尋關鍵字 (支援多詞搜尋，如「大狗狗 晚餐」)..." 
+                  placeholder="🔍 即時搜尋關鍵字 (支援多詞搜尋，如「大狗狗 晚餐 $200」)..." 
                   value={logSearchText} 
                   onChange={(e) => setLogSearchText(e.target.value)} 
                   className="glass-input" 
@@ -2018,7 +2233,7 @@ const SettingsView = ({
 
               {loadingLogs && dbLogs.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>
-                  ⏳ 正在高速載入歷史軌跡...
+                  ⏳ 正在高速載入歷史審計軌跡...
                 </div>
               ) : dbLogs.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: '40px 0' }}>
@@ -2030,21 +2245,57 @@ const SettingsView = ({
                 </div>
               ) : (
                 <>
-                  <div className="timeline-list" style={{ maxHeight: '52vh', overflowY: 'auto', paddingRight: '2px' }}>
+                  <div className="timeline-list" style={{ maxHeight: '54vh', overflowY: 'auto', paddingRight: '4px' }}>
                     {filteredLogs.slice(0, visibleLogCount).map((log, idx) => {
                       const operatorDisplay = (log.operator?.includes('大狗狗') || log.operator === 'userA') ? '🐕 大狗狗' :
                                               (log.operator?.includes('阿陞') || log.operator === 'userB') ? '🐶 阿陞' : (log.operator || '🤖 系統');
+                      const meta = getActionMeta(log);
+                      const resolvedDetail = getResolvedLogDetail(log);
+                      const relativeTime = formatRelativeTime(log.timestamp);
+
                       return (
-                        <div key={log.id || idx} className="timeline-item">
-                          <div className={getTimelineDotClass(log.action)} />
+                        <div 
+                          key={log.id || idx} 
+                          className="timeline-item"
+                          onClick={() => setSelectedAuditLog(log)}
+                          title="點擊展開此筆軌跡之深度審計詳情"
+                        >
+                          <div className={getTimelineDotClass(log)} />
+                          
+                          {/* Top Meta Header: Operator + Action Badge + Time */}
                           <div className="timeline-meta">
-                            <span className="timeline-operator" style={{ color: operatorDisplay.includes('大狗狗') ? '#007aff' : (operatorDisplay.includes('阿陞') ? '#af52de' : 'var(--text-secondary)') }}>
-                              {operatorDisplay}
-                            </span>
-                            <span>{formatTimestamp(log.timestamp)}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span className="timeline-operator" style={{ color: operatorDisplay.includes('大狗狗') ? '#007aff' : (operatorDisplay.includes('阿陞') ? '#af52de' : 'var(--text-secondary)') }}>
+                                {operatorDisplay}
+                              </span>
+                              <span 
+                                className="log-badge" 
+                                style={{ color: meta.color, background: meta.bg, border: `0.5px solid ${meta.color}40` }}
+                              >
+                                <span>{meta.icon}</span>
+                                <span>{meta.label}</span>
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {relativeTime && (
+                                <span style={{ fontSize: '0.7rem', color: '#ffb94f', background: 'rgba(255, 185, 79, 0.12)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>
+                                  {relativeTime}
+                                </span>
+                              )}
+                              <span className="timeline-time">{formatTimestamp(log.timestamp)}</span>
+                            </div>
                           </div>
-                          <div className="timeline-desc" style={{ wordBreak: 'break-all', fontSize: '0.8rem', lineHeight: '1.4' }}>
-                            {log.detail}
+
+                          {/* Detail Content with Visual Formatting */}
+                          <div className="timeline-desc">
+                            {resolvedDetail}
+                          </div>
+
+                          {/* Hover Action Indicator */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', marginTop: '2px', alignItems: 'center', gap: '3px' }}>
+                            <span>🔍 點擊查看審計數據</span>
+                            <span style={{ fontSize: '0.72rem' }}>➔</span>
                           </div>
                         </div>
                       );
@@ -2056,14 +2307,15 @@ const SettingsView = ({
                         className="glass-btn"
                         style={{
                           width: '100%',
-                          padding: '8px',
-                          borderRadius: '8px',
-                          fontSize: '0.76rem',
+                          padding: '9px',
+                          borderRadius: '10px',
+                          fontSize: '0.78rem',
                           color: '#007aff',
                           background: 'rgba(0, 122, 255, 0.08)',
                           border: '0.5px solid rgba(0, 122, 255, 0.25)',
                           cursor: 'pointer',
-                          marginTop: '6px'
+                          marginTop: '6px',
+                          fontWeight: '700'
                         }}
                       >
                         ⬇️ 展開更多已載入軌跡 (尚有 {filteredLogs.length - visibleLogCount} 筆)
@@ -2094,6 +2346,162 @@ const SettingsView = ({
                   )}
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* === 🔍 操作審計深度檢視器彈窗 (Audit Log Inspector Modal) === */}
+        {selectedAuditLog && (
+          <div 
+            className="modal-overlay" 
+            style={{ zIndex: 99999 }}
+            onClick={() => setSelectedAuditLog(null)}
+          >
+            <div 
+              className="glass-card" 
+              style={{
+                width: '92%',
+                maxWidth: '520px',
+                maxHeight: '85vh',
+                overflowY: 'auto',
+                padding: '22px',
+                borderRadius: '18px',
+                background: 'rgba(22, 22, 26, 0.95)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.2rem' }}>🔍</span>
+                  <div>
+                    <div style={{ fontWeight: '850', fontSize: '0.98rem', color: '#fff' }}>操作審計深度檢視器</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>完整記錄時間戳記、操作者與審計數據</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAuditLog(null)}
+                  style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Status Banner */}
+              {(() => {
+                const meta = getActionMeta(selectedAuditLog);
+                const resolvedDetail = getResolvedLogDetail(selectedAuditLog);
+                const operatorDisplay = (selectedAuditLog.operator?.includes('大狗狗') || selectedAuditLog.operator === 'userA') ? '🐕 大狗狗' :
+                                        (selectedAuditLog.operator?.includes('阿陞') || selectedAuditLog.operator === 'userB') ? '🐶 阿陞' : (selectedAuditLog.operator || '🤖 系統');
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {/* Basic Meta Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.04)', padding: '10px 12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginBottom: '4px' }}>👤 操作人員</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.86rem', color: operatorDisplay.includes('大狗狗') ? '#007aff' : (operatorDisplay.includes('阿陞') ? '#af52de' : '#fff') }}>
+                          {operatorDisplay}
+                        </div>
+                      </div>
+
+                      <div style={{ background: meta.bg, padding: '10px 12px', borderRadius: '12px', border: `1px solid ${meta.color}40` }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginBottom: '4px' }}>🏷️ 動作類別</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.86rem', color: meta.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>{meta.icon}</span>
+                          <span>{meta.label}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Full Detail Box */}
+                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: '6px', fontWeight: '700' }}>📋 詳細審計內容</div>
+                      <div style={{ fontSize: '0.86rem', color: '#ffffff', lineHeight: '1.6', wordBreak: 'break-all' }}>
+                        {resolvedDetail}
+                      </div>
+                    </div>
+
+                    {/* Time Details */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.74rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-tertiary)' }}>🕒 本地精確時間:</span>
+                        <span style={{ color: '#fff', fontWeight: '700', fontFamily: 'monospace' }}>{formatTimestamp(selectedAuditLog.timestamp)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-tertiary)' }}>🌐 ISO 8601 時間戳:</span>
+                        <span style={{ color: '#64d2ff', fontFamily: 'monospace' }}>{selectedAuditLog.timestamp || '無'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-tertiary)' }}>⏱️ 相對時間距離:</span>
+                        <span style={{ color: '#ffb94f', fontWeight: '700' }}>{formatRelativeTime(selectedAuditLog.timestamp) || '過去記錄'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-tertiary)' }}>🔑 資料庫 Document ID:</span>
+                        <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{selectedAuditLog.id || '無'}</span>
+                      </div>
+                    </div>
+
+                    {/* Raw JSON Box with One-Click Copy */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: '700' }}>💾 原始審計資料 (JSON)</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(JSON.stringify(selectedAuditLog, null, 2));
+                            customAlert("📋 審計 JSON 數據已成功複製至剪貼簿！");
+                          }}
+                          className="glass-btn"
+                          style={{ padding: '3px 8px', fontSize: '0.7rem', color: '#64d2ff', borderRadius: '6px' }}
+                        >
+                          📋 複製 JSON
+                        </button>
+                      </div>
+                      <pre style={{
+                        background: 'rgba(0,0,0,0.5)',
+                        padding: '10px',
+                        borderRadius: '10px',
+                        fontSize: '0.72rem',
+                        color: '#a1e44d',
+                        fontFamily: 'SF Mono, Consolas, monospace',
+                        maxHeight: '130px',
+                        overflowY: 'auto',
+                        margin: 0,
+                        border: '1px solid rgba(255,255,255,0.06)'
+                      }}>
+                        {JSON.stringify(selectedAuditLog, null, 2)}
+                      </pre>
+                    </div>
+
+                    {/* Bottom Close Button */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAuditLog(null)}
+                      className="glass-btn"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '12px',
+                        fontSize: '0.84rem',
+                        fontWeight: '800',
+                        color: '#fff',
+                        background: 'rgba(255,255,255,0.08)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        cursor: 'pointer',
+                        marginTop: '4px'
+                      }}
+                    >
+                      關閉檢視器
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

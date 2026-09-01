@@ -18,7 +18,15 @@ const swRecentNotifs = new Map();
 
 messaging.onBackgroundMessage((payload) => {
   console.log('[SW] Received background message payload: ', payload);
-  const rawTitle = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || '系統通知';
+
+  // ★ 若 FCM Payload 內已包含 notification 物件，Firebase Compat SDK 會自動於背景觸發原生通知。
+  // 為防止與 SDK 預設行為重疊導致同時跳出 2 則通知，此處不重複呼叫 showNotification。
+  if (payload.notification && (payload.notification.title || payload.notification.body)) {
+    console.log('[SW] Notification object detected, already handled automatically by Firebase SDK. Skipping manual display.');
+    return Promise.resolve();
+  }
+
+  const rawTitle = payload.data?.title || '系統通知';
   const title = String(rawTitle)
     .replace(/\s*[[(（【]?(from|drom)?\s*馬鈴薯管家\s*[\])）】]?/gi, '')
     .replace(/\s*(from|drom)\s*馬鈴薯管家/gi, '')
@@ -31,7 +39,7 @@ messaging.onBackgroundMessage((payload) => {
     .replace(/^[\s\-–—:：【】()[\]]+/, '')
     .replace(/[\s\-–—:：【】()[\]]+$/, '')
     .trim() || '系統通知';
-  const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || '';
+  const body = payload.data?.body || '';
 
   const dedupKey = `${title}_${body}`;
   const now = Date.now();

@@ -325,9 +325,31 @@ const showDeduplicatedNotification = (rawTitle, rawBody, extraOptions = {}) => {
 const getTokensArray = (field) => {
   if (!field) return [];
   if (typeof field === 'string') return [field];
-  if (Array.isArray(field)) return field.filter(t => typeof t === 'string' && t.length > 5);
+  if (Array.isArray(field)) return Array.from(new Set(field.filter(t => typeof t === 'string' && t.length > 5)));
   if (typeof field === 'object' && field !== null) {
-    return Object.keys(field).filter(t => typeof t === 'string' && t.length > 5);
+    // 若為裝置物件字典，依據裝置特徵 (相同作業系統、瀏覽器、螢幕與 PWA 狀態) 嚴格去重，每個實體裝置僅保留最新的 1 個 Token
+    const deviceMap = new Map();
+    const resultTokens = [];
+
+    Object.entries(field).forEach(([tok, meta]) => {
+      if (typeof tok !== 'string' || tok.length <= 5) return;
+      if (typeof meta === 'object' && meta !== null && (meta.rawOs || meta.rawBrowser || meta.screen)) {
+        const deviceSig = `${meta.rawOs || ''}_${meta.rawBrowser || ''}_${meta.screen || ''}_${meta.isPWA ? 'pwa' : 'web'}`;
+        const existing = deviceMap.get(deviceSig);
+        const tokTime = new Date(meta.lastSeen || meta.registeredAt || 0).getTime();
+        if (!existing || tokTime > existing.time) {
+          deviceMap.set(deviceSig, { token: tok, time: tokTime });
+        }
+      } else {
+        resultTokens.push(tok);
+      }
+    });
+
+    for (const { token } of deviceMap.values()) {
+      resultTokens.push(token);
+    }
+
+    return Array.from(new Set(resultTokens));
   }
   return [];
 };
@@ -336,16 +358,40 @@ const addTokenToDict = (field, newToken, customName = null) => {
   let dict = {};
   if (typeof field === 'string' && field) {
     dict[field] = { deviceName: '舊登入裝置', icon: '📱', registeredAt: '' };
-  } else if (typeof field === 'object' && field) {
+  } else if (typeof field === 'object' && field && !Array.isArray(field)) {
     dict = { ...field };
+  } else if (Array.isArray(field)) {
+    field.forEach(t => { if (typeof t === 'string' && t.length > 5) dict[t] = { deviceName: '已登入裝置', icon: '📱' }; });
   }
+
   if (newToken) {
     const meta = getDetailedDeviceInfo();
+    let inheritedCustomName = customName;
+
+    // 自動清理同裝置 (相同作業系統、瀏覽器、螢幕與 PWA 狀態) 過去留存的過期舊 Token，避免單一裝置累積多組 Token 造成重複發送
+    Object.entries(dict).forEach(([oldToken, oldMeta]) => {
+      if (oldToken !== newToken && typeof oldMeta === 'object' && oldMeta !== null) {
+        const isSameDevice = (
+          oldMeta.rawOs === meta.rawOs &&
+          oldMeta.rawBrowser === meta.rawBrowser &&
+          oldMeta.screen === meta.screen &&
+          oldMeta.isPWA === meta.isPWA
+        );
+        if (isSameDevice) {
+          if (!inheritedCustomName && oldMeta.customName) {
+            inheritedCustomName = oldMeta.customName;
+          }
+          console.log(`[Token Dedup] 替換同裝置舊 Token: ${oldToken.substring(0, 10)}... -> 新 Token: ${newToken.substring(0, 10)}...`);
+          delete dict[oldToken];
+        }
+      }
+    });
+
     const existing = dict[newToken] || {};
     dict[newToken] = {
       ...existing,
-      deviceName: customName || existing.customName || existing.deviceName || meta.deviceName,
-      customName: customName || existing.customName || null,
+      deviceName: inheritedCustomName || existing.customName || existing.deviceName || meta.deviceName,
+      customName: inheritedCustomName || existing.customName || null,
       rawOs: meta.rawOs,
       rawBrowser: meta.rawBrowser,
       icon: existing.icon || meta.icon,
@@ -1883,18 +1929,40 @@ function App() {
     };
   };
 
-  const logOperation = (newAssets, actionType, detail) => {
+  const logOperation = (newAssets, actionType, detail, extraMeta = {}) => {
     const timestamp = new Date().toISOString();
+    let safeDetail = '';
+    if (typeof detail === 'string' && detail.trim()) {
+      safeDetail = detail.trim();
+    } else if (typeof detail === 'object' && detail !== null) {
+      try { safeDetail = JSON.stringify(detail); } catch { safeDetail = ''; }
+    }
+
+    if (!safeDetail) {
+      if (actionType === 'budget_update') safeDetail = '更新類別預算設定';
+      else if (actionType === 'budget_delete') safeDetail = '刪除類別預算設定';
+      else if (actionType === 'transaction') safeDetail = '登錄新帳務明細';
+      else if (actionType === 'edit') safeDetail = '修改歷史帳務內容';
+      else if (actionType === 'delete') safeDetail = '作廢撤銷交易明細';
+      else if (actionType === 'calibrate') safeDetail = '帳戶餘額校正調整';
+      else if (actionType === 'transfer') safeDetail = '跨帳戶資產劃撥';
+      else if (actionType === 'settle') safeDetail = '共同支出代墊結算';
+      else if (actionType === 'reset_data') safeDetail = '重設系統測試資料';
+      else safeDetail = actionType ? `執行「${actionType}」操作` : '一般系統操作記錄';
+    }
+
     const logEntry = {
       timestamp,
       operator: operatorName || currentUser?.email?.split('@')[0] || '系統',
-      action: actionType,
-      detail
+      action: actionType || 'transaction',
+      detail: safeDetail,
+      ...(typeof extraMeta === 'object' && extraMeta !== null ? extraMeta : {})
     };
+
     try {
       const logsRef = collection(db, "finance", "data", "operationsLog");
       addDoc(logsRef, cleanFirestoreData(logEntry)).catch(err => console.error("Firestore Log Fail:", err));
-      logger.addLog('CLOUD', `操作紀錄: ${actionType} - ${detail}`);
+      logger.addLog('CLOUD', `操作紀錄: ${actionType} - ${safeDetail}`);
     } catch (e) {
       console.error("Log error:", e);
     }
@@ -1951,20 +2019,10 @@ function App() {
       const finalTitle = cleanPushTitle(title);
       const currentUserKey = operatorName.includes('大狗狗') ? 'userA' : 'userB';
       const partnerUserKey = currentUserKey === 'userA' ? 'userB' : 'userA';
-      let localNativeTriggered = false;
 
       logger.addLog('PUSH', `廣播推播: [${finalTitle}] - ${body}`, { targetScope, notifCategory, sender: operatorName });
 
-      // 1. 本地/裝置原生 Web Notification 觸發 (使用去重管理器，防止與 FCM 重複彈窗)
-      if (isTest || isNotificationEnabledForUser(currentUserKey, notifCategory)) {
-        const notifResult = showDeduplicatedNotification(finalTitle, body);
-        if (notifResult) {
-          localNativeTriggered = true;
-          console.log("[Push] Native Web Notification dispatched locally with dedup!");
-        }
-      }
-
-      // 2. 計算受影響的目標使用者 (targetUserKeys)
+      // 1. 計算受影響的目標使用者 (targetUserKeys)
       let targetUserKeys = [];
       if (isTest) {
         targetUserKeys = [currentUserKey];
@@ -1976,7 +2034,7 @@ function App() {
         targetUserKeys = ['userA', 'userB'];
       }
 
-      // 3. 過濾出開啟該通知類別的使用者，並收集其所有已註冊裝置的 FCM Tokens (跨多平臺/多裝置)
+      // 2. 過濾出開啟該通知類別的使用者，並收集其所有已註冊裝置的 FCM Tokens (依實體裝置嚴格去重)
       let allTokens = [];
       targetUserKeys.forEach(uKey => {
         if (isNotificationEnabledForUser(uKey, notifCategory)) {
@@ -1989,17 +2047,16 @@ function App() {
       console.log(`[Push] Target scope: ${targetScope}, category: ${notifCategory}, tokens:`, allTokens);
 
       if (allTokens.length === 0) {
-        if (isTest && localNativeTriggered) {
+        if (isTest) {
+          showDeduplicatedNotification(finalTitle, body);
           return { success: true, targetCount: 1, message: "✅ 本機測試推播已發送！上方已成功跳出 Notification 通知彈窗。" };
         }
-        const errDesc = isTest
-          ? `當前帳號【${currentUserKey}】尚未在任何裝置上完成 FCM Web Push 註冊，或全域通知開關已關閉。`
-          : '無已註冊並開啟通知之接收目標。';
+        const errDesc = '無已註冊並開啟通知之接收目標。';
         console.warn(`[Push] ${errDesc}`);
         return { success: false, targetCount: 0, error: errDesc };
       }
 
-      // 4. 廣播發送推播給受影響使用者的所有裝置
+      // 3. 透過 GAS 廣播發送推播給目標裝置 (由 FCM 送達後經由 onFcmMessage/SW 統一顯示，絕不重複本地預先彈窗)
       let successCount = 0;
       let errorList = [];
 
@@ -2046,7 +2103,8 @@ function App() {
       if (successCount > 0) {
         const msg = `已成功推播至 ${successCount}/${allTokens.length} 台登入裝置！`;
         return { success: true, targetCount: successCount, message: msg };
-      } else if (isTest && localNativeTriggered) {
+      } else if (isTest) {
+        showDeduplicatedNotification(finalTitle, body);
         return {
           success: true,
           targetCount: 1,
@@ -2067,10 +2125,7 @@ function App() {
       const finalTitle = cleanPushTitle(title);
       logger.addLog('PUSH', `[強制全域廣播] [${finalTitle}] - ${body}`, { sender: operatorName });
 
-      // 1. 本地原生 Web Notification 立即觸發 (使用去重防重)
-      showDeduplicatedNotification(finalTitle, body);
-
-      // 2. 收集雙方所有裝置的 FCM tokens (強制全發，忽視偏好開關)
+      // 收集雙方所有裝置的 FCM tokens (依實體裝置去重)
       const allTokens = [
         ...getTokensArray(assets?.fcmTokens?.userA),
         ...getTokensArray(assets?.fcmTokens?.userB)
@@ -2078,6 +2133,7 @@ function App() {
       const uniqueTokens = Array.from(new Set(allTokens));
 
       if (uniqueTokens.length === 0) {
+        showDeduplicatedNotification(finalTitle, body);
         return { success: true, targetCount: 1, message: "本機已彈出通知（無其他已註冊裝置）" };
       }
 
@@ -2139,11 +2195,6 @@ function App() {
       const body = `這是一則發送到【${deviceName || '指定裝置'}】的單機專屬測試推播！`;
       logger.addLog('PUSH', `[單機測試] [${deviceName}] - ${body}`, { sender: operatorName });
 
-      // 本機原生 Web Notification 立即觸發 (若測試的是本機，使用去重防重)
-      if (fcmDiagnostic?.token === targetToken) {
-        showDeduplicatedNotification(finalTitle, body);
-      }
-
       const res = await fetch(MY_GOOGLE_API_URL, {
         method: 'POST',
         mode: 'cors',
@@ -2166,11 +2217,18 @@ function App() {
       } else if (json && json.errorType === 'UNREGISTERED') {
         handleRemoveBadToken(targetToken);
         return { success: false, error: '該裝置的推播 Token 已過期或失效，系統已自動清除該離線裝置。' };
+      } else if (fcmDiagnostic?.token === targetToken) {
+        showDeduplicatedNotification(finalTitle, body);
+        return { success: true, message: `本機測試推播已彈窗！(遠端回應: ${json?.message || text || '404'})` };
       } else {
         return { success: false, error: json?.message || text || '發送失敗' };
       }
     } catch (e) {
       console.error("[Push] sendSingleDeviceTestPush error:", e);
+      if (fcmDiagnostic?.token === targetToken) {
+        showDeduplicatedNotification("🎯 單機推播測試", `這是一則發送到【${deviceName || '指定裝置'}】的單機專屬測試推播！`);
+        return { success: true, message: `本機測試推播已彈窗！(網路請求異常: ${e.message})` };
+      }
       return { success: false, error: e.message || String(e) };
     }
   }, [operatorName, fcmDiagnostic?.token, handleRemoveBadToken]);
@@ -3001,9 +3059,10 @@ function App() {
       mainList = list;
     }
 
-    // ★ 如果是「系統結算」類型的紀錄被作廢，必須把 mainList 中對應 settleId 的消費明細還原為未結清
-    if (record.type === 'settle' && record.settleId) {
-      mainList = mainList.map(r => (r.type === 'spend' && r.settleId === record.settleId) ? { ...r, isSettled: false, settleId: null } : r);
+    // ★ 如果是「代墊結算」類型的紀錄被作廢，必須把 mainList 中對應 settleId 的消費明細還原為未結清
+    if ((record.type === 'settle' || record.type === 'settlement' || record.category === '代墊結清') && (record.settleId || record.settlementId)) {
+      const targetSettleId = record.settleId || record.settlementId;
+      mainList = mainList.map(r => (r.type === 'spend' && (r.settleId === targetSettleId || r.settlementId === targetSettleId)) ? { ...r, isSettled: false, settleId: null, settlementId: null, settledAt: null } : r);
     }
 
     // ★ 如果是「信用卡帳單劃撥」類型的紀錄被作廢，必須把對應 statementId 的刷卡明細還原為未結清

@@ -58,6 +58,8 @@ const MonthlyView = ({
 
     const [showSettlementModal, setShowSettlementModal] = useState(false);
     const [settlementTarget, setSettlementTarget] = useState(null);
+    const [debtScope, setDebtScope] = useState('all'); // 'all' (全期歷史未結) | 'month' (當月未結) | 'history' (歷史結清紀錄)
+    const [expandedDebtMonths, setExpandedDebtMonths] = useState({}); // Month expansion toggles for detailed breakdown
 
     // Unified Detail & Edit modal states
     const [detailModalRecord, setDetailModalRecord] = useState(null);
@@ -434,51 +436,229 @@ const MonthlyView = ({
     }, [filteredHistory]);
 
 
-    // Debt lists calculation
-    const getDebtList = (user) => {
-        return filteredHistory.filter(r => {
+    // --- 🤝 共同支出代墊結算核心計算與辨識引擎 ---
+    // 智慧辨識一筆共同支出是誰代墊（支援 advancedBy、帳戶歸屬、以及付款人名稱多層防禦判定）
+    const getRecordAdvanceUser = useCallback((record) => {
+        if (!record || record.type !== 'spend' || record.isDeleted) return null;
+        
+        // 1. 直接指定之代墊人
+        if (record.advancedBy === 'userA') return 'userA';
+        if (record.advancedBy === 'userB') return 'userB';
+        if (record.advancedBy === 'jointCash') return null; // 共同現金公費直付，非個人代墊
+        
+        // 2. 依據扣款帳戶之歸屬判斷 (若非 joint 則視為該個人代墊)
+        if (record.accountId && Array.isArray(assets?.accounts)) {
+            const acc = assets.accounts.find(a => a.id === record.accountId);
+            if (acc) {
+                if (acc.owner === 'userA') return 'userA';
+                if (acc.owner === 'userB') return 'userB';
+                if (acc.owner === 'joint') return null;
+            }
+        }
+        
+        // 3. 依據付款人名稱判斷
+        const p = record.payer || '';
+        if (p.includes('大狗') || p.includes('大狗狗') || p === 'userA') return 'userA';
+        if (p.includes('阿陞') || p === 'userB') return 'userB';
+        if (p.includes('共同') || p.includes('貓頭鷹')) return null;
+        
+        // 4. 依據操作者判定
+        if (record.operator?.includes('大狗') || record.operator === 'userA') return 'userA';
+        if (record.operator?.includes('阿陞') || record.operator === 'userB') return 'userB';
+        
+        return null;
+    }, [assets?.accounts]);
+
+    // 取得單筆共同支出的代墊結算狀態與視覺標籤
+    const getRecordSettlementInfo = useCallback((record) => {
+        if (!record || record.type !== 'spend' || record.isDeleted) return null;
+        const advUser = getRecordAdvanceUser(record);
+        if (!advUser) {
+            return {
+                isJointDirect: true,
+                label: '🦉 共同現金直付',
+                color: '#64d2ff',
+                bg: 'rgba(100, 210, 255, 0.12)',
+                border: 'rgba(100, 210, 255, 0.35)'
+            };
+        }
+        const advName = advUser === 'userA' ? '大狗狗' : '阿陞';
+        if (record.isSettled) {
+            return {
+                isSettled: true,
+                advUser,
+                advName,
+                label: `✅ 已代墊結清 (${advName}代墊)`,
+                color: '#30d158',
+                bg: 'rgba(48, 209, 88, 0.15)',
+                border: 'rgba(48, 209, 88, 0.35)',
+                settleId: record.settleId || record.settlementId
+            };
+        }
+        return {
+            isSettled: false,
+            advUser,
+            advName,
+            label: `⏳ 待代墊結算 (${advName}代墊)`,
+            color: '#ff9f0a',
+            bg: 'rgba(255, 159, 10, 0.15)',
+            border: 'rgba(255, 159, 10, 0.4)'
+        };
+    }, [getRecordAdvanceUser]);
+
+    // 全期歷史中所有「待結算代墊共同支出」明細 (跨越所有月份，不漏掉任何歷史帳目)
+    const allUnsettledDebts = useMemo(() => {
+        return historyWithIndex.filter(r => {
             if (r.isDeleted) return false;
             if (r.type !== 'spend') return false;
             if (r.isSettled) return false;
-            if (user === 'userA' && r.advancedBy === 'userA') return true;
-            if (user === 'userB' && r.advancedBy === 'userB') return true;
-            return false;
+            const advUser = getRecordAdvanceUser(r);
+            return !!advUser;
         });
+    }, [historyWithIndex, getRecordAdvanceUser]);
+
+    // 當前選取範圍（全期 vs 當月）下的待結清清單
+    const activeUnsettledDebts = useMemo(() => {
+        if (debtScope === 'month') {
+            return allUnsettledDebts.filter(r => r.month === filterDate || r.date?.startsWith(filterDate));
+        }
+        return allUnsettledDebts;
+    }, [allUnsettledDebts, debtScope, filterDate]);
+
+    // 歷史所有已完成結算的紀錄清單 (type === 'settlement' 或 type === 'settle')
+    const settledHistoryLogs = useMemo(() => {
+        return historyWithIndex.filter(r => {
+            if (r.isDeleted) return false;
+            return r.type === 'settlement' || r.type === 'settle' || r.category === '代墊結清';
+        }).sort((a, b) => new Date(b.date || b.timestamp || 0) - new Date(a.date || a.timestamp || 0));
+    }, [historyWithIndex]);
+
+    // 計算雙方待結款項與相互對沖抵銷淨額 (Net Offset Summary)
+    const settlementSummary = useMemo(() => {
+        const userADebts = activeUnsettledDebts.filter(r => getRecordAdvanceUser(r) === 'userA');
+        const userBDebts = activeUnsettledDebts.filter(r => getRecordAdvanceUser(r) === 'userB');
+
+        const totalA = userADebts.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+        const totalB = userBDebts.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+
+        const diff = totalA - totalB; // 正數代表大狗狗代墊較多，阿陞需轉帳給大狗狗；負數代表阿陞代墊較多
+        const absDiff = Math.abs(diff);
+        const netPayAmount = Math.round(absDiff / 2);
+
+        let payer = null;
+        let receiver = null;
+        let payerKey = null;
+        let receiverKey = null;
+
+        if (diff > 0) {
+            payer = '阿陞 🐶';
+            payerKey = 'userB';
+            receiver = '大狗狗 🐕';
+            receiverKey = 'userA';
+        } else if (diff < 0) {
+            payer = '大狗狗 🐕';
+            payerKey = 'userA';
+            receiver = '阿陞 🐶';
+            receiverKey = 'userB';
+        }
+
+        // 按月份分組統整明細
+        const groupByMonth = (list) => {
+            const map = {};
+            list.forEach(item => {
+                const m = item.month || (item.date ? item.date.slice(0, 7) : '未分類');
+                if (!map[m]) map[m] = { month: m, total: 0, items: [] };
+                map[m].total += (Number(item.total) || 0);
+                map[m].items.push(item);
+            });
+            return Object.values(map).sort((a, b) => b.month.localeCompare(a.month));
+        };
+
+        return {
+            userADebts,
+            userBDebts,
+            userAMonths: groupByMonth(userADebts),
+            userBMonths: groupByMonth(userBDebts),
+            totalA,
+            totalB,
+            countA: userADebts.length,
+            countB: userBDebts.length,
+            totalCount: userADebts.length + userBDebts.length,
+            diff,
+            absDiff,
+            netPayAmount,
+            payer,
+            receiver,
+            payerKey,
+            receiverKey,
+            isBalanced: totalA > 0 && totalA === totalB,
+            isEmpty: totalA === 0 && totalB === 0
+        };
+    }, [activeUnsettledDebts, getRecordAdvanceUser]);
+
+    // 取得指定使用者的待結清清單（支援全期或當月範圍）
+    const getDebtList = (user) => {
+        return activeUnsettledDebts.filter(r => getRecordAdvanceUser(r) === user);
     };
 
-    const handleSettle = async (user) => {
-        const debts = getDebtList(user);
-        const totalDebt = debts.reduce((sum, r) => sum + r.total, 0);
-        const half = Math.round(totalDebt / 2);
+    // ⚡ 雙向對沖一鍵合併結清 (結清雙方所有待結款項，相互抵銷，只轉移支付淨差額)
+    const handleDualSettle = async () => {
+        const { userADebts, userBDebts, totalA, totalB, countA, countB, totalCount, netPayAmount, payer, receiver, payerKey, receiverKey } = settlementSummary;
+        if (totalCount === 0) {
+            await customAlert("目前沒有任何待結算的代墊款項！");
+            return;
+        }
 
-        const label = user === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
-        const partnerLabel = user === 'userA' ? '阿陞 🐶' : '大狗狗 🐕';
-        
-        const confirmMsg = `確定為 ${label} 辦理一鍵結清嗎？\n本次結清 ${debts.length} 筆，代墊總額 ${formatMoney(totalDebt)}。\n應由 ${partnerLabel} 轉移支付半數 $${half.toLocaleString()} 元。`;
-        
-        if (!(await customConfirm(confirmMsg, "一鍵結清"))) return;
+        const targetDebts = [...userADebts, ...userBDebts];
+        const targetIndices = new Set(targetDebts.map(d => d.originalIndex));
 
-        // Reset and update state
+        let confirmMsg = `確定辦理【${debtScope === 'all' ? '🌐 全期歷史未結' : `📅 ${filterDate} 當月`}】雙向代墊合併結清嗎？\n\n`;
+        confirmMsg += `• 🐕 大狗狗 累計代墊：${formatMoney(totalA)} (${countA} 筆)\n`;
+        confirmMsg += `• 🐶 阿陞 累計代墊：${formatMoney(totalB)} (${countB} 筆)\n\n`;
+        
+        if (netPayAmount > 0) {
+            confirmMsg += `👉 相互對沖抵銷後：應由【${payer}】轉帳支付給【${receiver}】 $${netPayAmount.toLocaleString()} 元。\n\n`;
+        } else {
+            confirmMsg += `👉 雙方代墊總額剛好平衡，直接對沖結清！\n\n`;
+        }
+        confirmMsg += `本次將一次將 ${totalCount} 筆共同支出代墊明細全數標記為已結清。`;
+
+        if (!(await customConfirm(confirmMsg, "雙向對沖一鍵結清"))) return;
+
         const settleId = generateSettleId();
+        const nowIso = new Date().toISOString();
+        const todayStr = nowIso.split('T')[0];
+
         const updatedHistory = history.map(r => {
-            const match = debts.some(d => d.originalIndex === r.originalIndex);
-            if (match) {
-                return { ...r, isSettled: true, settlementId: settleId };
+            if (targetIndices.has(r.originalIndex)) {
+                return {
+                    ...r,
+                    isSettled: true,
+                    settleId: settleId,
+                    settlementId: settleId,
+                    settledAt: nowIso
+                };
             }
             return r;
         });
 
-        // Add settlement log record
         const settlementLog = {
-            date: new Date().toISOString().split('T')[0],
-            month: filterDate,
+            id: settleId,
+            date: todayStr,
+            month: todayStr.slice(0, 7),
             type: 'settlement',
             category: '代墊結清',
-            total: half,
-            payer: partnerLabel,
-            operator: currentUser,
-            note: `[代墊結清] 結清${label}代墊的 ${debts.length} 筆帳目 (代墊總額: $${totalDebt.toLocaleString()})`,
-            timestamp: new Date().toISOString()
+            total: netPayAmount,
+            payer: payer || '雙方結清',
+            receiver: receiver || '雙方結清',
+            settledUser: receiverKey || null,
+            operator: currentUser?.email?.split('@')[0] || '系統',
+            note: `[代墊結清] 結清大狗狗代墊 $${totalA.toLocaleString()} (${countA}筆) 與 阿陞代墊 $${totalB.toLocaleString()} (${countB}筆)，對沖後由 ${payer || '雙方'} 轉付 ${receiver || '雙方'} $${netPayAmount.toLocaleString()}`,
+            timestamp: nowIso,
+            settleId: settleId,
+            settlementId: settleId,
+            settledCount: totalCount,
+            settleScope: debtScope
         };
 
         const finalAssets = {
@@ -494,7 +674,67 @@ const MonthlyView = ({
         } else if (setAssets) {
             setAssets(finalAssets);
         }
-        await customAlert(`🎉 結清成功！已生成一筆結清紀錄。`);
+
+        await customAlert(`🎉 雙向對沖結清完成！\n共結清 ${totalCount} 筆代墊明細。\n結算紀錄已建立，流水帳狀態已全數同步更新。`, "結清成功");
+    };
+
+    // 單方獨立結清 (保留作為彈性備用選項)
+    const handleSettle = async (user) => {
+        const debts = getDebtList(user);
+        const totalDebt = debts.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+        const half = Math.round(totalDebt / 2);
+
+        const label = user === 'userA' ? '大狗狗 🐕' : '阿陞 🐶';
+        const partnerLabel = user === 'userA' ? '阿陞 🐶' : '大狗狗 🐕';
+        
+        const confirmMsg = `確定單獨為 ${label} 辦理一鍵結清嗎？\n本次結清 ${debts.length} 筆，代墊總額 ${formatMoney(totalDebt)}。\n應由 ${partnerLabel} 轉移支付半數 $${half.toLocaleString()} 元。`;
+        
+        if (!(await customConfirm(confirmMsg, "單方一鍵結清"))) return;
+
+        const settleId = generateSettleId();
+        const nowIso = new Date().toISOString();
+        const todayStr = nowIso.split('T')[0];
+
+        const targetIndices = new Set(debts.map(d => d.originalIndex));
+        const updatedHistory = history.map(r => {
+            if (targetIndices.has(r.originalIndex)) {
+                return { ...r, isSettled: true, settleId: settleId, settlementId: settleId, settledAt: nowIso };
+            }
+            return r;
+        });
+
+        const settlementLog = {
+            id: settleId,
+            date: todayStr,
+            month: todayStr.slice(0, 7),
+            type: 'settlement',
+            category: '代墊結清',
+            total: half,
+            payer: partnerLabel,
+            receiver: label,
+            settledUser: user,
+            operator: currentUser?.email?.split('@')[0] || '系統',
+            note: `[單方代墊結清] 結清${label}代墊的 ${debts.length} 筆帳目 (代墊總額: $${totalDebt.toLocaleString()})，由 ${partnerLabel} 支付 $${half.toLocaleString()}`,
+            timestamp: nowIso,
+            settleId: settleId,
+            settlementId: settleId,
+            settledCount: debts.length
+        };
+
+        const finalAssets = {
+            ...assets,
+            monthlyExpenses: [
+                ...updatedHistory,
+                settlementLog
+            ]
+        };
+
+        if (onTransaction) {
+            onTransaction(finalAssets, settlementLog);
+        } else if (setAssets) {
+            setAssets(finalAssets);
+        }
+        await customAlert(`🎉 結清成功！已生成一筆結清紀錄。`, "結清成功");
     };
 
     const currentMonthLabel = filterDate.replace('-', ' 年 ') + ' 月';
@@ -717,6 +957,25 @@ const MonthlyView = ({
                                                         }}>
                                                             🛒 購物車整批結帳 (共 {record.records.length} 筆)
                                                         </span>
+                                                        {/* Settlement Badge for Batch */}
+                                                        {(() => {
+                                                            const spendSubs = record.records?.filter(r => r.type === 'spend' && !r.isDeleted && r.category !== '作廢退款') || [];
+                                                            if (spendSubs.length === 0) return null;
+                                                            const allSettled = spendSubs.every(r => r.isSettled);
+                                                            return (
+                                                                <span style={{
+                                                                    fontSize: '0.62rem',
+                                                                    background: allSettled ? 'rgba(48,209,88,0.15)' : 'rgba(255,159,10,0.15)',
+                                                                    color: allSettled ? '#30d158' : '#ff9f0a',
+                                                                    border: allSettled ? '0.5px solid rgba(48,209,88,0.35)' : '0.5px solid rgba(255,159,10,0.4)',
+                                                                    padding: '1px 6px',
+                                                                    borderRadius: '4px',
+                                                                    fontWeight: '750'
+                                                                }}>
+                                                                    {allSettled ? '✅ 代墊已結清' : '⏳ 含待結算代墊'}
+                                                                </span>
+                                                            );
+                                                        })()}
                                                         {isDeleted && (
                                                             <span style={{ fontSize: '0.6rem', backgroundColor: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
                                                                 已作廢
@@ -933,6 +1192,24 @@ const MonthlyView = ({
                                                     <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>
                                                         {record.date}
                                                     </span>
+                                                    {/* Settlement Status Badge for Spend / Joint Expenses */}
+                                                    {(() => {
+                                                        const settleInfo = getRecordSettlementInfo(record);
+                                                        if (!settleInfo) return null;
+                                                        return (
+                                                            <span style={{
+                                                                fontSize: '0.62rem',
+                                                                background: settleInfo.bg,
+                                                                color: settleInfo.color,
+                                                                border: `0.5px solid ${settleInfo.border}`,
+                                                                padding: '1px 6px',
+                                                                borderRadius: '4px',
+                                                                fontWeight: '750'
+                                                            }}>
+                                                                {settleInfo.label}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                     {isDeleted && (
                                                         <span style={{ fontSize: '0.6rem', backgroundColor: '#8e8e93', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
                                                             已作廢
@@ -1077,77 +1354,561 @@ const MonthlyView = ({
                 </div>
             )}
 
-            {/* VIEW MODE 3: DEBT SETTLEMENT */}
+            {/* VIEW MODE 3: DEBT SETTLEMENT (代墊結算全新升級版) */}
             {viewMode === 'debts' && (
                 <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     
-                    {/* Visual Card 1: User A */}
-                    {(() => {
-                        const debts = getDebtList('userA');
-                        const debt = debts.reduce((sum, r) => sum + r.total, 0);
-                        return (
-                            <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-purple)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                    <div>
-                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>大狗狗</h4>
-                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>大狗狗為「共同支出」代墊的未結算明細</span>
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontWeight: '850', fontSize: '1.25rem', color: '#fff' }}>{formatMoney(debt)}</div>
-                                        <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>累計代墊</span>
-                                    </div>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '6px' }}>
-                                    {debt > 0 ? (
-                                        <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer', fontWeight: '600' }} onClick={() => { setSettlementTarget('userA'); setShowSettlementModal(true); }}>
-                                            明細及對帳單
-                                        </div>
-                                    ) : (
-                                        <div style={{ fontSize: '0.78rem', color: '#30d158', fontWeight: '600' }}>已全數清算結案</div>
-                                    )}
-                                    {debt > 0 && (
-                                        <button className="glass-btn" style={{ padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.3)', backgroundColor: 'rgba(52,199,89,0.08)' }} onClick={() => handleSettle('userA')}>
-                                            一鍵結清
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })()}
+                    {/* Scope Selector: All-time vs Current Month vs Settlement History */}
+                    <div style={{
+                        display: 'flex',
+                        gap: '6px',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        padding: '4px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.08)'
+                    }}>
+                        <button
+                            type="button"
+                            onClick={() => setDebtScope('all')}
+                            style={{
+                                flex: 1.2,
+                                padding: '8px 6px',
+                                fontSize: '0.78rem',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: debtScope === 'all' ? 'rgba(10, 132, 255, 0.25)' : 'transparent',
+                                color: debtScope === 'all' ? '#64d2ff' : 'var(--text-secondary)',
+                                fontWeight: debtScope === 'all' ? '800' : '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                            }}
+                        >
+                            <span>🌐 全期未結</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.85, background: debtScope === 'all' ? 'rgba(100,210,255,0.2)' : 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '10px' }}>
+                                {allUnsettledDebts.length}
+                            </span>
+                        </button>
 
-                    {/* Visual Card 2: User B */}
-                    {(() => {
-                        const debts = getDebtList('userB');
-                        const debt = debts.reduce((sum, r) => sum + r.total, 0);
-                        return (
-                            <div className="glass-card" style={{ padding: '18px', borderLeft: '4px solid var(--accent-green)' }}>
+                        <button
+                            type="button"
+                            onClick={() => setDebtScope('month')}
+                            style={{
+                                flex: 1,
+                                padding: '8px 6px',
+                                fontSize: '0.78rem',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: debtScope === 'month' ? 'rgba(10, 132, 255, 0.25)' : 'transparent',
+                                color: debtScope === 'month' ? '#64d2ff' : 'var(--text-secondary)',
+                                fontWeight: debtScope === 'month' ? '800' : '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                            }}
+                        >
+                            <span>📅 當月 ({filterDate.slice(5)}月)</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.85, background: debtScope === 'month' ? 'rgba(100,210,255,0.2)' : 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '10px' }}>
+                                {allUnsettledDebts.filter(r => r.month === filterDate || r.date?.startsWith(filterDate)).length}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setDebtScope('history')}
+                            style={{
+                                flex: 1,
+                                padding: '8px 6px',
+                                fontSize: '0.78rem',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: debtScope === 'history' ? 'rgba(10, 132, 255, 0.25)' : 'transparent',
+                                color: debtScope === 'history' ? '#64d2ff' : 'var(--text-secondary)',
+                                fontWeight: debtScope === 'history' ? '800' : '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                            }}
+                        >
+                            <span>📜 歷史結清</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.85, background: debtScope === 'history' ? 'rgba(100,210,255,0.2)' : 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '10px' }}>
+                                {settledHistoryLogs.length}
+                            </span>
+                        </button>
+                    </div>
+
+                    {/* VIEW SUBMODE A: ACTIVE UNSETTLED MASTER CARD & BREAKDOWNS */}
+                    {debtScope !== 'history' && (
+                        <>
+                            {/* MASTER CARD: 雙向相互對沖淨額主卡片 */}
+                            <div className="glass-card" style={{
+                                padding: '18px 16px',
+                                border: settlementSummary.isEmpty ? '1px solid rgba(48, 209, 88, 0.3)' : '1px solid rgba(100, 210, 255, 0.3)',
+                                background: settlementSummary.isEmpty
+                                    ? 'linear-gradient(135deg, rgba(48, 209, 88, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)'
+                                    : 'linear-gradient(135deg, rgba(10, 132, 255, 0.12) 0%, rgba(175, 82, 222, 0.08) 100%)',
+                                position: 'relative',
+                                overflow: 'hidden'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '1.2rem' }}>⚖️</span>
+                                        <div>
+                                            <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: '850', color: '#fff' }}>
+                                                {debtScope === 'all' ? '全期代墊雙向對沖結算' : `${currentMonthLabel} 代墊對沖結算`}
+                                            </h3>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                                                {debtScope === 'all' ? '自動整合歷史所有未結共同支出，自動相互抵銷' : '僅結算當月之未結共同支出'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '0.68rem',
+                                        fontWeight: '800',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        background: settlementSummary.isEmpty ? 'rgba(48, 209, 88, 0.15)' : 'rgba(255, 159, 10, 0.15)',
+                                        color: settlementSummary.isEmpty ? '#30d158' : '#ff9f0a',
+                                        border: settlementSummary.isEmpty ? '0.5px solid rgba(48, 209, 88, 0.4)' : '0.5px solid rgba(255, 159, 10, 0.4)'
+                                    }}>
+                                        {settlementSummary.isEmpty ? '✅ 帳務已平' : `待結清 ${settlementSummary.totalCount} 筆`}
+                                    </span>
+                                </div>
+
+                                {/* Comparison Grid */}
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1fr 1fr',
+                                    gap: '10px',
+                                    marginBottom: '14px'
+                                }}>
+                                    {/* User A Block */}
+                                    <div style={{
+                                        background: 'rgba(0, 0, 0, 0.25)',
+                                        border: '0.5px solid rgba(175, 82, 222, 0.35)',
+                                        borderRadius: '12px',
+                                        padding: '12px 10px',
+                                        textAlign: 'center'
+                                    }}>
+                                        <div style={{ fontSize: '0.74rem', color: '#bf5af2', fontWeight: '800', marginBottom: '2px' }}>
+                                            🐕 大狗狗 累計代墊
+                                        </div>
+                                        <div style={{ fontSize: '1.25rem', fontWeight: '900', color: '#fff' }}>
+                                            ${settlementSummary.totalA.toLocaleString()}
+                                        </div>
+                                        <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                                            共 {settlementSummary.countA} 筆 (半數: ${Math.round(settlementSummary.totalA / 2).toLocaleString()})
+                                        </div>
+                                    </div>
+
+                                    {/* User B Block */}
+                                    <div style={{
+                                        background: 'rgba(0, 0, 0, 0.25)',
+                                        border: '0.5px solid rgba(48, 209, 88, 0.35)',
+                                        borderRadius: '12px',
+                                        padding: '12px 10px',
+                                        textAlign: 'center'
+                                    }}>
+                                        <div style={{ fontSize: '0.74rem', color: '#30d158', fontWeight: '800', marginBottom: '2px' }}>
+                                            🐶 阿陞 累計代墊
+                                        </div>
+                                        <div style={{ fontSize: '1.25rem', fontWeight: '900', color: '#fff' }}>
+                                            ${settlementSummary.totalB.toLocaleString()}
+                                        </div>
+                                        <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                                            共 {settlementSummary.countB} 筆 (半數: ${Math.round(settlementSummary.totalB / 2).toLocaleString()})
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Net Result & One-Click Settle Action Box */}
+                                {settlementSummary.isEmpty ? (
+                                    <div style={{
+                                        textAlign: 'center',
+                                        padding: '14px 10px',
+                                        background: 'rgba(48, 209, 88, 0.1)',
+                                        borderRadius: '12px',
+                                        border: '0.5px solid rgba(48, 209, 88, 0.25)',
+                                        color: '#30d158',
+                                        fontSize: '0.85rem',
+                                        fontWeight: '750'
+                                    }}>
+                                        🎉 目前無任何待結算的共同代墊款項！雙方帳務乾淨平衡。
+                                    </div>
+                                ) : settlementSummary.isBalanced ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        <div style={{
+                                            background: 'rgba(48, 209, 88, 0.12)',
+                                            border: '1px solid rgba(48, 209, 88, 0.3)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            textAlign: 'center'
+                                        }}>
+                                            <div style={{ fontSize: '0.78rem', color: '#30d158', fontWeight: '800' }}>
+                                                ⚖️ 雙方代墊總額剛好平衡！
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', marginTop: '4px' }}>
+                                                雙方各自代墊 ${settlementSummary.totalA.toLocaleString()}，互相抵銷後差額為 $0，無需任何轉帳。
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleDualSettle}
+                                            className="glass-btn"
+                                            style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: '850',
+                                                background: 'linear-gradient(135deg, #30d158 0%, #28cd41 100%)',
+                                                color: '#000',
+                                                border: 'none',
+                                                borderRadius: '12px',
+                                                cursor: 'pointer',
+                                                boxShadow: '0 4px 15px rgba(48, 209, 88, 0.3)'
+                                            }}
+                                        >
+                                            ⚡ 一鍵平衡歸零結清 (沖銷 {settlementSummary.totalCount} 筆)
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        <div style={{
+                                            background: 'rgba(0, 0, 0, 0.35)',
+                                            border: '1px solid rgba(255, 159, 10, 0.4)',
+                                            borderRadius: '12px',
+                                            padding: '14px',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.74rem', color: '#ff9f0a', fontWeight: '800' }}>
+                                                    👉 相互抵銷後結算指示
+                                                </div>
+                                                <div style={{ fontSize: '0.92rem', fontWeight: '850', color: '#fff', marginTop: '3px' }}>
+                                                    應由 <span style={{ color: '#ff9f0a' }}>{settlementSummary.payer}</span> 轉帳給 <span style={{ color: '#64d2ff' }}>{settlementSummary.receiver}</span>
+                                                </div>
+                                                <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '3px' }}>
+                                                    公式：|${settlementSummary.totalA.toLocaleString()} - ${settlementSummary.totalB.toLocaleString()}| ÷ 2 = ${settlementSummary.netPayAmount.toLocaleString()}
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ fontSize: '1.45rem', fontWeight: '950', color: '#ff9f0a', fontFamily: 'monospace' }}>
+                                                    ${settlementSummary.netPayAmount.toLocaleString()}
+                                                </div>
+                                                <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>應付淨額 TWD</div>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleDualSettle}
+                                            className="glass-btn"
+                                            style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                fontSize: '0.92rem',
+                                                fontWeight: '850',
+                                                background: 'linear-gradient(135deg, #ff9f0a 0%, #ff643b 100%)',
+                                                color: '#000',
+                                                border: 'none',
+                                                borderRadius: '12px',
+                                                cursor: 'pointer',
+                                                boxShadow: '0 4px 18px rgba(255, 159, 10, 0.35)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            <span>⚡ 一鍵雙向對沖結清</span>
+                                            <span style={{ fontSize: '0.8rem', opacity: 0.9 }}>
+                                                ({settlementSummary.payer} ➔ {settlementSummary.receiver} ${settlementSummary.netPayAmount.toLocaleString()})
+                                            </span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* USER A ITEM DETAILS ACCORDION CARD */}
+                            <div className="glass-card" style={{ padding: '16px', borderLeft: '4px solid #bf5af2' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                     <div>
-                                        <h4 style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.94rem' }}>阿陞</h4>
-                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>阿陞為「共同支出」代墊的未結算明細</span>
+                                        <h4 style={{ margin: 0, fontWeight: '850', color: '#fff', fontSize: '0.94rem' }}>
+                                            🐕 大狗狗 的代墊清單
+                                        </h4>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                                            大狗狗為「共同支出」代墊之未結款項
+                                        </span>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontWeight: '850', fontSize: '1.25rem', color: '#fff' }}>{formatMoney(debt)}</div>
-                                        <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>累計代墊</span>
+                                        <div style={{ fontWeight: '850', fontSize: '1.18rem', color: '#bf5af2' }}>
+                                            ${settlementSummary.totalA.toLocaleString()}
+                                        </div>
+                                        <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>
+                                            共 {settlementSummary.countA} 筆
+                                        </span>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '6px' }}>
-                                    {debt > 0 ? (
-                                        <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer', fontWeight: '600' }} onClick={() => { setSettlementTarget('userB'); setShowSettlementModal(true); }}>
-                                            明細及對帳單
+
+                                {settlementSummary.countA === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '16px', color: '#30d158', fontSize: '0.8rem', fontWeight: '700' }}>
+                                        ✅ 大狗狗目前無任何未結清代墊
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {settlementSummary.userAMonths.map(mGroup => {
+                                            const isExpanded = expandedDebtMonths[`userA_${mGroup.month}`] !== false; // Default expanded
+                                            return (
+                                                <div key={mGroup.month} style={{ background: 'rgba(0,0,0,0.22)', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                                                    <div
+                                                        onClick={() => setExpandedDebtMonths(prev => ({ ...prev, [`userA_${mGroup.month}`]: !isExpanded }))}
+                                                        style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.03)' }}
+                                                    >
+                                                        <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span>{isExpanded ? '▼' : '▶'}</span>
+                                                            <span>📅 {mGroup.month}</span>
+                                                            <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', fontWeight: 'normal' }}>({mGroup.items.length} 筆)</span>
+                                                        </span>
+                                                        <span style={{ fontSize: '0.84rem', fontWeight: '800', color: '#bf5af2' }}>
+                                                            ${mGroup.total.toLocaleString()}
+                                                        </span>
+                                                    </div>
+
+                                                    {isExpanded && (
+                                                        <div style={{ padding: '4px 10px 8px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                            {mGroup.items.map((r, idx) => {
+                                                                const sourceAcc = assets.accounts?.find(a => a.id === r.accountId);
+                                                                return (
+                                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderBottom: idx < mGroup.items.length - 1 ? '1px dashed rgba(255,255,255,0.05)' : 'none' }}>
+                                                                        <div style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#fff' }}>
+                                                                                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.7rem' }}>{r.date}</span>
+                                                                                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note || r.category}</strong>
+                                                                                {Array.isArray(r.itemizedBreakdown) && r.itemizedBreakdown.length > 0 && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setItemizedModalRecord(r)}
+                                                                                        style={{ background: 'rgba(100,210,255,0.12)', border: '0.5px solid rgba(100,210,255,0.3)', color: '#64d2ff', fontSize: '0.62rem', padding: '1px 5px', borderRadius: '4px', cursor: 'pointer' }}
+                                                                                    >
+                                                                                        🧾 小票
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                            {sourceAcc && (
+                                                                                <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                                                                    扣款：{sourceAcc.icon || '🏦'} {sourceAcc.nickname}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '0.86rem', fontWeight: '800', color: '#fff', flexShrink: 0 }}>
+                                                                            ${r.total.toLocaleString()}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px' }}>
+                                            <div
+                                                style={{ fontSize: '0.76rem', color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer', fontWeight: '600' }}
+                                                onClick={() => { setSettlementTarget('userA'); setShowSettlementModal(true); }}
+                                            >
+                                                📄 查看大狗狗完整對帳單
+                                            </div>
+                                            <button
+                                                className="glass-btn"
+                                                style={{ padding: '5px 12px', fontSize: '0.76rem', fontWeight: '700', color: '#bf5af2', borderColor: 'rgba(191,90,242,0.3)', backgroundColor: 'rgba(191,90,242,0.08)' }}
+                                                onClick={() => handleSettle('userA')}
+                                            >
+                                                單獨結清大狗狗
+                                            </button>
                                         </div>
-                                    ) : (
-                                        <div style={{ fontSize: '0.78rem', color: '#30d158', fontWeight: '600' }}>已全數清算結案</div>
-                                    )}
-                                    {debt > 0 && (
-                                        <button className="glass-btn" style={{ padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-green)', borderColor: 'rgba(52,199,89,0.3)', backgroundColor: 'rgba(52,199,89,0.08)' }} onClick={() => handleSettle('userB')}>
-                                            一鍵結清
-                                        </button>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
-                        );
-                    })()}
+
+                            {/* USER B ITEM DETAILS ACCORDION CARD */}
+                            <div className="glass-card" style={{ padding: '16px', borderLeft: '4px solid #30d158' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontWeight: '850', color: '#fff', fontSize: '0.94rem' }}>
+                                            🐶 阿陞 的代墊清單
+                                        </h4>
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                                            阿陞為「共同支出」代墊之未結款項
+                                        </span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontWeight: '850', fontSize: '1.18rem', color: '#30d158' }}>
+                                            ${settlementSummary.totalB.toLocaleString()}
+                                        </div>
+                                        <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)' }}>
+                                            共 {settlementSummary.countB} 筆
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {settlementSummary.countB === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '16px', color: '#30d158', fontSize: '0.8rem', fontWeight: '700' }}>
+                                        ✅ 阿陞目前無任何未結清代墊
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {settlementSummary.userBMonths.map(mGroup => {
+                                            const isExpanded = expandedDebtMonths[`userB_${mGroup.month}`] !== false; // Default expanded
+                                            return (
+                                                <div key={mGroup.month} style={{ background: 'rgba(0,0,0,0.22)', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                                                    <div
+                                                        onClick={() => setExpandedDebtMonths(prev => ({ ...prev, [`userB_${mGroup.month}`]: !isExpanded }))}
+                                                        style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.03)' }}
+                                                    >
+                                                        <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span>{isExpanded ? '▼' : '▶'}</span>
+                                                            <span>📅 {mGroup.month}</span>
+                                                            <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', fontWeight: 'normal' }}>({mGroup.items.length} 筆)</span>
+                                                        </span>
+                                                        <span style={{ fontSize: '0.84rem', fontWeight: '800', color: '#30d158' }}>
+                                                            ${mGroup.total.toLocaleString()}
+                                                        </span>
+                                                    </div>
+
+                                                    {isExpanded && (
+                                                        <div style={{ padding: '4px 10px 8px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                            {mGroup.items.map((r, idx) => {
+                                                                const sourceAcc = assets.accounts?.find(a => a.id === r.accountId);
+                                                                return (
+                                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderBottom: idx < mGroup.items.length - 1 ? '1px dashed rgba(255,255,255,0.05)' : 'none' }}>
+                                                                        <div style={{ minWidth: 0, flex: 1, paddingRight: '8px' }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#fff' }}>
+                                                                                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.7rem' }}>{r.date}</span>
+                                                                                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note || r.category}</strong>
+                                                                                {Array.isArray(r.itemizedBreakdown) && r.itemizedBreakdown.length > 0 && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setItemizedModalRecord(r)}
+                                                                                        style={{ background: 'rgba(100,210,255,0.12)', border: '0.5px solid rgba(100,210,255,0.3)', color: '#64d2ff', fontSize: '0.62rem', padding: '1px 5px', borderRadius: '4px', cursor: 'pointer' }}
+                                                                                    >
+                                                                                        🧾 小票
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                            {sourceAcc && (
+                                                                                <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                                                                    扣款：{sourceAcc.icon || '🏦'} {sourceAcc.nickname}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '0.86rem', fontWeight: '800', color: '#fff', flexShrink: 0 }}>
+                                                                            ${r.total.toLocaleString()}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px' }}>
+                                            <div
+                                                style={{ fontSize: '0.76rem', color: 'var(--accent-blue)', textDecoration: 'underline', cursor: 'pointer', fontWeight: '600' }}
+                                                onClick={() => { setSettlementTarget('userB'); setShowSettlementModal(true); }}
+                                            >
+                                                📄 查看阿陞完整對帳單
+                                            </div>
+                                            <button
+                                                className="glass-btn"
+                                                style={{ padding: '5px 12px', fontSize: '0.76rem', fontWeight: '700', color: '#30d158', borderColor: 'rgba(52,199,89,0.3)', backgroundColor: 'rgba(52,199,89,0.08)' }}
+                                                onClick={() => handleSettle('userB')}
+                                            >
+                                                單獨結清阿陞
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    {/* VIEW SUBMODE B: HISTORICAL SETTLEMENT LOGS */}
+                    {debtScope === 'history' && (
+                        <div className="glass-card" style={{ padding: '18px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: '850', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span>📜</span>
+                                        <span>歷史代墊結清紀錄</span>
+                                    </h3>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                                        過去所有已完成的代墊結清交易
+                                    </span>
+                                </div>
+                                <span style={{ fontSize: '0.72rem', color: '#64d2ff', fontWeight: '800', background: 'rgba(100,210,255,0.12)', padding: '2px 8px', borderRadius: '10px' }}>
+                                    共 {settledHistoryLogs.length} 筆紀錄
+                                </span>
+                            </div>
+
+                            {settledHistoryLogs.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+                                    尚未有任何歷史代墊結清紀錄
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {settledHistoryLogs.map((log, lIdx) => (
+                                        <div
+                                            key={lIdx}
+                                            style={{
+                                                background: 'rgba(0,0,0,0.25)',
+                                                border: '1px solid rgba(48, 209, 88, 0.25)',
+                                                borderRadius: '12px',
+                                                padding: '12px 14px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ background: 'rgba(48,209,88,0.15)', color: '#30d158', fontSize: '0.68rem', fontWeight: '800', padding: '1px 6px', borderRadius: '5px' }}>
+                                                        🤝 代墊結清
+                                                    </span>
+                                                    <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)' }}>
+                                                        {log.date}
+                                                    </span>
+                                                </div>
+                                                <strong style={{ fontSize: '1rem', color: '#30d158', fontFamily: 'monospace' }}>
+                                                    ${(log.total || 0).toLocaleString()} TWD
+                                                </strong>
+                                            </div>
+                                            <div style={{ fontSize: '0.82rem', color: '#fff', fontWeight: '600' }}>
+                                                {log.note || '共同支出代墊款結清'}
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.68rem', color: 'var(--text-tertiary)', borderTop: '0.5px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
+                                                <span>付款方：<strong style={{ color: 'rgba(255,255,255,0.8)' }}>{log.payer || '無'}</strong></span>
+                                                <span>結算單號：<code style={{ color: '#64d2ff' }}>{log.settleId || log.settlementId || log.id || 'N/A'}</code></span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                 </div>
             )}
@@ -1159,23 +1920,39 @@ const MonthlyView = ({
                         <div className="card-sheet-indicator" />
                         <div className="card-sheet-header">
                             <button className="card-sheet-btn-text" onClick={() => setShowSettlementModal(false)}>關閉</button>
-                            <span className="card-sheet-title">{settlementTarget === 'userA' ? '大狗狗' : '阿陞'} 的代墊明細</span>
+                            <span className="card-sheet-title">{settlementTarget === 'userA' ? '大狗狗' : '阿陞'} 的代墊明細 ({debtScope === 'all' ? '全期未結' : `${filterDate} 當月`})</span>
                             <span style={{ width: '40px' }} />
                         </div>
 
                         <div className="card-sheet-content" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
                             <div className="inset-group-card">
-                                {getDebtList(settlementTarget).map((r, idx) => (
-                                    <div key={idx} className="inset-group-row" style={{ padding: '12px 14px' }}>
-                                        <span className="inset-group-label" style={{ fontSize: '0.86rem' }}>
-                                            <span style={{ color: 'var(--text-tertiary)', marginRight: '8px', fontSize: '0.78rem' }}>{r.date}</span>
-                                            {r.note}
-                                        </span>
-                                        <span className="inset-group-value" style={{ fontWeight: '700' }}>
-                                            {formatMoney(r.total)}
-                                        </span>
+                                {getDebtList(settlementTarget).length === 0 ? (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+                                        無任何待結清明細
                                     </div>
-                                ))}
+                                ) : (
+                                    getDebtList(settlementTarget).map((r, idx) => {
+                                        const sourceAcc = assets.accounts?.find(a => a.id === r.accountId);
+                                        return (
+                                            <div key={idx} className="inset-group-row" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div style={{ minWidth: 0, flex: 1, paddingRight: '10px' }}>
+                                                    <div className="inset-group-label" style={{ fontSize: '0.86rem', color: '#fff' }}>
+                                                        <span style={{ color: 'var(--text-tertiary)', marginRight: '8px', fontSize: '0.78rem' }}>{r.date}</span>
+                                                        {r.note || r.category}
+                                                    </div>
+                                                    {sourceAcc && (
+                                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                                            扣款帳戶：{sourceAcc.icon || '🏦'} {sourceAcc.nickname}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span className="inset-group-value" style={{ fontWeight: '800', color: '#fff', fontSize: '0.92rem' }}>
+                                                    {formatMoney(r.total)}
+                                                </span>
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1239,6 +2016,33 @@ const MonthlyView = ({
                                     <span style={{ color: 'var(--text-tertiary)' }}>記錄成員</span>
                                     <span style={{ color: '#fff' }}>{detailModalRecord.payer || '無'} {detailModalRecord.operator ? `(${detailModalRecord.operator})` : ''}</span>
                                 </div>
+                                {/* Joint / Advance Settlement Status */}
+                                {detailModalRecord.type === 'spend' && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '6px' }}>
+                                        <span style={{ color: 'var(--text-tertiary)' }}>🤝 代墊結算狀態</span>
+                                        {(() => {
+                                            const settleInfo = getRecordSettlementInfo(detailModalRecord);
+                                            if (!settleInfo) return <span style={{ color: 'var(--text-secondary)' }}>一般支出</span>;
+                                            if (settleInfo.isJointDirect) {
+                                                return <span style={{ color: '#64d2ff', fontWeight: '750' }}>🦉 共同公費直付 (非代墊)</span>;
+                                            }
+                                            if (settleInfo.isSettled) {
+                                                return (
+                                                    <span style={{ color: '#30d158', fontWeight: '750' }}>
+                                                        ✅ 已結清 ({settleInfo.advName}代墊{settleInfo.settleId ? ` / 單號: ${settleInfo.settleId.slice(0, 14)}...` : ''})
+                                                    </span>
+                                                );
+                                            }
+                                            const half = Math.round((detailModalRecord.total || 0) / 2);
+                                            const partner = settleInfo.advUser === 'userA' ? '阿陞' : '大狗狗';
+                                            return (
+                                                <span style={{ color: '#ff9f0a', fontWeight: '750' }}>
+                                                    ⏳ 待代墊結算 ({settleInfo.advName}代墊，待{partner}支付 ${half.toLocaleString()})
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
                             </div>
 
                             {/* BATCH EDITOR: WHEN RECORD CONTAINS MULTIPLE CART ITEMS */}

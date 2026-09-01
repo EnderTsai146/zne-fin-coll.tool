@@ -130,10 +130,6 @@ function doPost(e) {
       var fcmPayload = {
         "message": {
           "token": token,
-          "notification": {
-            "title": title,
-            "body": body
-          },
           "data": {
             "title": title,
             "body": body,
@@ -144,6 +140,8 @@ function doPost(e) {
               "Urgency": "high"
             },
             "notification": {
+              "title": title,
+              "body": body,
               "icon": "/apple-touch-icon.png",
               "badge": "/apple-touch-icon.png",
               "tag": tagStr
