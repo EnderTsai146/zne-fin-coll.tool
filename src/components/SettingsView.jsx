@@ -791,6 +791,7 @@ const SettingsView = ({
   const formatTimestamp = (isoStr) => {
     if (!isoStr) return '';
     const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const dateVal = String(d.getDate()).padStart(2, '0');
@@ -799,6 +800,72 @@ const SettingsView = ({
     const s = String(d.getSeconds()).padStart(2, '0');
     return `${y}-${m}-${dateVal} ${h}:${min}:${s}`;
   };
+
+  // 人性化完整審計時間 (如: 2026/08/26 (週三) 10:29:16)
+  const formatHumanAuditTime = (isoStr) => {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return isoStr;
+      const weekDays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dateVal = String(d.getDate()).padStart(2, '0');
+      const dayName = weekDays[d.getDay()];
+      const h = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      const s = String(d.getSeconds()).padStart(2, '0');
+      return `${y}/${m}/${dateVal} (${dayName}) ${h}:${min}:${s}`;
+    } catch {
+      return isoStr;
+    }
+  };
+
+  // 智慧審計實體提取 (提取帳戶、金額、分類、備註等核心查帳資訊)
+  const parseAuditLogEntities = useCallback((log) => {
+    if (!log) return {};
+    const detail = getResolvedLogDetail(log);
+    
+    // 1. 提取金額 (例如: $350, -$1,200, +$500)
+    let amountStr = null;
+    if (log.amount) {
+      amountStr = `$${Number(log.amount).toLocaleString()}`;
+    } else if (log.total) {
+      amountStr = `$${Number(log.total).toLocaleString()}`;
+    } else {
+      const amtMatch = detail.match(/([+\-]?\$[\d,]+(?:\.\d+)?)/);
+      if (amtMatch) amountStr = amtMatch[1];
+    }
+
+    // 2. 提取帳戶資訊
+    let accountName = log.accountNickname || null;
+    if (!accountName && Array.isArray(assets?.accounts)) {
+      for (const acc of assets.accounts) {
+        if (acc.nickname && detail.includes(acc.nickname)) {
+          accountName = `${acc.icon || '🏦'} ${acc.nickname}`;
+          break;
+        }
+      }
+    }
+    if (!accountName) {
+      const bracketMatch = detail.match(/【(.*?)】/);
+      if (bracketMatch) accountName = bracketMatch[1];
+    }
+
+    // 3. 提取分類/項目
+    let categoryName = log.category || log.subCategory || null;
+    if (!categoryName) {
+      const catMatch = detail.match(/\[(.*?)\]/);
+      if (catMatch) categoryName = catMatch[1];
+    }
+
+    return {
+      amountStr,
+      accountName,
+      categoryName,
+      resolvedDetail: detail
+    };
+  }, [assets?.accounts, getResolvedLogDetail]);
 
   const getTimelineDotClass = (log) => {
     const meta = getActionMeta(log);
@@ -2079,17 +2146,17 @@ const SettingsView = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               
               {/* Header & Quick Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '4px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '4px', gap: '8px', flexWrap: 'wrap' }}>
                 <div style={{ fontSize: '0.94rem', fontWeight: '850', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>📜</span>
                   <span>操作審計軌跡中心</span>
                   {loadingLogs && <span style={{ fontSize: '0.72rem', color: '#007aff', animation: 'pulse 1s infinite' }}>● 載入中...</span>}
                 </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
                   <button
                     onClick={handleExportLogsCsv}
                     className="glass-btn"
-                    style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#64d2ff', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{ padding: '5px 10px', fontSize: '0.74rem', color: '#64d2ff', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}
                     title="匯出符合目前篩選條件的軌跡為 CSV"
                   >
                     <span>📥</span>
@@ -2099,25 +2166,25 @@ const SettingsView = ({
                     <button
                       onClick={resetLogFilters}
                       className="glass-btn"
-                      style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#ff9f0a', borderRadius: '8px' }}
+                      style={{ padding: '5px 10px', fontSize: '0.74rem', color: '#ff9f0a', borderRadius: '8px', whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
-                      ✕ 重設篩選
+                      ✕ 重設
                     </button>
                   )}
                   <button
                     onClick={() => fetchLogs(true)}
                     disabled={loadingLogs}
                     className="glass-btn"
-                    style={{ padding: '4px 10px', fontSize: '0.74rem', borderRadius: '8px' }}
+                    style={{ padding: '5px 10px', fontSize: '0.74rem', borderRadius: '8px', whiteSpace: 'nowrap', flexShrink: 0 }}
                     title="重新整理歷史軌跡"
                   >
-                    🔄 重新整理
+                    🔄 重整
                   </button>
                 </div>
               </div>
 
-              {/* Quick Date Presets Bar */}
-              <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+              {/* Quick Date Presets Bar (No deformation, smooth horizontal scroll) */}
+              <div className="log-presets-bar">
                 {[
                   { key: 'all', label: '📅 全部時間' },
                   { key: 'today', label: '⚡ 今日' },
@@ -2129,18 +2196,13 @@ const SettingsView = ({
                     key={preset.key}
                     type="button"
                     onClick={() => handleApplyQuickDate(preset.key)}
+                    className="log-preset-chip"
                     style={{
-                      padding: '4px 10px',
-                      fontSize: '0.72rem',
-                      fontWeight: quickDatePreset === preset.key ? '800' : '500',
-                      borderRadius: '8px',
+                      fontWeight: quickDatePreset === preset.key ? '800' : '600',
                       border: '1px solid',
                       borderColor: quickDatePreset === preset.key ? 'rgba(0, 122, 255, 0.6)' : 'rgba(255, 255, 255, 0.08)',
                       background: quickDatePreset === preset.key ? 'rgba(0, 122, 255, 0.22)' : 'rgba(255, 255, 255, 0.03)',
-                      color: quickDatePreset === preset.key ? '#64d2ff' : 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      transition: 'all 0.15s ease'
+                      color: quickDatePreset === preset.key ? '#64d2ff' : 'var(--text-secondary)'
                     }}
                   >
                     {preset.label}
@@ -2154,7 +2216,7 @@ const SettingsView = ({
                   value={logFilterOperator} 
                   onChange={(e) => setLogFilterOperator(e.target.value)} 
                   className="glass-input" 
-                  style={{ margin: 0, padding: '6px 10px', fontSize: '0.78rem', height: '36px', borderRadius: '8px' }}
+                  style={{ margin: 0, padding: '6px 10px', fontSize: '0.78rem', height: '36px', borderRadius: '8px', minWidth: 0 }}
                 >
                   <option value="all">👥 所有操作者</option>
                   <option value="userA">🐕 大狗狗</option>
@@ -2166,7 +2228,7 @@ const SettingsView = ({
                   value={logFilterAction} 
                   onChange={(e) => setLogFilterAction(e.target.value)} 
                   className="glass-input" 
-                  style={{ margin: 0, padding: '6px 10px', fontSize: '0.78rem', height: '36px', borderRadius: '8px' }}
+                  style={{ margin: 0, padding: '6px 10px', fontSize: '0.78rem', height: '36px', borderRadius: '8px', minWidth: 0 }}
                 >
                   <option value="all">🛠️ 所有動作類型</option>
                   <option value="transaction">🛒 登錄支出 / 記帳</option>
@@ -2181,25 +2243,25 @@ const SettingsView = ({
 
               {/* Custom Date range pickers (Collapsible / Compact) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                   <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 自訂起始日</span>
                   <input 
                     type="date" 
                     value={logStartDate} 
                     onChange={(e) => { setLogStartDate(e.target.value); setQuickDatePreset('custom'); }} 
                     className="glass-input" 
-                    style={{ margin: 0, padding: '5px 8px', fontSize: '0.76rem', height: '34px', borderRadius: '8px' }}
+                    style={{ margin: 0, padding: '5px 8px', fontSize: '0.76rem', height: '34px', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                   <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', paddingLeft: '4px' }}>📅 自訂結束日</span>
                   <input 
                     type="date" 
                     value={logEndDate} 
                     onChange={(e) => { setLogEndDate(e.target.value); setQuickDatePreset('custom'); }} 
                     className="glass-input" 
-                    style={{ margin: 0, padding: '5px 8px', fontSize: '0.76rem', height: '34px', borderRadius: '8px' }}
+                    style={{ margin: 0, padding: '5px 8px', fontSize: '0.76rem', height: '34px', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
@@ -2208,7 +2270,7 @@ const SettingsView = ({
               <div style={{ position: 'relative' }}>
                 <input 
                   type="text" 
-                  placeholder="🔍 即時搜尋關鍵字 (支援多詞搜尋，如「大狗狗 晚餐 $200」)..." 
+                  placeholder="🔍 搜尋關鍵字 (如「大狗狗 晚餐 $200」)..." 
                   value={logSearchText} 
                   onChange={(e) => setLogSearchText(e.target.value)} 
                   className="glass-input" 
@@ -2228,7 +2290,7 @@ const SettingsView = ({
               {/* Stats Bar */}
               <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
                 <span>已載入記憶體: <strong style={{ color: '#fff' }}>{dbLogs.length}</strong> 筆</span>
-                <span>符合搜尋條件: <strong style={{ color: '#30d158' }}>{filteredLogs.length}</strong> 筆</span>
+                <span>符合條件: <strong style={{ color: '#30d158' }}>{filteredLogs.length}</strong> 筆</span>
               </div>
 
               {loadingLogs && dbLogs.length === 0 ? (
@@ -2258,14 +2320,14 @@ const SettingsView = ({
                           key={log.id || idx} 
                           className="timeline-item"
                           onClick={() => setSelectedAuditLog(log)}
-                          title="點擊展開此筆軌跡之深度審計詳情"
+                          title="點擊查看詳細審計資料"
                         >
                           <div className={getTimelineDotClass(log)} />
                           
-                          {/* Top Meta Header: Operator + Action Badge + Time */}
+                          {/* Top Meta Header: Operator + Action Badge (Left) ... Time (Right) */}
                           <div className="timeline-meta">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                              <span className="timeline-operator" style={{ color: operatorDisplay.includes('大狗狗') ? '#007aff' : (operatorDisplay.includes('阿陞') ? '#af52de' : 'var(--text-secondary)') }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', minWidth: 0, flex: 1 }}>
+                              <span className="timeline-operator" style={{ color: operatorDisplay.includes('大狗狗') ? '#64d2ff' : (operatorDisplay.includes('阿陞') ? '#bf5af2' : 'var(--text-secondary)') }}>
                                 {operatorDisplay}
                               </span>
                               <span 
@@ -2277,24 +2339,24 @@ const SettingsView = ({
                               </span>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                               {relativeTime && (
-                                <span style={{ fontSize: '0.7rem', color: '#ffb94f', background: 'rgba(255, 185, 79, 0.12)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>
+                                <span style={{ fontSize: '0.68rem', color: '#ffb94f', background: 'rgba(255, 185, 79, 0.12)', padding: '1px 5px', borderRadius: '4px', fontWeight: '750', whiteSpace: 'nowrap' }}>
                                   {relativeTime}
                                 </span>
                               )}
-                              <span className="timeline-time">{formatTimestamp(log.timestamp)}</span>
+                              <span className="timeline-time">{formatTimestamp(log.timestamp).slice(5, 16)}</span>
                             </div>
                           </div>
 
-                          {/* Detail Content with Visual Formatting */}
+                          {/* Detail Content with proper Chinese word wrapping */}
                           <div className="timeline-desc">
                             {resolvedDetail}
                           </div>
 
-                          {/* Hover Action Indicator */}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', marginTop: '2px', alignItems: 'center', gap: '3px' }}>
-                            <span>🔍 點擊查看審計數據</span>
+                          {/* Tap to view hint */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px', alignItems: 'center', gap: '3px' }}>
+                            <span>🔍 點擊查看查帳詳情</span>
                             <span style={{ fontSize: '0.72rem' }}>➔</span>
                           </div>
                         </div>
@@ -2350,160 +2412,159 @@ const SettingsView = ({
           </div>
         )}
 
-        {/* === 🔍 操作審計深度檢視器彈窗 (Audit Log Inspector Modal) === */}
-        {selectedAuditLog && (
+        {/* === 🔍 操作審計深度檢視器彈窗 (Centered Floating User-Centric Modal) === */}
+        {selectedAuditLog && createPortal(
           <div 
-            className="modal-overlay" 
-            style={{ zIndex: 99999 }}
+            className="liquid-modal-overlay" 
             onClick={() => setSelectedAuditLog(null)}
           >
             <div 
-              className="glass-card" 
+              className="liquid-modal-card" 
               style={{
+                maxWidth: '440px',
                 width: '92%',
-                maxWidth: '520px',
-                maxHeight: '85vh',
-                overflowY: 'auto',
-                padding: '22px',
-                borderRadius: '18px',
-                background: 'rgba(22, 22, 26, 0.95)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7)',
+                maxHeight: '86vh',
+                padding: '20px 18px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '16px'
+                gap: '14px',
+                boxSizing: 'border-box'
               }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '1.2rem' }}>🔍</span>
+                  <span style={{ fontSize: '1.25rem' }}>🔍</span>
                   <div>
-                    <div style={{ fontWeight: '850', fontSize: '0.98rem', color: '#fff' }}>操作審計深度檢視器</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>完整記錄時間戳記、操作者與審計數據</div>
+                    <div style={{ fontWeight: '850', fontSize: '1.02rem', color: '#fff' }}>操作審計詳情</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>核對操作時間、操作者與財務變動</div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedAuditLog(null)}
-                  style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}
+                  style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}
                 >
                   ✕
                 </button>
               </div>
 
-              {/* Status Banner */}
+              {/* Modal Scrollable Body */}
               {(() => {
                 const meta = getActionMeta(selectedAuditLog);
-                const resolvedDetail = getResolvedLogDetail(selectedAuditLog);
+                const entities = parseAuditLogEntities(selectedAuditLog);
                 const operatorDisplay = (selectedAuditLog.operator?.includes('大狗狗') || selectedAuditLog.operator === 'userA') ? '🐕 大狗狗' :
-                                        (selectedAuditLog.operator?.includes('阿陞') || selectedAuditLog.operator === 'userB') ? '🐶 阿陞' : (selectedAuditLog.operator || '🤖 系統');
+                                        (selectedAuditLog.operator?.includes('阿陞') || selectedAuditLog.operator === 'userB') ? '🐶 阿陞' : (selectedAuditLog.operator || '🤖 系統自動');
+                const humanTime = formatHumanAuditTime(selectedAuditLog.timestamp);
+                const relativeTime = formatRelativeTime(selectedAuditLog.timestamp);
+
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {/* Basic Meta Cards */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0, overflowY: 'auto', padding: '2px' }}>
+                    {/* 1. 操作者與動作卡片 */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                       <div style={{ background: 'rgba(255,255,255,0.04)', padding: '10px 12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginBottom: '4px' }}>👤 操作人員</div>
-                        <div style={{ fontWeight: '800', fontSize: '0.86rem', color: operatorDisplay.includes('大狗狗') ? '#007aff' : (operatorDisplay.includes('阿陞') ? '#af52de' : '#fff') }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginBottom: '3px' }}>👤 操作人員</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.9rem', color: operatorDisplay.includes('大狗狗') ? '#64d2ff' : (operatorDisplay.includes('阿陞') ? '#bf5af2' : '#fff') }}>
                           {operatorDisplay}
                         </div>
                       </div>
 
                       <div style={{ background: meta.bg, padding: '10px 12px', borderRadius: '12px', border: `1px solid ${meta.color}40` }}>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginBottom: '4px' }}>🏷️ 動作類別</div>
-                        <div style={{ fontWeight: '800', fontSize: '0.86rem', color: meta.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginBottom: '3px' }}>🏷️ 動作類別</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.9rem', color: meta.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>{meta.icon}</span>
                           <span>{meta.label}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Full Detail Box */}
+                    {/* 2. 操作時間卡片 */}
+                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>🕒 操作執行時間</div>
+                        <div style={{ fontSize: '0.86rem', fontWeight: '800', color: '#fff', marginTop: '2px' }}>
+                          {humanTime}
+                        </div>
+                      </div>
+                      {relativeTime && (
+                        <span style={{ fontSize: '0.74rem', color: '#ffb94f', background: 'rgba(255, 185, 79, 0.12)', border: '0.5px solid rgba(255, 185, 79, 0.3)', padding: '3px 8px', borderRadius: '8px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                          {relativeTime}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 3. 完整異動說明內容 */}
                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: '6px', fontWeight: '700' }}>📋 詳細審計內容</div>
-                      <div style={{ fontSize: '0.86rem', color: '#ffffff', lineHeight: '1.6', wordBreak: 'break-all' }}>
-                        {resolvedDetail}
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: '6px', fontWeight: '750', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>📋</span>
+                        <span>完整異動內容說明</span>
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#ffffff', lineHeight: '1.6', wordBreak: 'normal', overflowWrap: 'break-word', fontWeight: '600' }}>
+                        {entities.resolvedDetail}
                       </div>
                     </div>
 
-                    {/* Time Details */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.74rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-tertiary)' }}>🕒 本地精確時間:</span>
-                        <span style={{ color: '#fff', fontWeight: '700', fontFamily: 'monospace' }}>{formatTimestamp(selectedAuditLog.timestamp)}</span>
+                    {/* 4. 財務核算核心實體 (若有帳戶或金額) */}
+                    {(entities.accountName || entities.amountStr || entities.categoryName) && (
+                      <div style={{ background: 'rgba(10, 132, 255, 0.08)', border: '1px solid rgba(10, 132, 255, 0.25)', borderRadius: '12px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontSize: '0.74rem', color: '#64d2ff', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>💳</span>
+                          <span>財務核算實體要素</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: entities.accountName && entities.amountStr ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                          {entities.accountName && (
+                            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '8px 10px', borderRadius: '8px' }}>
+                              <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)' }}>涉及帳戶/錢包</div>
+                              <div style={{ fontSize: '0.84rem', fontWeight: '800', color: '#64d2ff', marginTop: '2px' }}>
+                                {entities.accountName}
+                              </div>
+                            </div>
+                          )}
+                          {entities.amountStr && (
+                            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '8px 10px', borderRadius: '8px' }}>
+                              <div style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)' }}>異動/記錄金額</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: '900', color: '#8effa2', fontFamily: 'monospace', marginTop: '2px' }}>
+                                {entities.amountStr}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-tertiary)' }}>🌐 ISO 8601 時間戳:</span>
-                        <span style={{ color: '#64d2ff', fontFamily: 'monospace' }}>{selectedAuditLog.timestamp || '無'}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-tertiary)' }}>⏱️ 相對時間距離:</span>
-                        <span style={{ color: '#ffb94f', fontWeight: '700' }}>{formatRelativeTime(selectedAuditLog.timestamp) || '過去記錄'}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-tertiary)' }}>🔑 資料庫 Document ID:</span>
-                        <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{selectedAuditLog.id || '無'}</span>
-                      </div>
-                    </div>
+                    )}
 
-                    {/* Raw JSON Box with One-Click Copy */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: '700' }}>💾 原始審計資料 (JSON)</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(JSON.stringify(selectedAuditLog, null, 2));
-                            customAlert("📋 審計 JSON 數據已成功複製至剪貼簿！");
-                          }}
-                          className="glass-btn"
-                          style={{ padding: '3px 8px', fontSize: '0.7rem', color: '#64d2ff', borderRadius: '6px' }}
-                        >
-                          📋 複製 JSON
-                        </button>
-                      </div>
-                      <pre style={{
-                        background: 'rgba(0,0,0,0.5)',
-                        padding: '10px',
-                        borderRadius: '10px',
-                        fontSize: '0.72rem',
-                        color: '#a1e44d',
-                        fontFamily: 'SF Mono, Consolas, monospace',
-                        maxHeight: '130px',
-                        overflowY: 'auto',
-                        margin: 0,
-                        border: '1px solid rgba(255,255,255,0.06)'
-                      }}>
-                        {JSON.stringify(selectedAuditLog, null, 2)}
-                      </pre>
+                    {/* 5. 查帳核對指引 */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px 12px', fontSize: '0.74rem', color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
+                      💡 <strong style={{ color: 'rgba(255,255,255,0.8)' }}>查帳核對指引</strong>：若您在查帳時發現帳目對不上，可對照此筆操作的執行時間與涉及帳戶，前往【財務流水帳】或【資產帳戶】核對該時段之交易明細與餘額演變。
                     </div>
-
-                    {/* Bottom Close Button */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedAuditLog(null)}
-                      className="glass-btn"
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        borderRadius: '12px',
-                        fontSize: '0.84rem',
-                        fontWeight: '800',
-                        color: '#fff',
-                        background: 'rgba(255,255,255,0.08)',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        cursor: 'pointer',
-                        marginTop: '4px'
-                      }}
-                    >
-                      關閉檢視器
-                    </button>
                   </div>
                 );
               })()}
+
+              {/* Modal Footer Button */}
+              <div style={{ paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAuditLog(null)}
+                  className="glass-btn"
+                  style={{
+                    width: '100%',
+                    padding: '11px',
+                    borderRadius: '12px',
+                    fontWeight: '800',
+                    fontSize: '0.88rem',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    color: '#fff',
+                    cursor: 'pointer'
+                  }}
+                >
+                  關閉詳情
+                </button>
+              </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* === 6. 系統資訊 === */}

@@ -2453,6 +2453,7 @@ div {
   color: var(--text-tertiary);
   font-weight: 600;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .timeline-operator {
@@ -2461,19 +2462,22 @@ div {
   gap: 4px;
   font-weight: 800;
   font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .timeline-time {
   font-family: var(--font-family);
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
 }
 
 .timeline-desc {
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   color: var(--text-primary);
-  line-height: 1.5;
-  word-break: break-all;
+  line-height: 1.55;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .log-badge {
@@ -2485,6 +2489,7 @@ div {
   font-size: 0.68rem;
   font-weight: 750;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .log-hl-amount {
@@ -2494,11 +2499,13 @@ div {
   background: rgba(48, 209, 88, 0.12);
   padding: 1px 5px;
   border-radius: 4px;
+  white-space: nowrap;
 }
 
 .log-hl-account {
   color: #64d2ff;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .log-hl-tag {
@@ -2506,6 +2513,29 @@ div {
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.log-presets-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.log-presets-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.log-preset-chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 5px 11px;
+  font-size: 0.74rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 /* Glass Brand Button styling */
