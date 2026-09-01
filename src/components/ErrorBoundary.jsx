@@ -118,7 +118,8 @@ ${typeof window !== 'undefined' ? window.location.href : '未知'}
             textAlign: 'left',
             fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             overflowX: 'auto',
-            wordBreak: 'break-all',
+            overflowWrap: 'break-word',
+            wordBreak: 'break-word',
             lineHeight: '1.5'
           }}>
             <div style={{ fontWeight: '800', color: '#ff453a', marginBottom: '4px' }}>

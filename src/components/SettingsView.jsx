@@ -2068,7 +2068,8 @@ const SettingsView = ({
                     fontFamily: 'SF Mono, Consolas, monospace',
                     fontSize: '0.74rem',
                     color: '#ffb94f',
-                    wordBreak: 'break-all',
+                    overflowWrap: 'break-word',
+                    wordBreak: 'break-word',
                     whiteSpace: 'pre-wrap',
                     background: 'rgba(0,0,0,0.4)',
                     padding: '10px',
@@ -2678,7 +2679,7 @@ const SettingsView = ({
                     </div>
                   )}
                   {fcmDiagnostic.error && (
-                    <div style={{ marginTop: '4px', padding: '8px', borderRadius: '6px', backgroundColor: 'rgba(255, 69, 58, 0.1)', color: 'var(--accent-red)', fontSize: '0.72rem', wordBreak: 'break-all' }}>
+                    <div style={{ marginTop: '4px', padding: '8px', borderRadius: '6px', backgroundColor: 'rgba(255, 69, 58, 0.1)', color: 'var(--accent-red)', fontSize: '0.72rem', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                       ⚠️ 診斷錯誤資訊：{fcmDiagnostic.error}
                     </div>
                   )}
@@ -3247,11 +3248,11 @@ const SystemLogsModal = ({ isOpen, onClose, assets, appContext, customAlert }) =
                       {item.type}
                     </span>
                   </div>
-                  <div style={{ color: isErr ? '#ff6b6b' : (isWarn ? '#ffd166' : '#f8fafc'), wordBreak: 'break-all', lineHeight: '1.4' }}>
+                  <div style={{ color: isErr ? '#ff6b6b' : (isWarn ? '#ffd166' : '#f8fafc'), overflowWrap: 'break-word', wordBreak: 'break-word', lineHeight: '1.4' }}>
                     {item.message}
                   </div>
                   {item.details && (
-                    <pre style={{ margin: '6px 0 0 0', padding: '8px', background: 'rgba(0, 0, 0, 0.4)', borderRadius: '6px', fontSize: '0.72rem', color: '#cbd5e1', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                    <pre style={{ margin: '6px 0 0 0', padding: '8px', background: 'rgba(0, 0, 0, 0.4)', borderRadius: '6px', fontSize: '0.72rem', color: '#cbd5e1', overflowX: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                       {item.details}
                     </pre>
                   )}

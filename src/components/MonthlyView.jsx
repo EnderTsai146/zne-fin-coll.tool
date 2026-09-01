@@ -1913,19 +1913,32 @@ const MonthlyView = ({
                 </div>
             )}
 
-            {/* HIG 5: Card Sheet Settlement Details Modal (Bottom Sheet style) */}
+            {/* HIG 5: Settlement Details Modal (Centered Liquid Modal) */}
             {showSettlementModal && settlementTarget && createPortal(
-                <div className="card-sheet-overlay active" onClick={() => setShowSettlementModal(false)}>
-                    <div className="card-sheet active" onClick={e => e.stopPropagation()}>
-                        <div className="card-sheet-indicator" />
-                        <div className="card-sheet-header">
-                            <button className="card-sheet-btn-text" onClick={() => setShowSettlementModal(false)}>關閉</button>
-                            <span className="card-sheet-title">{settlementTarget === 'userA' ? '大狗狗' : '阿陞'} 的代墊明細 ({debtScope === 'all' ? '全期未結' : `${filterDate} 當月`})</span>
-                            <span style={{ width: '40px' }} />
+                <div className="liquid-modal-overlay" style={{ zIndex: 11000 }} onClick={() => setShowSettlementModal(false)}>
+                    <div
+                        className="liquid-modal-card"
+                        style={{ maxWidth: '440px', width: '92%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: 0 }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ fontWeight: '850', fontSize: '1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>🤝</span>
+                                <span>{settlementTarget === 'userA' ? '大狗狗' : '阿陞'} 的代墊明細 ({debtScope === 'all' ? '全期未結' : `${filterDate} 當月`})</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowSettlementModal(false)}
+                                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '30px', height: '30px', color: '#fff', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                ✕
+                            </button>
                         </div>
 
-                        <div className="card-sheet-content" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-                            <div className="inset-group-card">
+                        {/* Content List */}
+                        <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div className="inset-group-card" style={{ marginBottom: 0 }}>
                                 {getDebtList(settlementTarget).length === 0 ? (
                                     <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
                                         無任何待結清明細
@@ -1954,6 +1967,18 @@ const MonthlyView = ({
                                     })
                                 )}
                             </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+                            <button
+                                type="button"
+                                onClick={() => setShowSettlementModal(false)}
+                                className="liquid-modal-btn liquid-btn-confirm"
+                                style={{ width: '100%', padding: '10px', fontSize: '0.88rem', fontWeight: '750', borderRadius: '12px' }}
+                            >
+                                關閉明細
+                            </button>
                         </div>
                     </div>
                 </div>,

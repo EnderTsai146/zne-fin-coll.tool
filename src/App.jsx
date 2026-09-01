@@ -3452,11 +3452,11 @@ function App() {
                     backgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     letterSpacing: '-0.02em',
-                    wordBreak: 'break-all'
+                    overflowWrap: 'break-word'
                   }}>
                     馬鈴薯管家 系統更新
                   </h2>
-                  <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0, wordBreak: 'break-all' }}>
+                  <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0, overflowWrap: 'break-word' }}>
                     提供更完整的資產最佳化工具與系統穩定度改善
                   </p>
                 </div>
@@ -3488,10 +3488,10 @@ function App() {
                         {h.emoji}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff', wordBreak: 'break-all' }}>
+                        <h4 style={{ margin: '0 0 3px 0', fontSize: '0.92rem', fontWeight: '700', color: '#ffffff', overflowWrap: 'break-word' }}>
                           {h.title}
                         </h4>
-                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45', wordBreak: 'break-all' }}>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.45', overflowWrap: 'break-word' }}>
                           {h.desc}
                         </p>
                       </div>
@@ -3499,7 +3499,7 @@ function App() {
                   ))}
                 </div>
 
-                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, wordBreak: 'break-all' }}>
+                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, overflowWrap: 'break-word' }}>
                   資產數據與隱私資訊已進行安全傳輸並儲存於私有資料庫中。<br />
                   <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('tutorial')}>
                     檢視操作指南
@@ -3544,11 +3544,11 @@ function App() {
                     backgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     letterSpacing: '-0.02em',
-                    wordBreak: 'break-all'
+                    overflowWrap: 'break-word'
                   }}>
                     系統操作指南
                   </h2>
-                  <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0, wordBreak: 'break-all' }}>
+                  <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.55)', margin: 0, overflowWrap: 'break-word' }}>
                     協助掌握核心資產管理與交易操作步驟
                   </p>
                 </div>
@@ -3571,17 +3571,17 @@ function App() {
                       borderRadius: '12px',
                       border: '1px solid rgba(255,255,255,0.06)'
                     }}>
-                      <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700', wordBreak: 'break-all' }}>
+                      <h4 style={{ margin: '0 0 6px 0', color: 'var(--accent-blue)', fontSize: '0.88rem', fontWeight: '700', overflowWrap: 'break-word' }}>
                         {i + 1}. {t.title}
                       </h4>
-                      <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45', display: 'block', wordBreak: 'break-all' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: '1.45', display: 'block', overflowWrap: 'break-word' }}>
                         {t.content}
                       </span>
                     </div>
                   ))}
                 </div>
 
-                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, wordBreak: 'break-all' }}>
+                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', margin: '18px 0 12px 0', flexShrink: 0, overflowWrap: 'break-word' }}>
                   <span style={{ color: '#007aff', cursor: 'pointer', fontWeight: '600' }} onClick={() => setChangelogTab('whatsnew')}>
                     返回系統更新日誌
                   </span>

@@ -95,10 +95,13 @@ body {
   margin: 0;
   font-family: var(--font-family);
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--text-primary);
-  padding-bottom: 80px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 20px));
+  padding-top: env(safe-area-inset-top, 0px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 
   /* ★ Dark base — gradient concentrated in bottom-left corner */
   background-color: #050B14;
@@ -2067,10 +2070,37 @@ body[data-page="review"] {
 .review-invest-label,
 label,
 h1, h2, h3, h4,
+p,
 span,
-div {
-  word-break: keep-all;
+div,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+label {
+  word-break: normal;
   overflow-wrap: break-word;
+  line-break: loose;
+}
+
+/* Universal Anti-Deformation and Scrollable Chips */
+.no-deform-btn {
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.pill-chip-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.pill-chip-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* ======================================================
