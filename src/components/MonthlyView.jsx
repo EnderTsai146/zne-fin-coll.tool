@@ -1037,11 +1037,12 @@ const MonthlyView = ({
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                                                         {(() => {
                                                             const sourceAcc = assets.accounts?.find(a => a.id === record.accountId);
-                                                            if (sourceAcc) {
+                                                            const accNickname = sourceAcc?.nickname || sourceAcc?.name || '';
+                                                            if (sourceAcc && accNickname) {
                                                                 const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
                                                                 return (
                                                                     <span>
-                                                                        交易帳戶：<strong style={{ color: '#8effa2' }}>{sourceAcc.icon || '🏦'} {sourceAcc.nickname}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
+                                                                        交易帳戶：<strong style={{ color: '#8effa2' }}>{sourceAcc.icon || '🏦'} {accNickname}</strong> <span style={{ opacity: 0.6, fontSize: '0.64rem' }}>({ownerLabel})</span>
                                                                     </span>
                                                                 );
                                                             }
@@ -1253,7 +1254,8 @@ const MonthlyView = ({
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                                     {(() => {
                                                         const sourceAcc = assets.accounts?.find(a => a.id === record.accountId);
-                                                        const accName = sourceAcc ? `${sourceAcc.icon || '🏦'} ${sourceAcc.nickname}` : '';
+                                                        const accNickname = sourceAcc?.nickname || sourceAcc?.name || '';
+                                                        const accName = accNickname ? `${sourceAcc.icon || '🏦'} ${accNickname}` : '';
                                                         if (accName) {
                                                             const ownerLabel = sourceAcc.owner === 'joint' ? '共同' : (sourceAcc.owner === 'userA' ? '大狗狗' : '阿陞');
                                                             return (

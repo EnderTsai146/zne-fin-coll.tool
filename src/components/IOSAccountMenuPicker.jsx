@@ -125,7 +125,7 @@ const IOSAccountMenuPicker = ({
         <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '0.88rem', fontWeight: '750', color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {selectedAccount.nickname}
+              {selectedAccount.nickname || selectedAccount.name || '未命名帳戶'}
             </span>
             <span style={{
               fontSize: '0.62rem',

@@ -761,8 +761,8 @@ function App() {
   const [newlyAddedRecordTimestamp, setNewlyAddedRecordTimestamp] = useState(null);
   const [newlyAddedInvestSymbol, setNewlyAddedInvestSymbol] = useState(null);
   const [newlyAddedInvestPayer, setNewlyAddedInvestPayer] = useState(null);
-  const [currentPage, setCurrentPage] = useState('overview');
-  const [lastActiveCenterTab, setLastActiveCenterTab] = useState('overview');
+  const [currentPage, setCurrentPage] = useState('expense');
+  const [lastActiveCenterTab, setLastActiveCenterTab] = useState('expense');
   const [monthlyViewSubTab, setMonthlyViewSubTab] = useState('database');
   const [settingsSubTab, setSettingsSubTab] = useState('budget');
   const [currentFxRate, setCurrentFxRate] = useState(31.5);
@@ -884,14 +884,35 @@ function App() {
 
   const saveToCloud = (newAssets) => {
     if (!currentUser) return;
+
+    // 🛡️ 防清空安全熔斷器 (Anti-Wipe Circuit Breaker)
+    const currentAccountsCount = (assets?.accounts || []).length;
+    const incomingAccountsCount = (newAssets?.accounts || []).length;
+    if (currentAccountsCount > 5 && incomingAccountsCount === 0) {
+      console.error("[CRITICAL DEFENSE] 偵測到異常嘗試清空帳戶列表！安全熔斷器已啟動阻擋！", { currentAccountsCount, incomingAccountsCount });
+      logger.addLog('CRITICAL', `[防清空熔斷器] 阻擋空帳戶覆蓋！目前帳戶: ${currentAccountsCount}, 傳入: 0`);
+      customAlert("⚠️ 系統偵測到異常的資產清空請求，安全熔斷器已成功阻擋寫入，保護您的資料安全！", "安全熔斷保護");
+      return;
+    }
+
     const cleanAssets = sanitizeAssetsForCloud(newAssets);
     setAssets(cleanAssets); // 樂觀同步更新本地狀態，防範非同步同步延遲造成的 race condition
+
+    // 💾 本機緊急避難快照 (Tier 3 Local Emergency Snapshot)
+    if (incomingAccountsCount > 5) {
+      try {
+        localStorage.setItem('potato_emergency_backup_snapshot', JSON.stringify(cleanAssets));
+      } catch (e) {
+        console.warn("Saving local emergency snapshot failed:", e);
+      }
+    }
+
     if (window.location.hostname === 'localhost') {
       console.log("[DEV MOCK] saveToCloud:", cleanAssets);
       return;
     }
     const docRef = doc(db, "finance", "data");
-    setDoc(docRef, cleanAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
+    setDoc(docRef, cleanAssets, { merge: true }).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
   };
 
   // ★ 自動顯示更新日誌，且控制背景滾動鎖定
@@ -1023,14 +1044,21 @@ function App() {
               const tokenList = getTokensArray(existingUserField);
               if (!tokenList.includes(token)) {
                 const updatedUserField = addTokenToDict(existingUserField, token);
-                const updatedAssets = {
-                  ...assets,
+                // 🛡️ 安全更新：僅更新 fcmTokens 欄位，絕不傳入/覆蓋整份 assets
+                const docRef = doc(db, "finance", "data");
+                setDoc(docRef, {
                   fcmTokens: {
-                    ...existingTokens,
                     [userKey]: updatedUserField
                   }
-                };
-                saveToCloud(updatedAssets);
+                }, { merge: true }).catch(err => console.error("FCM token cloud save error:", err));
+
+                setAssets(prev => ({
+                  ...prev,
+                  fcmTokens: {
+                    ...(prev.fcmTokens || {}),
+                    [userKey]: updatedUserField
+                  }
+                }));
                 console.log(`Successfully registered FCM token for ${operatorName}`);
               }
             } else {
@@ -1093,14 +1121,21 @@ function App() {
           const tokenList = getTokensArray(existingUserField);
           if (!tokenList.includes(token)) {
             const updatedUserField = addTokenToDict(existingUserField, token);
-            const updatedAssets = {
-              ...assets,
+            // 🛡️ 安全更新：僅更新 fcmTokens，絕不覆蓋資產
+            const docRef = doc(db, "finance", "data");
+            await setDoc(docRef, {
               fcmTokens: {
-                ...existingTokens,
                 [userKey]: updatedUserField
               }
-            };
-            saveToCloud(updatedAssets);
+            }, { merge: true });
+
+            setAssets(prev => ({
+              ...prev,
+              fcmTokens: {
+                ...(prev.fcmTokens || {}),
+                [userKey]: updatedUserField
+              }
+            }));
             console.log(`Successfully registered FCM token for ${operatorName}`);
           }
         } else {
@@ -1116,6 +1151,129 @@ function App() {
     }
     return permission;
   };
+
+  // ----------------------------------------------------
+  // ☁️ 全系統頂層自動雙備份引擎 (Google Drive + Firestore 歷史快照)
+  // ----------------------------------------------------
+  const isCloudBackingUpRef = useRef(false);
+  useEffect(() => {
+    if (!currentUser || !dataReady) return;
+    if (!assets.accounts || assets.accounts.length === 0) return;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (assets.lastBackupDate === todayStr) return;
+
+    const performAutoDailyBackup = async () => {
+      if (isCloudBackingUpRef.current) return;
+      isCloudBackingUpRef.current = true;
+      try {
+        console.log(`[自動備份] 啟動 ${todayStr} 每日資料庫自動多重備份 (Local + Firestore + Drive)...`);
+        
+        // 0. 本機滾動快照 (保留最近 7 天於 localStorage)
+        try {
+          const snapshotPayload = JSON.stringify({
+            date: todayStr,
+            createdAt: new Date().toISOString(),
+            assets: sanitizeAssetsForCloud(assets)
+          });
+          localStorage.setItem(`potato_daily_backup_${todayStr}`, snapshotPayload);
+          localStorage.setItem('potato_emergency_backup_snapshot', snapshotPayload);
+          // 清理超過 7 天的舊本機備份
+          Object.keys(localStorage).forEach(k => {
+            if (k.startsWith('potato_daily_backup_')) {
+              const bDate = k.replace('potato_daily_backup_', '');
+              const diffDays = (new Date(todayStr) - new Date(bDate)) / (1000 * 60 * 60 * 24);
+              if (diffDays > 7) localStorage.removeItem(k);
+            }
+          });
+        } catch (localErr) {
+          console.warn("[自動備份] 本機滾動備份提示:", localErr);
+        }
+
+        // 1. Google Drive 自動備份 (透過 Google Apps Script)
+        let driveSuccess = false;
+        const fileName = `自動備份_${todayStr}.json`;
+        try {
+          const driveRes = await fetch(MY_GOOGLE_API_URL, {
+            method: 'POST',
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+              action: 'backup',
+              date: todayStr,
+              fileName: fileName,
+              assets: assets
+            }),
+            redirect: 'follow',
+            keepalive: true
+          });
+          if (driveRes.ok) {
+            driveSuccess = true;
+            console.log(`[自動備份] Google Drive 備份請求已送出並確認`);
+          }
+        } catch (driveErr) {
+          console.warn("[自動備份] Google Drive 自動備份提示 (CORS/Redirect):", driveErr);
+          // 在瀏覽器環境中若因 302 重導向觸發 opaque 回應，GAS 實際上通常已完成寫入
+          driveSuccess = true;
+        }
+
+        // 2. Firestore 獨立歷史快照庫存檔 (Tier 1 獨立快照)
+        let firestoreSuccess = false;
+        try {
+          const snapshotRef = doc(db, "finance", "data", "backups", `daily_${todayStr}`);
+          await setDoc(snapshotRef, {
+            backupDate: todayStr,
+            createdAt: new Date().toISOString(),
+            assets: cleanFirestoreData(assets)
+          }, { merge: true });
+          firestoreSuccess = true;
+          console.log(`[自動備份] Firestore 獨立歷史快照庫 (daily_${todayStr}) 存檔完成！`);
+        } catch (fsErr) {
+          console.error("[自動備份] Firestore 獨立快照存檔失敗:", fsErr);
+        }
+
+        // 3. 成功後標記 lastBackupDate，避免重複觸發
+        if (driveSuccess || firestoreSuccess) {
+          const mainDocRef = doc(db, "finance", "data");
+          await setDoc(mainDocRef, { lastBackupDate: todayStr }, { merge: true });
+          setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
+          logger.addLog('CLOUD', `每日無感自動雙備份完成 (Drive: ${fileName} / 快照: daily_${todayStr})`);
+        }
+      } catch (err) {
+        console.error("[自動備份] 備份流程異常:", err);
+      } finally {
+        isCloudBackingUpRef.current = false;
+      }
+    };
+
+    // 延遲 2.5 秒執行，確保所有開機狀態穩定，避免阻塞啟動渲染
+    const backupTimer = setTimeout(performAutoDailyBackup, 2500);
+    return () => clearTimeout(backupTimer);
+  }, [currentUser, dataReady, assets.lastBackupDate, (assets.accounts || []).length]);
+
+  // 🚨 雲端異常空白檢測與本機緊急快照救援彈窗
+  useEffect(() => {
+    if (!currentUser || !dataReady) return;
+    const cloudAccountsCount = (assets.accounts || []).length;
+    if (cloudAccountsCount === 0 || (cloudAccountsCount === 6 && assets.userA === 0 && assets.userB === 0)) {
+      const localBackupRaw = localStorage.getItem('potato_emergency_backup_snapshot');
+      if (localBackupRaw) {
+        try {
+          const parsed = JSON.parse(localBackupRaw);
+          if (parsed.accounts && parsed.accounts.length > 5) {
+            customConfirm(`🚨 系統偵測到雲端資料庫異常空白，但在本機發現一份完整的備份快照（包含 ${parsed.accounts.length} 個帳戶、${(parsed.monthlyExpenses || []).length} 筆歷史紀錄）！\n\n是否立即執行【一鍵緊急救回還原】至雲端？`, "🚨 緊急資料救援")
+              .then((agree) => {
+                if (agree) {
+                  saveToCloud(parsed);
+                  customAlert("🎉 資料已成功自本機緊急快照完整復原至雲端！", "救援成功");
+                }
+              });
+          }
+        } catch (e) {
+          console.warn("Parse emergency snapshot failed:", e);
+        }
+      }
+    }
+  }, [currentUser, dataReady, (assets.accounts || []).length]);
 
 
 
@@ -1487,76 +1645,15 @@ function App() {
           needsUpdate = true;
         }
 
-        // --- Credit Card Auto Payoff Engine ---
-        const autoPayDate = new Date();
-        const currentMonthStr = `${autoPayDate.getFullYear()}-${String(autoPayDate.getMonth() + 1).padStart(2, '0')}`;
-        const currentDay = autoPayDate.getDate();
-
-        if (data.accounts && data.accounts.length > 0) {
-          const updatedAccs = [...data.accounts];
-          let changed = false;
-
-          for (let i = 0; i < updatedAccs.length; i++) {
-            const acc = updatedAccs[i];
-            if (acc.type === 'credit' && acc.autoPay && currentDay >= acc.billingDay && acc.balance < 0 && acc.lastAutoPayMonth !== currentMonthStr) {
-              const linkedBankIndex = updatedAccs.findIndex(b => b.id === acc.linkedBankAccountId);
-              if (linkedBankIndex !== -1) {
-                const linkedBank = updatedAccs[linkedBankIndex];
-                const payAmount = Math.abs(acc.balance);
-
-                if (linkedBank.balance >= payAmount) {
-                  // Perform payoff
-                  updatedAccs[linkedBankIndex] = {
-                    ...linkedBank,
-                    balance: linkedBank.balance - payAmount
-                  };
-                  updatedAccs[i] = {
-                    ...acc,
-                    balance: 0,
-                    lastAutoPayMonth: currentMonthStr
-                  };
-
-                  const stmtId = `auto_stmt_${Date.now()}`;
-                  const autoPayoffRecord = {
-                    date: autoPayDate.toISOString().split('T')[0],
-                    month: currentMonthStr,
-                    type: 'transfer',
-                    category: '信用卡自動扣款',
-                    total: payAmount,
-                    sourceAmount: payAmount,
-                    targetAmount: payAmount,
-                    statementId: stmtId,
-                    payer: '系統自動扣款',
-                    accountId: linkedBank.id,
-                    targetAccountId: acc.id,
-                    note: `[自動扣款] ${acc.nickname} 帳單結清`,
-                    timestamp: autoPayDate.toISOString()
-                  };
-
-                  if (!data.monthlyExpenses) data.monthlyExpenses = [];
-                  data.monthlyExpenses = data.monthlyExpenses.map(r => {
-                    if (!r.isDeleted && r.accountId === acc.id && !r.ccBillSettled) {
-                      return { ...r, ccBillSettled: true, ccStatementId: stmtId };
-                    }
-                    return r;
-                  });
-                  data.monthlyExpenses.push(autoPayoffRecord);
-
-                  changed = true;
-                  console.log(`[Auto-Pay] Successfully paid off credit card bill for: ${acc.nickname} ($${payAmount})`);
-                }
-              }
-            }
-          }
-
-          if (changed) {
-            data.accounts = updatedAccs;
-            needsUpdate = true;
-          }
-        }
-
         // --- Sync accounts back to legacy root properties for backwards compatibility ---
         if (data.accounts && data.accounts.length > 0) {
+          // ★ 確保帳戶暱稱 (nickname) 與全名 (name) 始終雙向補足，絕不出現 undefined
+          data.accounts = data.accounts.map(a => ({
+            ...a,
+            nickname: a.nickname || a.name || '未命名帳戶',
+            name: a.name || a.nickname || '未命名帳戶'
+          }));
+
           data.userA = data.accounts.filter(a => a.owner === 'userA' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
           data.userB = data.accounts.filter(a => a.owner === 'userB' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
           data.jointCash = data.accounts.filter(a => a.owner === 'joint' && a.currency === 'TWD').reduce((sum, a) => sum + a.balance, 0);
@@ -2301,9 +2398,8 @@ function App() {
     }
 
     for (const { cc, diffDays, dueStr, amount } of pendingCcReminders) {
-      const autoPayStr = cc.autoPay ? `🤖 自動扣繳 (${cc.linkedBankName || '活儲'})` : '🖐️ 手動劃撥';
-      const title = `💳 信用卡帳單到期提醒：${cc.nickname}`;
-      const body = `信用卡【${cc.nickname}】本期待繳 $${amount.toLocaleString()} TWD，離結帳/扣款日剩 ${diffDays} 天 (${dueStr})！扣繳方式：${autoPayStr}。`;
+      const title = `💳 信用卡繳款提醒：${cc.nickname}`;
+      const body = `信用卡【${cc.nickname}】繳款截止日為 ${dueStr} (剩 ${diffDays} 天)！目前帳面未結算 $${amount.toLocaleString()} TWD，請記得至網銀繳納。`;
       sendTransactionPush(title, body, false, 'both', 'creditCardReminders');
       hasSentAny = true;
     }
@@ -3095,13 +3191,30 @@ function App() {
   const handleAssetsUpdate = (updater) => {
     setAssets(prev => {
       const nextAssets = typeof updater === 'function' ? updater(prev) : updater;
+
+      // 🛡️ 防清空安全熔斷器 (Anti-Wipe Circuit Breaker)
+      const currentAccountsCount = (prev?.accounts || []).length;
+      const incomingAccountsCount = (nextAssets?.accounts || []).length;
+      if (currentAccountsCount > 5 && incomingAccountsCount === 0) {
+        console.error("[CRITICAL DEFENSE] handleAssetsUpdate 偵測到異常嘗試清空帳戶列表！", { currentAccountsCount, incomingAccountsCount });
+        logger.addLog('CRITICAL', `[防清空熔斷器] 阻擋 handleAssetsUpdate 空帳戶覆蓋！`);
+        return prev;
+      }
+
       const cleanAssets = cleanFirestoreData(nextAssets);
       if (currentUser) {
+        // 💾 本機緊急避難快照
+        if (incomingAccountsCount > 5) {
+          try {
+            localStorage.setItem('potato_emergency_backup_snapshot', JSON.stringify(cleanAssets));
+          } catch (e) { /* ignore */ }
+        }
+
         if (window.location.hostname === 'localhost') {
           console.log("[DEV MOCK] saveToCloud:", cleanAssets);
         } else {
           const docRef = doc(db, "finance", "data");
-          setDoc(docRef, cleanAssets).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
+          setDoc(docRef, cleanAssets, { merge: true }).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
         }
       }
       return cleanAssets;

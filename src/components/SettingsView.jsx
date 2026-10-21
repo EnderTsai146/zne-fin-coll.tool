@@ -2743,8 +2743,28 @@ const SettingsView = ({
                   <span>💾</span>
                   <span>資料備份與還原管理</span>
                 </div>
+                <div style={{
+                  background: 'rgba(52, 199, 89, 0.08)',
+                  border: '1px solid rgba(52, 199, 89, 0.25)',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  fontSize: '0.78rem',
+                  color: '#34c759'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🛡️</span>
+                    <span style={{ fontWeight: '700' }}>防清空熔斷保險：已啟用</span>
+                  </div>
+                  <span style={{ color: 'rgba(255, 255, 255, 0.65)', fontSize: '0.72rem' }}>
+                    {assets.lastBackupDate ? `最近備份: ${assets.lastBackupDate}` : '今日已自動排程'}
+                  </span>
+                </div>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
-                  支援手動同步備份至 Google 雲端硬碟 (Google Drive)，以及下載完整 JSON 檔案進行本機永久保存與一鍵還原。
+                  系統已啟用【頂層啟動自動備份引擎】與【四重容災防護】。每日開啟 App 即自動備份至 Google Drive 與 Firestore 獨立歷史快照庫，並於本機保留緊急避難存檔。
                 </p>
 
                 <button

@@ -98,7 +98,10 @@ class SessionLogger {
     const accountsRows = accounts.map(a => {
       const ownerLabel = a.owner === 'joint' ? '共同' : (a.owner === 'userA' ? '大狗狗' : '阿陞');
       const typeLabel = a.type === 'credit' ? '信用卡' : (a.type === 'bank' ? '銀行活儲' : (a.type === 'cash' ? '現金錢包' : '外幣/其他'));
-      const balStr = a.type === 'credit' ? `-$${Math.abs(Number(a.balance) || 0).toLocaleString()}` : `$${(Number(a.balance) || 0).toLocaleString()}`;
+      const balNum = Number(a.balance) || 0;
+      const balStr = a.type === 'credit' 
+        ? (balNum < 0 ? `-$${Math.abs(balNum).toLocaleString()}` : (balNum > 0 ? `+$${balNum.toLocaleString()} (溢繳/退款)` : '$0'))
+        : `$${balNum.toLocaleString()}`;
       return `| \`${a.id}\` | ${a.nickname || a.name} | ${typeLabel} | ${ownerLabel} | ${a.currency || 'TWD'} | ${balStr} | ${a.isDefaultExpense ? '✅' : '—'} | ${a.isDefaultIncome ? '✅' : '—'} |`;
     });
 
@@ -113,26 +116,29 @@ class SessionLogger {
         !r.isDeleted && 
         r.accountId === card.id && 
         !r.ccBillSettled &&
-        r.type !== 'transfer'
+        (r.type === 'expense' || r.type === 'spend')
       );
       const unpaidSum = cardExpenses.reduce((s, r) => s + (Number(r.total) || 0), 0);
-      const cardDebt = Math.abs(Number(card.balance) || 0);
+      const rawBal = Number(card.balance) || 0;
+      const cardDebt = Math.abs(rawBal);
       const diff = Math.abs(cardDebt - unpaidSum);
 
-      const linkedBank = card.linkedBankAccountId 
-        ? accounts.find(a => a.id === card.linkedBankAccountId)
-        : null;
-      const linkedBal = linkedBank ? `$${(Number(linkedBank.balance) || 0).toLocaleString()}` : '未綁定';
-      const autoPayStr = card.autoPay ? `🤖 自動 (${linkedBank?.nickname || '活儲'})` : '🖐️ 手動';
+      const lastPaymentRecord = expenses
+        .filter(r => !r.isDeleted && r.targetAccountId === card.id && r.type === 'transfer' && (r.category === '信用卡帳單' || r.category === '信用卡自動扣款' || r.statementId))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.timestamp || '').localeCompare(a.timestamp || ''))[0];
+      const lastPayStr = lastPaymentRecord ? `${lastPaymentRecord.date} ($${(Number(lastPaymentRecord.total) || Number(lastPaymentRecord.sourceAmount) || 0).toLocaleString()})` : '尚無紀錄';
 
       let statusStr = '🟢 吻合正常';
-      if (diff > 0) {
-        statusStr = `🟡 差額 $${diff.toLocaleString()} (待校正/含初始負債)`;
+      if (rawBal > 0) {
+        statusStr = `🔵 溢繳/銷貨退回 (卡片為正資產 +$${rawBal.toLocaleString()})`;
+      } else if (diff > 0) {
+        statusStr = `🟡 差額 $${diff.toLocaleString()} (待校正/含微差或未出帳)`;
         ccHasDiffCount++;
       }
 
       const ownerLabel = card.owner === 'joint' ? '共同' : (card.owner === 'userA' ? '大狗狗' : '阿陞');
-      ccReportRows.push(`| ${card.nickname} | ${ownerLabel} | -$${cardDebt.toLocaleString()} | 每月 ${card.billingDay || 10} 號 | 每月 ${card.billingDay || 10} 號 | ${autoPayStr} | ${linkedBank?.nickname || '未綁定'} (${linkedBal}) | ${cardExpenses.length} 筆 | $${unpaidSum.toLocaleString()} | ${statusStr} |`);
+      const cardBalStr = rawBal < 0 ? `-$${Math.abs(rawBal).toLocaleString()}` : (rawBal > 0 ? `+$${rawBal.toLocaleString()} (溢繳)` : '$0');
+      ccReportRows.push(`| ${card.nickname} | ${ownerLabel} | ${cardBalStr} | 每月 ${card.billingDay || 10} 號 | ${lastPayStr} | ${cardExpenses.length} 筆 | $${unpaidSum.toLocaleString()} | ${statusStr} |`);
 
       // Detailed Unpaid List
       if (cardExpenses.length > 0) {
@@ -247,7 +253,7 @@ class SessionLogger {
 - **[CHECK 4] 股票持股與投資配置**:
   - 目前持股檔數: \`${Object.keys(stockHoldings).length} 檔\` (已補足防禦性成本欄位)
 - **[CHECK 5] 信用卡與待繳明細健康度**:
-  - 共 ${creditCards.length} 張信用卡，${creditCards.every(c => Math.abs((Math.abs(Number(c.balance)||0)) - expenses.filter(r => !r.isDeleted && r.accountId === c.id && !r.ccBillSettled && r.type !== 'transfer').reduce((s,r)=>s+(Number(r.total)||0),0)) <= 30) ? '🟢 全數在正常或微差容許範圍內' : '🟡 部分卡片存在待確認差額 (可能含歷史初始餘額)'}
+  - 共 ${creditCards.length} 張信用卡，${creditCards.every(c => Math.abs((Math.abs(Number(c.balance)||0)) - expenses.filter(r => !r.isDeleted && r.accountId === c.id && !r.ccBillSettled && (r.type === 'expense' || r.type === 'spend')).reduce((s,r)=>s+(Number(r.total)||0),0)) <= 30) ? '🟢 全數在正常或微差容許範圍內' : '🟡 部分卡片存在待確認差額 (可能含微差或未出帳)'}
 
 ---
 
@@ -259,9 +265,9 @@ ${accountsRows.length > 0 ? accountsRows.join('\n') : '| 無帳戶 | - | - | - |
 ---
 
 ## 5. 信用卡帳戶專區深度稽核 (Credit Cards Audit Matrix)
-| 卡片暱稱 | 持卡人 | 卡片當前負債 | 結帳日 | 扣繳日 | 扣繳方式 | 綁定活儲 (餘額) | 待繳筆數 | 待繳金額 | 健康狀態 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-${ccReportRows.length > 0 ? ccReportRows.join('\n') : '| 無任何信用卡 | - | - | - | - | - | - | - | - | - |'}
+| 卡片暱稱 | 持卡人 | 卡片當前負債 | 繳款截止日 | 上次在 App 繳款 | 待繳筆數 | 待繳金額 | 健康狀態 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+${ccReportRows.length > 0 ? ccReportRows.join('\n') : '| 無任何信用卡 | - | - | - | - | - | - | - |'}
 
 ${ccUnpaidSections.length > 0 ? ccUnpaidSections.join('\n\n') : ''}
 

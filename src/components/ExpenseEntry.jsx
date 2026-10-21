@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import SegmentedControl from './SegmentedControl';
 import ErrorBoundary from './ErrorBoundary';
 import IOSAccountMenuPicker from './IOSAccountMenuPicker';
+import MarkdownQuickEntry from './MarkdownQuickEntry';
 import { logger } from '../utils/logger';
 
 const formatInputMoney = (valStr) => {
@@ -279,6 +280,17 @@ const ExpenseEntry = ({
   const [activeTab, setActiveTab] = useState('personal'); // 'personal', 'joint', 'bills'
   const [incomeTab, setIncomeTab] = useState('personal'); // 'personal', 'joint'
 
+  // ★ 記帳介面模式：預設為極速 Markdown 便籤記帳，隨時可切換回傳統表單
+  // 【AI 快速切換指令標記】：若未來需要預設改回傳統模式，只需將下方預設值由 'markdown' 改為 'classic'
+  const [expenseUIMode, setExpenseUIMode] = useState(() => {
+    return localStorage.getItem('potato_expense_ui_mode') || 'markdown';
+  });
+
+  const handleToggleUIMode = (mode) => {
+    setExpenseUIMode(mode);
+    localStorage.setItem('potato_expense_ui_mode', mode);
+  };
+
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
 
   // ==========================================
@@ -471,6 +483,7 @@ const ExpenseEntry = ({
   const [selectedTxKeys, setSelectedTxKeys] = useState(new Set());
   const [showDirectCalibration, setShowDirectCalibration] = useState(false);
   const [directCalibrateInput, setDirectCalibrateInput] = useState('');
+  const [directCalibrateIsDebt, setDirectCalibrateIsDebt] = useState(true); // true = 欠款 (-), false = 溢繳 (+)
   const [helpTooltipConfig, setHelpTooltipConfig] = useState(null);
   const [pendingSubmitConfig, setPendingSubmitConfig] = useState(null);
 
@@ -1360,6 +1373,7 @@ const ExpenseEntry = ({
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth();
     const currentDay = today.getDate();
+    const allExpenses = assets?.monthlyExpenses || [];
 
     return (assets?.accounts || [])
       .filter(a => a && a.type === 'credit')
@@ -1377,7 +1391,25 @@ const ExpenseEntry = ({
         const nextDateStr = `${yyyy}-${mm}-${dd}`;
 
         const diffDays = Math.ceil((dueDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        const unpaidAmount = Math.abs(card.balance || 0);
+        const rawBalance = Number(card.balance) || 0;
+        const unpaidAmount = Math.abs(rawBalance);
+        const isDebt = rawBalance <= 0;
+
+        // Find latest payment record for this card
+        const lastPaymentRecord = allExpenses
+          .filter(r => !r.isDeleted && r.targetAccountId === card.id && r.type === 'transfer' && (r.category === '信用卡帳單' || r.category === '信用卡自動扣款' || r.statementId))
+          .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.timestamp || '').localeCompare(a.timestamp || ''))[0];
+
+        const lastPayment = lastPaymentRecord ? {
+          date: lastPaymentRecord.date,
+          amount: Number(lastPaymentRecord.total) || Number(lastPaymentRecord.sourceAmount) || 0,
+          note: lastPaymentRecord.note || ''
+        } : null;
+
+        // Count unpaid swipe items (only real expense/spend)
+        const unpaidItems = allExpenses.filter(r => !r.isDeleted && r.accountId === card.id && !r.ccBillSettled && (r.type === 'expense' || r.type === 'spend'));
+        const unpaidCount = unpaidItems.length;
+        const unpaidSum = unpaidItems.reduce((s, r) => s + (Number(r.total) || 0), 0);
 
         const linkedBank = card.linkedBankAccountId
           ? (assets?.accounts || []).find(a => a && a.id === card.linkedBankAccountId)
@@ -1385,7 +1417,7 @@ const ExpenseEntry = ({
 
         let linkedBankName = linkedBank
           ? `${linkedBank.owner === 'joint' ? '共同' : (linkedBank.owner === 'userA' ? '大狗狗' : '阿陞')}${linkedBank.nickname}`
-          : '未綁定活儲';
+          : '未設定常用活儲';
 
         return {
           id: `cc_bill_${card.id}`,
@@ -1394,19 +1426,25 @@ const ExpenseEntry = ({
           name: `${card.nickname} (信用卡帳單)`,
           note: `${card.nickname} 信用卡`,
           amount: unpaidAmount,
+          rawBalance: rawBalance,
+          isDebt: isDebt,
           category: '信用卡帳單',
           nextDate: nextDateStr,
           diffDays,
+          billingDay: bDay,
           autoPay: !!card.autoPay,
           linkedBankAccountId: card.linkedBankAccountId,
           linkedBankName,
+          lastPayment,
+          unpaidCount,
+          unpaidSum,
           owner: card.owner,
           currency: card.currency || 'TWD',
           icon: card.icon || '💳',
           rawAccount: card
         };
       });
-  }, [assets?.accounts]);
+  }, [assets?.accounts, assets?.monthlyExpenses]);
 
   const combinedBills = useMemo(() => {
     const regularBills = (assets?.bills || [])
@@ -1419,12 +1457,12 @@ const ExpenseEntry = ({
     });
   }, [assets?.bills, creditCardBills]);
 
-  // --- Unpaid Credit Card Transactions Query ---
+  // --- Unpaid Credit Card Transactions Query (Only genuine expenses) ---
   const unpaidCardTransactions = useMemo(() => {
     if (!selectedCcBill?.creditCardAccountId) return [];
     const cardId = selectedCcBill.creditCardAccountId;
     return (assets?.monthlyExpenses || [])
-      .filter(r => !r.isDeleted && r.accountId === cardId && !r.ccBillSettled && r.type !== 'transfer')
+      .filter(r => !r.isDeleted && r.accountId === cardId && !r.ccBillSettled && (r.type === 'expense' || r.type === 'spend'))
       .map((r, index) => {
         const amt = Math.abs(Number(r.total) || 0);
         return {
@@ -1518,11 +1556,13 @@ const ExpenseEntry = ({
     if (bill.isCreditCard) {
       setSelectedCcBill(bill);
       setShowDirectCalibration(false);
-      const cardDebt = Math.abs(bill.rawAccount?.balance || bill.amount || 0);
+      const rawBal = bill.rawAccount ? Number(bill.rawAccount.balance) : (bill.rawBalance !== undefined ? bill.rawBalance : (bill.amount ? -bill.amount : 0));
+      setDirectCalibrateIsDebt(rawBal <= 0);
+      const cardDebt = Math.abs(rawBal);
       setDirectCalibrateInput(String(cardDebt));
 
       const cardExpenses = (assets?.monthlyExpenses || [])
-        .filter(r => !r.isDeleted && r.accountId === bill.creditCardAccountId && !r.ccBillSettled && r.type !== 'transfer')
+        .filter(r => !r.isDeleted && r.accountId === bill.creditCardAccountId && !r.ccBillSettled && (r.type === 'expense' || r.type === 'spend'))
         .map((r, index) => {
           const amt = Math.abs(Number(r.total) || 0);
           return {
@@ -1574,7 +1614,6 @@ const ExpenseEntry = ({
     }
 
     const { calibrationDiff = 0, customNote = '' } = options;
-    const totalCreditCardDeduct = paymentAmount + calibrationDiff;
 
     const statementId = `stmt_${Date.now()}`;
     const targetTimestamp = new Date().toISOString();
@@ -1582,7 +1621,7 @@ const ExpenseEntry = ({
 
     const updatedAccounts = accounts.map(a => {
       if (a.id === billPayAccountId) return { ...a, balance: a.balance - paymentAmount };
-      if (a.id === creditAccId) return { ...a, balance: a.balance + totalCreditCardDeduct };
+      if (a.id === creditAccId) return { ...a, balance: a.balance + paymentAmount };
       return a;
     });
 
@@ -1604,7 +1643,7 @@ const ExpenseEntry = ({
       return r;
     });
 
-    const diffNote = calibrationDiff !== 0 ? ` (微差校正: ${calibrationDiff > 0 ? '+' : ''}$${calibrationDiff})` : '';
+    const diffNote = calibrationDiff !== 0 ? ` (含網銀差額校正平帳: ${calibrationDiff > 0 ? '+' : ''}$${calibrationDiff})` : '';
     const txRecord = {
       date: txDate,
       month: txDate.slice(0, 7),
@@ -1612,7 +1651,7 @@ const ExpenseEntry = ({
       category: '信用卡帳單',
       total: paymentAmount,
       sourceAmount: paymentAmount,
-      targetAmount: totalCreditCardDeduct,
+      targetAmount: paymentAmount,
       calibrationDiff: calibrationDiff,
       statementId: statementId,
       settledItemCount: settledUniqueKeys.size,
@@ -1652,8 +1691,8 @@ const ExpenseEntry = ({
       return;
     }
 
-    const targetDebt = Math.abs(Number(rawVal));
-    const newBalance = -targetDebt;
+    const targetVal = Math.abs(Number(rawVal));
+    const newBalance = directCalibrateIsDebt ? -targetVal : targetVal;
     const diff = newBalance - (Number(card.balance) || 0);
 
     if (diff === 0) {
@@ -1663,6 +1702,10 @@ const ExpenseEntry = ({
     }
 
     const updatedAccounts = accounts.map(a => a.id === card.id ? { ...a, balance: newBalance } : a);
+    const signDesc = newBalance < 0 ? '欠款負債' : (newBalance > 0 ? '溢繳/退款' : '已結清');
+    const signValStr = newBalance < 0 ? `-$${Math.abs(newBalance).toLocaleString()}` : `$${newBalance.toLocaleString()}`;
+    const prevDisplay = Number(card.balance) < 0 ? `-$${Math.abs(card.balance).toLocaleString()}` : `$${Number(card.balance).toLocaleString()}`;
+
     const txRecord = {
       date: new Date().toISOString().split('T')[0],
       month: new Date().toISOString().slice(0, 7),
@@ -1672,19 +1715,19 @@ const ExpenseEntry = ({
       payer: card.nickname,
       accountId: card.id,
       twdDiff: diff,
-      note: `⚖️ 信用卡餘額直接校正: ${card.nickname} (${card.balance} ➔ ${newBalance})`,
+      note: `⚖️ 信用卡餘額直接校正: ${card.nickname} (${prevDisplay} ➔ ${signValStr}，${signDesc})`,
       timestamp: new Date().toISOString()
     };
 
     setShowDirectCalibration(false);
     setShowCreditCardModal(false);
 
-    logger.addLog('TRANSACTION', `信用卡餘額直接校正: ${card.nickname} (${card.balance} ➔ ${newBalance})`, { targetDebt, diff });
+    logger.addLog('TRANSACTION', `信用卡餘額直接校正: ${card.nickname} (${prevDisplay} ➔ ${signValStr}，${signDesc})`, { targetVal, newBalance, diff });
 
     if (onTransaction) onTransaction({ ...assets, accounts: updatedAccounts }, txRecord);
     else if (setAssets) setAssets({ ...assets, accounts: updatedAccounts });
 
-    await customAlert?.(`✅ 信用卡【${card.nickname}】餘額已成功直接校正為 -$${targetDebt.toLocaleString()} TWD！`, "校正完成");
+    await customAlert?.(`✅ 信用卡【${card.nickname}】餘額已成功直接校正為 ${signValStr} TWD（${signDesc}）！`, "校正完成");
   };
 
   const safeBills = assets.bills || [];
@@ -1732,18 +1775,47 @@ const ExpenseEntry = ({
       {/* ========================================== */}
       {entryMode === 'expense' && (
         <div className="slide-in">
-          {/* Sub Navigation */}
-          <div style={{ padding: '0 4px', marginBottom: '16px' }}>
+          {/* UI Style Selector (Markdown 便籤速記 vs 傳統表單) */}
+          <div style={{ padding: '0 4px', marginBottom: '14px' }}>
             <SegmentedControl
               options={[
-                { label: '👤 個人記帳', value: 'personal', activeColor: '#0a84ff' },
-                { label: '🤝 共同記帳', value: 'joint', activeColor: '#30d158' },
-                { label: `📅 帳單 ${safeBills.some(b => isApproaching(b.nextDate)) ? '⚠️' : ''}`, value: 'bills', activeColor: '#ffd60a' },
+                { label: '⚡ Markdown 便籤速記', value: 'markdown', activeColor: '#0a84ff' },
+                { label: '📋 傳統分項表單 (舊版)', value: 'classic', activeColor: '#8e8e93' }
               ]}
-              value={activeTab}
-              onChange={handleExpenseTabChange}
+              value={expenseUIMode}
+              onChange={handleToggleUIMode}
             />
           </div>
+
+          {expenseUIMode === 'markdown' ? (
+            <MarkdownQuickEntry
+              assets={assets}
+              accounts={accounts}
+              currentUser={currentUser}
+              operatorName={loggedInUserName}
+              userKey={userKey}
+              expenseCategories={expenseCategories}
+              onTransaction={onTransaction}
+              setPendingSubmitConfig={setPendingSubmitConfig}
+              customAlert={customAlert}
+              customConfirm={customConfirm}
+              onSwitchToClassic={() => handleToggleUIMode('classic')}
+              getBudgetProgressText={getBudgetProgressText}
+            />
+          ) : (
+            <>
+              {/* Sub Navigation */}
+              <div style={{ padding: '0 4px', marginBottom: '16px' }}>
+                <SegmentedControl
+                  options={[
+                    { label: '👤 個人記帳', value: 'personal', activeColor: '#0a84ff' },
+                    { label: '🤝 共同記帳', value: 'joint', activeColor: '#30d158' },
+                    { label: `📅 帳單 ${safeBills.some(b => isApproaching(b.nextDate)) ? '⚠️' : ''}`, value: 'bills', activeColor: '#ffd60a' },
+                  ]}
+                  value={activeTab}
+                  onChange={handleExpenseTabChange}
+                />
+              </div>
 
           {/* Sub Tab: Personal Expense */}
           {activeTab === 'personal' && (
@@ -2245,7 +2317,7 @@ const ExpenseEntry = ({
                                   let rowBorderLeft = 'none';
                                   let rowBg = 'none';
 
-                                  if (isCc && !bill.autoPay) {
+                                  if (isCc) {
                                     if (diffDays <= 1) {
                                       rowBorderLeft = '4px solid #ff453a';
                                       rowBg = 'rgba(255,69,58,0.08)';
@@ -2264,6 +2336,8 @@ const ExpenseEntry = ({
                                   const displayAmount = (typeof bill.amount === 'number' && !isNaN(bill.amount))
                                     ? bill.amount
                                     : Number(bill.amount) || 0;
+                                  const rawCcBal = isCc ? Number(bill.rawBalance ?? (bill.rawAccount ? bill.rawAccount.balance : -displayAmount)) : 0;
+                                  const isPositiveCc = isCc && rawCcBal > 0;
 
                                   return (
                                     <div
@@ -2293,47 +2367,40 @@ const ExpenseEntry = ({
                                           </span>
                                         </div>
 
-                                        <strong style={{ color: isCc && displayAmount > 0 ? '#ffb94f' : (bill.isFixedAmount === false ? '#0a84ff' : '#fff'), fontSize: '0.9rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                          {bill.isFixedAmount === false ? `~${displayAmount.toLocaleString()}` : `$${displayAmount.toLocaleString()}`} {bill.currency || 'TWD'}
+                                        <strong style={{ color: isCc ? (displayAmount > 0 ? '#ffb94f' : '#8effa2') : (bill.isFixedAmount === false ? '#0a84ff' : '#fff'), fontSize: '0.9rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                          {isCc ? `-$${displayAmount.toLocaleString()}` : (bill.isFixedAmount === false ? `~${displayAmount.toLocaleString()}` : `$${displayAmount.toLocaleString()}`)} {bill.currency || 'TWD'}
                                         </strong>
                                       </div>
 
                                       {/* Line 2: Date Subtext (Left), Status Badges (Right) */}
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', width: '100%', marginTop: '2px' }}>
                                         <span style={{ fontSize: '0.66rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>
-                                          扣繳日: 每月 {bill.date || (bill.nextDate && !isNaN(new Date(bill.nextDate).getTime()) ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: {bill.nextDate || '未定'}
+                                          {isCc
+                                            ? `⏰ 每月 ${bill.billingDay || 10} 號截止 · 距到期 ${diffDays} 天`
+                                            : `扣繳日: 每月 ${bill.date || (bill.nextDate && !isNaN(new Date(bill.nextDate).getTime()) ? new Date(bill.nextDate).getDate() : '')} 號 | 下次: ${bill.nextDate || '未定'}`
+                                          }
                                         </span>
 
                                         <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
                                           {isCc ? (
-                                            bill.autoPay ? (
-                                              <span style={{ fontSize: '0.6rem', background: 'rgba(142,255,162,0.15)', color: '#8effa2', border: '0.5px solid rgba(142,255,162,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                                🤖 自動扣款 ({bill.linkedBankName || '活儲'})
+                                            <>
+                                              <span style={{ fontSize: '0.6rem', background: (bill.unpaidCount || 0) > 0 ? 'rgba(255,149,0,0.15)' : 'rgba(48,209,88,0.15)', color: (bill.unpaidCount || 0) > 0 ? '#ffb94f' : '#8effa2', border: `0.5px solid ${(bill.unpaidCount || 0) > 0 ? 'rgba(255,149,0,0.3)' : 'rgba(48,209,88,0.3)'}`, padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                                                📋 待結算 {bill.unpaidCount || 0} 筆
                                               </span>
-                                            ) : (
-                                              <span style={{ fontSize: '0.6rem', background: 'rgba(255,185,79,0.15)', color: '#ffb94f', border: '0.5px solid rgba(255,185,79,0.3)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                                🖐️ 手動繳納
-                                              </span>
-                                            )
+                                              {diffDays <= 1 && (
+                                                <span style={{ fontSize: '0.6rem', background: '#ff453a', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                                                  🚨 到期
+                                                </span>
+                                              )}
+                                              {diffDays > 1 && diffDays <= 3 && (
+                                                <span style={{ fontSize: '0.6rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                                                  ⚠️ 3天內到期
+                                                </span>
+                                              )}
+                                            </>
                                           ) : (
                                             <span style={{ fontSize: '0.6rem', background: bill.isFixedAmount === false ? 'rgba(0,122,255,0.15)' : 'rgba(48,209,88,0.15)', color: bill.isFixedAmount === false ? '#0a84ff' : '#30d158', border: '0.5px solid rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700', whiteSpace: 'nowrap' }}>
                                               {bill.isFixedAmount === false ? '📊 變動金額' : '📌 固定金額'}
-                                            </span>
-                                          )}
-
-                                          {isCc && !bill.autoPay && diffDays <= 1 && (
-                                            <span style={{ fontSize: '0.6rem', background: '#ff453a', color: '#fff', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
-                                              🚨 到期
-                                            </span>
-                                          )}
-                                          {isCc && !bill.autoPay && diffDays > 1 && diffDays <= 3 && (
-                                            <span style={{ fontSize: '0.6rem', background: '#ff9500', color: '#000', padding: '1px 5px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>
-                                              ⚠️ 3天內到期
-                                            </span>
-                                          )}
-                                          {isCc && !bill.autoPay && diffDays > 3 && diffDays <= 7 && (
-                                            <span style={{ fontSize: '0.62rem', background: 'rgba(255,149,0,0.25)', color: '#ffb94f', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
-                                              📅 7天內到期
                                             </span>
                                           )}
 
@@ -2344,6 +2411,21 @@ const ExpenseEntry = ({
                                           )}
                                         </div>
                                       </div>
+
+                                      {/* Line 3 for Credit Card: Last Payment Record */}
+                                      {isCc && (
+                                        <div style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '0.5px dashed rgba(255,255,255,0.06)', paddingTop: '4px', marginTop: '2px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span>🕒 上次在 App 繳款:</span>
+                                            <span style={{ color: bill.lastPayment ? 'rgba(255,255,255,0.85)' : 'var(--text-tertiary)', fontWeight: bill.lastPayment ? '700' : 'normal' }}>
+                                              {bill.lastPayment ? `${bill.lastPayment.date} (劃撥 $${bill.lastPayment.amount.toLocaleString()})` : '尚無繳款紀錄'}
+                                            </span>
+                                          </div>
+                                          <span style={{ color: 'var(--color-joint)', fontSize: '0.64rem', fontWeight: '750' }}>
+                                            點擊對帳繳款 ›
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -2417,6 +2499,8 @@ const ExpenseEntry = ({
                 )}
               </div>
             </ErrorBoundary>
+          )}
+            </>
           )}
         </div>
       )}
@@ -3319,27 +3403,64 @@ const ExpenseEntry = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
               <div style={{ fontWeight: '850', fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>💳</span>
-                <span>{selectedCcBill?.rawAccount?.nickname || selectedCcBill?.name || '信用卡'} 智慧帳單對帳與結清</span>
+                <span>{selectedCcBill?.rawAccount?.nickname || selectedCcBill?.name || '信用卡'} 帳單結清與智慧對帳</span>
               </div>
-              <button onClick={() => setShowCreditCardModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDirectCalibration(!showDirectCalibration)}
+                  className="glass-btn"
+                  style={{ padding: '4px 8px', fontSize: '0.72rem', color: showDirectCalibration ? '#0a84ff' : 'var(--text-secondary)' }}
+                >
+                  ⚖️ 直接校正
+                </button>
+                <button onClick={() => setShowCreditCardModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+              </div>
             </div>
 
             {/* Scrollable Modal Content */}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 2px' }}>
 
               {/* Card Summary Inset */}
-              <div className="inset-group-card" style={{ flexShrink: 0, padding: '12px 14px', background: 'rgba(255,255,255,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>📊 目前未結算刷卡負債</span>
-                  <strong style={{ fontSize: '1.18rem', color: (selectedCcBill?.amount || 0) > 0 ? '#ffb94f' : '#8effa2' }}>
-                    -${(selectedCcBill?.amount || 0).toLocaleString()} {selectedCcBill?.currency || 'TWD'}
+              <div className="inset-group-card" style={{ flexShrink: 0, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+                    {(() => {
+                      const bal = Number(selectedCcBill?.rawAccount?.balance ?? (selectedCcBill?.amount ? -selectedCcBill.amount : 0));
+                      return bal > 0 ? '📊 目前 App 記錄卡片餘額 (溢繳款)' : '📊 目前 App 記錄卡片負債';
+                    })()}
+                  </span>
+                  <strong style={{ fontSize: '1.18rem', color: (() => {
+                    const bal = Number(selectedCcBill?.rawAccount?.balance ?? (selectedCcBill?.amount ? -selectedCcBill.amount : 0));
+                    return bal < 0 ? '#ffb94f' : (bal > 0 ? '#30d158' : '#8effa2');
+                  })() }}>
+                    {(() => {
+                      const bal = Number(selectedCcBill?.rawAccount?.balance ?? (selectedCcBill?.amount ? -selectedCcBill.amount : 0));
+                      if (bal < 0) return `-$${Math.abs(bal).toLocaleString()}`;
+                      if (bal > 0) return `+$${bal.toLocaleString()}`;
+                      return '$0';
+                    })()} {selectedCcBill?.currency || 'TWD'}
                   </strong>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                  <span>📅 出帳日: <strong>每月 {selectedCcBill?.rawAccount?.billingDay || 10} 號</strong></span>
-                  <span>⏰ 到期: <strong>{selectedCcBill?.nextDate} (剩 {selectedCcBill?.diffDays} 天)</strong></span>
-                  <span>{selectedCcBill?.autoPay ? '🤖 自動扣繳' : '🖐️ 手動劃撥'}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>🕒 上次在 App 繳款:</span>
+                    <strong style={{ color: selectedCcBill?.lastPayment ? '#fff' : 'var(--text-tertiary)' }}>
+                      {selectedCcBill?.lastPayment ? `${selectedCcBill.lastPayment.date} ($${selectedCcBill.lastPayment.amount.toLocaleString()})` : '尚無歷史紀錄'}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>📋 待結算消費:</span>
+                    <strong style={{ color: '#30d158' }}>
+                      {unpaidCardTransactions.length} 筆 (${unpaidCardTransactions.reduce((s, r) => s + r._amt, 0).toLocaleString()})
+                    </strong>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
+                  <span>⏰ 每月繳款截止: <strong>每月 {selectedCcBill?.billingDay || selectedCcBill?.rawAccount?.billingDay || 10} 號</strong> (剩 {selectedCcBill?.diffDays} 天)</span>
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: '0.68rem' }}>💡 提前 3 天推播提醒</span>
                 </div>
               </div>
 
@@ -3352,21 +3473,97 @@ const ExpenseEntry = ({
                   </div>
                   <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
                     💡 <strong>什麼是直接校正？</strong><br />
-                    當您不想逐筆比對發票，只想將 App 內此卡負債強制改為目前網銀上看到的「未出帳/未繳總金額」時使用。
+                    當您不想逐筆比對發票，只想將 App 內此卡餘額強制校正為網銀查得的最新金額時使用。
                   </p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>
-                    <span>目前 App 記錄卡片負債：</span>
-                    <strong style={{ color: '#ffb94f' }}>-${Math.abs(selectedCcBill?.rawAccount?.balance || selectedCcBill?.amount || 0).toLocaleString()} TWD</strong>
+
+                  {/* Positive/Negative Selector */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setDirectCalibrateIsDebt(true)}
+                      style={{
+                        flex: 1,
+                        padding: '7px 10px',
+                        borderRadius: '8px',
+                        border: directCalibrateIsDebt ? '1px solid #ff9f0a' : '1px solid rgba(255,255,255,0.1)',
+                        background: directCalibrateIsDebt ? 'rgba(255,159,10,0.18)' : 'rgba(255,255,255,0.04)',
+                        color: directCalibrateIsDebt ? '#ffb94f' : 'var(--text-secondary)',
+                        fontWeight: '800',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      💳 尚有欠款 (負數 -)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDirectCalibrateIsDebt(false)}
+                      style={{
+                        flex: 1,
+                        padding: '7px 10px',
+                        borderRadius: '8px',
+                        border: !directCalibrateIsDebt ? '1px solid #30d158' : '1px solid rgba(255,255,255,0.1)',
+                        background: !directCalibrateIsDebt ? 'rgba(48,209,88,0.18)' : 'rgba(255,255,255,0.04)',
+                        color: !directCalibrateIsDebt ? '#30d158' : 'var(--text-secondary)',
+                        fontWeight: '800',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      💰 溢繳/退款 (正數 +)
+                    </button>
                   </div>
+
+                  {/* Explanatory Callout */}
+                  <div style={{
+                    padding: '8px 10px',
+                    background: directCalibrateIsDebt ? 'rgba(255,159,10,0.08)' : 'rgba(48,209,88,0.08)',
+                    border: `1px solid ${directCalibrateIsDebt ? 'rgba(255,159,10,0.2)' : 'rgba(48,209,88,0.2)'}`,
+                    borderRadius: '8px',
+                    fontSize: '0.72rem',
+                    lineHeight: '1.45',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    {directCalibrateIsDebt ? (
+                      <div>
+                        <strong style={{ color: '#ffb94f' }}>💳 尚有欠款 (負數 -，預設)</strong>：<br />
+                        代表未繳或未出帳消費（您欠銀行錢，為負債）。系統將儲存為負數餘額。
+                      </div>
+                    ) : (
+                      <div>
+                        <strong style={{ color: '#30d158' }}>💰 溢繳/退款 (正數 +)</strong>：<br />
+                        代表前期退貨銷貨退回折抵款或溢繳款（銀行欠您錢，為正資產）。系統將儲存為正數餘額。
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>
+                    <span>目前 App 記錄卡片餘額：</span>
+                    {(() => {
+                      const curBal = Number(selectedCcBill?.rawAccount?.balance ?? (selectedCcBill?.amount ? -selectedCcBill.amount : 0));
+                      return (
+                        <strong style={{ color: curBal < 0 ? '#ffb94f' : (curBal > 0 ? '#30d158' : '#8effa2') }}>
+                          {curBal < 0 ? `-$${Math.abs(curBal).toLocaleString()}` : (curBal > 0 ? `+$${curBal.toLocaleString()}` : '$0')} TWD
+                          {curBal < 0 ? ' (尚有欠款)' : (curBal > 0 ? ' (溢繳/退款)' : ' (已結清)')}
+                        </strong>
+                      );
+                    })()}
+                  </div>
+
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="例如: 4348"
-                      value={directCalibrateInput ? formatInputMoney(directCalibrateInput) : ''}
-                      onChange={(e) => setDirectCalibrateInput(e.target.value.replace(/[^\d.]/g, ''))}
-                      style={{ flex: 1, padding: '8px 10px', fontSize: '0.95rem', fontWeight: '800', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', padding: '0 8px' }}>
+                      <span style={{ fontWeight: '850', fontSize: '1rem', color: directCalibrateIsDebt ? '#ff9f0a' : '#30d158', marginRight: '4px' }}>
+                        {directCalibrateIsDebt ? '-' : '+'}
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="例如: 4348"
+                        value={directCalibrateInput ? formatInputMoney(directCalibrateInput) : ''}
+                        onChange={(e) => setDirectCalibrateInput(e.target.value.replace(/[^\d.]/g, ''))}
+                        style={{ width: '100%', padding: '8px 0', fontSize: '0.95rem', fontWeight: '800', background: 'transparent', border: 'none', color: '#fff', outline: 'none' }}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={handleExecuteDirectCalibration}
@@ -3729,10 +3926,12 @@ const ExpenseEntry = ({
                   type="button"
                   onClick={() => {
                     if (!showDirectCalibration) {
+                      const curBal = Number(selectedCcBill?.rawAccount?.balance ?? (selectedCcBill?.amount ? -selectedCcBill.amount : 0));
+                      setDirectCalibrateIsDebt(curBal <= 0);
                       if (reconcileAmountInput) {
                         setDirectCalibrateInput(reconcileAmountInput);
                       } else {
-                        setDirectCalibrateInput(String(Math.abs(selectedCcBill?.rawAccount?.balance || selectedCcBill?.amount || 0)));
+                        setDirectCalibrateInput(String(Math.abs(curBal)));
                       }
                     }
                     setShowDirectCalibration(v => !v);

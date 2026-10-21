@@ -71,11 +71,13 @@ const AccountsManager = ({
   const [isDefaultSettle, setIsDefaultSettle] = useState(false);
   const [linkedBankId, setLinkedBankId] = useState('');
   const [billingDay, setBillingDay] = useState('10');
-  const [autoPay, setAutoPay] = useState(true);
+    const [autoPay, setAutoPay] = useState(true);
+  const [accIsDebt, setAccIsDebt] = useState(true); // For credit card edit/create: true = 欠款 (-), false = 溢繳 (+)
 
   // Calibrate states
   const [calAcc, setCalAcc] = useState('');
   const [calNewBalance, setCalNewBalance] = useState('');
+  const [calIsDebt, setCalIsDebt] = useState(true); // For credit card calibration: true = 欠款 (-), false = 溢繳 (+)
   const [calNote, setCalNote] = useState('');
   const [calDate, setCalDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -112,6 +114,7 @@ const AccountsManager = ({
     setAccIcon('🏦');
     setAccNumber('');
     setAccBalance('');
+    setAccIsDebt(true);
     setAccCurrency('TWD');
     setIsDefaultExpense(false);
     setIsDefaultIncome(false);
@@ -139,6 +142,7 @@ const AccountsManager = ({
     setAccNumber(acc.accountNumber);
     const rawVal = acc.balance;
     setAccBalance(acc.type === 'credit' ? Math.abs(rawVal).toString() : rawVal.toString());
+    setAccIsDebt(acc.type === 'credit' ? rawVal <= 0 : true);
     setAccCurrency(acc.currency);
     setIsDefaultExpense(acc.isDefaultExpense || false);
     setIsDefaultIncome(acc.isDefaultIncome || false);
@@ -164,23 +168,11 @@ const AccountsManager = ({
       return;
     }
 
-    let isAutoPay = autoPay;
-    if (accType === 'credit' && isAutoPay && !linkedBankId) {
-      const confirmDisableAutoPay = await customConfirm(
-        "⚠️ 您開啟了信用卡「自動扣繳」，但尚未選擇綁定扣款活儲帳戶。\n\n是否先【關閉自動扣繳】並繼續儲存帳戶？（日後可隨時再編輯綁定）",
-        "自動扣款設定提示"
-      );
-      if (confirmDisableAutoPay) {
-        isAutoPay = false;
-        setAutoPay(false);
-      } else {
-        return;
-      }
-    }
+    const isAutoPay = autoPay;
     
     let val = parseMoney(accBalance);
     if (accType === 'credit') {
-      val = -Math.abs(val); // Save as negative liability
+      val = accIsDebt ? -Math.abs(val) : Math.abs(val); // Debt is negative, refund/overpayment is positive
     }
 
     let defaultTypeIcon = '🏦';
@@ -225,11 +217,15 @@ const AccountsManager = ({
     let txRecord = null;
     if (balanceDiff !== 0) {
       const isUs = accCurrency === 'USD';
+      const prevDisplay = editingAccount 
+        ? (editingAccount.type === 'credit' && editingAccount.balance < 0 ? `-$${Math.abs(editingAccount.balance).toLocaleString()}` : `$${editingAccount.balance.toLocaleString()}`)
+        : '$0';
+      const valDisplay = accType === 'credit' && val < 0 ? `-$${Math.abs(val).toLocaleString()}` : `$${val.toLocaleString()}`;
       const changeText = balanceDiff > 0 ? `增加 $${balanceDiff.toLocaleString()}` : `減少 $${Math.abs(balanceDiff).toLocaleString()}`;
       
       const confirmMessage = editingAccount
-        ? `⚠️ 偵測到帳戶餘額變更！\n【${accNickname}】的餘額將由 $${prevBalance.toLocaleString()} ${accCurrency} 變更為 $${val.toLocaleString()} ${accCurrency}（${changeText}）。\n\n系統將自動產生一筆「餘額校正」紀錄以留下審計軌跡，是否確定儲存？`
-        : `🆕 您為新帳戶【${accNickname}】設定了初始餘額 $${val.toLocaleString()} ${accCurrency}。\n\n系統將自動產生一筆「餘額校正」紀錄作為初始帳面軌跡，是否確定儲存？`;
+        ? `⚠️ 偵測到帳戶餘額變更！\n【${accNickname}】的餘額將由 ${prevDisplay} ${accCurrency} 變更為 ${valDisplay} ${accCurrency}（${changeText}）。\n\n系統將自動產生一筆「餘額校正」紀錄以留下審計軌跡，是否確定儲存？`
+        : `🆕 您為新帳戶【${accNickname}】設定了初始餘額 ${valDisplay} ${accCurrency}。\n\n系統將自動產生一筆「餘額校正」紀錄作為初始帳面軌跡，是否確定儲存？`;
 
       const confirmSave = await customConfirm(confirmMessage, "儲存變更確認");
       if (!confirmSave) return;
@@ -241,13 +237,16 @@ const AccountsManager = ({
         month: new Date().toISOString().slice(0, 7),
         type: 'calibrate',
         category: '餘額校正',
-        total: totalTwd,
-        usdAmount: isUs ? balanceDiff : 0,
+        total: Math.abs(totalTwd),
+        twdDiff: totalTwd,
+        usdAmount: isUs ? Math.abs(balanceDiff) : 0,
+        usdDiff: isUs ? balanceDiff : 0,
         accountId: nextId,
         payer: accOwner === 'joint' ? '共同帳戶' : (accOwner === 'userA' ? '大狗狗🐕' : '阿陞🐶'),
         note: editingAccount
-          ? `📝 編輯帳戶餘額自動調整: ${accNickname} (${prevBalance.toLocaleString()} ➔ ${val.toLocaleString()} ${accCurrency})`
-          : `🆕 新增帳戶設定初始餘額: ${accNickname} (初始餘額: ${val.toLocaleString()} ${accCurrency})`
+          ? `📝 編輯帳戶餘額自動調整: ${accNickname} (${prevDisplay} ➔ ${valDisplay} ${accCurrency})`
+          : `🆕 新增帳戶設定初始餘額: ${accNickname} (初始餘額: ${valDisplay} ${accCurrency})`,
+        timestamp: new Date().toISOString()
       };
     }
 
@@ -386,8 +385,14 @@ const AccountsManager = ({
       await customAlert("請選擇帳戶並輸入校正後的真實餘額！");
       return;
     }
-    const newVal = parseMoney(calNewBalance);
     const acc = accounts.find(a => a.id === calAcc);
+    if (!acc) return;
+
+    const rawNum = parseMoney(calNewBalance);
+    let newVal = rawNum;
+    if (acc.type === 'credit') {
+      newVal = calIsDebt ? -Math.abs(rawNum) : Math.abs(rawNum);
+    }
     const diff = newVal - acc.balance;
 
     if (diff === 0) {
@@ -402,21 +407,28 @@ const AccountsManager = ({
 
     const isUs = acc.currency === 'USD';
     const totalTwd = isUs ? Math.round(diff * (currentFxRate || 31.5)) : diff;
+    const isCredit = acc.type === 'credit';
+    const signDesc = isCredit ? (newVal < 0 ? '欠款負債' : (newVal > 0 ? '溢繳/退款' : '已結清')) : '';
+    const prevDisplay = isCredit && acc.balance < 0 ? `-$${Math.abs(acc.balance).toLocaleString()}` : `$${acc.balance.toLocaleString()}`;
+    const newDisplay = isCredit && newVal < 0 ? `-$${Math.abs(newVal).toLocaleString()}` : `$${newVal.toLocaleString()}`;
 
     const txRecord = {
       date: calDate,
       month: calDate.slice(0, 7),
       type: 'calibrate',
       category: '餘額校正',
-      total: totalTwd,
-      usdAmount: isUs ? diff : 0,
+      total: Math.abs(totalTwd),
+      twdDiff: totalTwd,
+      usdAmount: isUs ? Math.abs(diff) : 0,
+      usdDiff: isUs ? diff : 0,
       payer: operatorName.includes('大狗狗') ? '大狗狗🐕' : '阿陞🐶',
       accountId: calAcc,
-      note: calNote.trim() || `餘額手動校正: ${acc.nickname}`,
+      note: calNote.trim() || `⚖️ 餘額手動校正: ${acc.nickname} (${prevDisplay} ➔ ${newDisplay}${signDesc ? `，${signDesc}` : ''})`,
+      timestamp: new Date().toISOString()
     };
 
     onTransaction({ ...assets, accounts: updatedAccounts }, txRecord);
-    await customAlert(`✅ 餘額校正儲存成功！`);
+    await customAlert(`✅ 帳戶【${acc.nickname}】餘額校正儲存成功！\n校正後餘額：${newDisplay} ${acc.currency || 'TWD'}${signDesc ? `（${signDesc}）` : ''}`);
     setCalNewBalance('');
     setCalNote('');
   };
@@ -469,7 +481,8 @@ const AccountsManager = ({
               }}>
                 {cat.list.map((acc, index) => {
                   const isCredit = acc.type === 'credit';
-                  const balanceColor = isCredit ? '#ff9f0a' : '#fff';
+                  const isPositiveCredit = isCredit && acc.balance > 0;
+                  const balanceColor = isCredit ? (isPositiveCredit ? '#30d158' : '#ff9f0a') : '#fff';
                   
                   let defaultIcon = '🏦';
                   let typeName = '銀行活儲';
@@ -515,14 +528,14 @@ const AccountsManager = ({
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: '750', fontSize: '0.88rem', color: '#fff' }}>{acc.nickname}</span>
+                            <span style={{ fontWeight: '750', fontSize: '0.88rem', color: '#fff' }}>{acc.nickname || acc.name || '未命名帳戶'}</span>
                             <div style={{ display: 'inline-flex', gap: '3px' }}>
                               {acc.isDefaultExpense && <span style={{ fontSize: '0.56rem', background: 'rgba(255,45,85,0.15)', color: '#ff2d55', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>支</span>}
                               {acc.isDefaultIncome && <span style={{ fontSize: '0.56rem', background: 'rgba(48,209,88,0.15)', color: '#30d158', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>收</span>}
                               {acc.isDefaultSettle && <span style={{ fontSize: '0.56rem', background: 'rgba(10,132,255,0.15)', color: '#0a84ff', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>結</span>}
-                              {isCredit && acc.autoPay && (
-                                <span style={{ fontSize: '0.56rem', background: 'rgba(0,122,255,0.2)', color: '#64d2ff', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
-                                  🤖自動扣款 ({linkedBank ? linkedBank.nickname : '活儲'})
+                              {isCredit && (
+                                <span style={{ fontSize: '0.56rem', background: 'rgba(255,159,10,0.15)', color: '#ffb94f', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                  ⏰ 每月 {acc.billingDay || 10} 號截止 {acc.autoPay !== false ? '🔔' : ''}
                                 </span>
                               )}
                             </div>
@@ -536,9 +549,11 @@ const AccountsManager = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '10px' }}>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontWeight: '850', fontSize: '0.92rem', color: balanceColor }}>
-                            ${(acc.balance || 0).toLocaleString()}
+                            {acc.balance < 0 ? `-$${Math.abs(acc.balance).toLocaleString()}` : (isPositiveCredit ? `+$${acc.balance.toLocaleString()}` : `$${(acc.balance || 0).toLocaleString()}`)}
                           </div>
-                          <span style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)' }}>{acc.currency || 'TWD'}</span>
+                          <span style={{ fontSize: '0.62rem', color: isPositiveCredit ? '#30d158' : 'var(--text-tertiary)' }}>
+                            {isPositiveCredit ? '💰 溢繳/退款' : (acc.currency || 'TWD')}
+                          </span>
                         </div>
                         <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '1.1rem', paddingLeft: '2px' }}>›</span>
                       </div>
@@ -731,17 +746,136 @@ const AccountsManager = ({
                 label="⚖️ 要校正的帳戶"
                 accounts={accounts}
                 selectedValue={calAcc}
-                onChange={setCalAcc}
+                onChange={(accId) => {
+                  setCalAcc(accId);
+                  const target = accounts.find(a => a.id === accId);
+                  if (target?.type === 'credit') {
+                    setCalIsDebt(target.balance <= 0);
+                    setCalNewBalance(target.balance !== 0 ? Math.abs(target.balance).toString() : '');
+                  } else if (target) {
+                    setCalNewBalance(Math.abs(target.balance || 0).toString());
+                  } else {
+                    setCalNewBalance('');
+                  }
+                }}
                 currentUser={operatorName}
                 themeColor="#AF52DE"
                 modalTitle="選擇要校正的帳戶"
               />
+
+              {/* Current Balance Display Subtext */}
+              {(() => {
+                const target = accounts.find(a => a.id === calAcc);
+                if (!target) return null;
+                const isCredit = target.type === 'credit';
+                const bal = target.balance || 0;
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', padding: '0 4px 4px 4px' }}>
+                    <span style={{ color: 'var(--text-tertiary)' }}>目前 App 記錄餘額：</span>
+                    <strong style={{ color: isCredit ? (bal < 0 ? '#ff9f0a' : (bal > 0 ? '#30d158' : '#8effa2')) : '#fff' }}>
+                      {bal < 0 ? `-$${Math.abs(bal).toLocaleString()}` : (isCredit && bal > 0 ? `+$${bal.toLocaleString()}` : `$${bal.toLocaleString()}`)} {target.currency || 'TWD'}
+                      {isCredit && (bal < 0 ? ' (尚有欠款)' : (bal > 0 ? ' (溢繳/退款)' : ' (已結清)'))}
+                    </strong>
+                  </div>
+                );
+              })()}
             </div>
+
+            {/* Credit Card Sign Selector & Guide */}
+            {(() => {
+              const target = accounts.find(a => a.id === calAcc);
+              if (target?.type !== 'credit') return null;
+              return (
+                <div className="inset-group-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '10px 14px' }}>
+                  <span className="inset-group-label" style={{ alignSelf: 'flex-start', fontSize: '0.78rem', fontWeight: '800', color: '#fff' }}>
+                    💳 信用卡正負屬性設定
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setCalIsDebt(true)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: calIsDebt ? '1px solid #ff9f0a' : '1px solid rgba(255,255,255,0.1)',
+                        background: calIsDebt ? 'rgba(255,159,10,0.18)' : 'rgba(255,255,255,0.04)',
+                        color: calIsDebt ? '#ffb94f' : 'var(--text-secondary)',
+                        fontWeight: '800',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      💳 尚有欠款 (負數 -)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCalIsDebt(false)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: !calIsDebt ? '1px solid #30d158' : '1px solid rgba(255,255,255,0.1)',
+                        background: !calIsDebt ? 'rgba(48,209,88,0.18)' : 'rgba(255,255,255,0.04)',
+                        color: !calIsDebt ? '#30d158' : 'var(--text-secondary)',
+                        fontWeight: '800',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      💰 溢繳/退款 (正數 +)
+                    </button>
+                  </div>
+
+                  {/* Explanation Banner */}
+                  <div style={{
+                    padding: '8px 12px',
+                    background: calIsDebt ? 'rgba(255,159,10,0.08)' : 'rgba(48,209,88,0.08)',
+                    border: `1px solid ${calIsDebt ? 'rgba(255,159,10,0.2)' : 'rgba(48,209,88,0.2)'}`,
+                    borderRadius: '8px',
+                    fontSize: '0.72rem',
+                    lineHeight: '1.45',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    {calIsDebt ? (
+                      <div>
+                        <strong style={{ color: '#ffb94f' }}>💳 尚有欠款 (負數 -，預設)</strong>：<br />
+                        代表您在網銀查到的未出帳或本期應繳帳款（您欠銀行錢，為負債）。系統校正後會將餘額設為 <strong>負數</strong>。
+                      </div>
+                    ) : (
+                      <div>
+                        <strong style={{ color: '#30d158' }}>💰 溢繳/退款 (正數 +)</strong>：<br />
+                        代表前期帳款辦理銷貨退回折抵款，或多繳了溢繳款（銀行倒欠您錢，為正資產）。系統校正後會將餘額設為 <strong>正數</strong>。
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* New Balance */}
             <div className="inset-group-row">
-              <span className="inset-group-label">💵 真實餘額 (校正後)</span>
-              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px' }}>
+              <span className="inset-group-label">
+                {(() => {
+                  const target = accounts.find(a => a.id === calAcc);
+                  if (target?.type === 'credit') {
+                    return calIsDebt ? '💳 校正後欠款 (-)' : '💰 校正後溢繳 (+)';
+                  }
+                  return '💵 真實餘額 (校正後)';
+                })()}
+              </span>
+              <span className="inset-group-value" style={{ flex: 1, marginLeft: '24px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                {(() => {
+                  const target = accounts.find(a => a.id === calAcc);
+                  if (target?.type !== 'credit') return null;
+                  return (
+                    <span style={{ fontSize: '1.15rem', fontWeight: '850', color: calIsDebt ? '#ff9f0a' : '#30d158' }}>
+                      {calIsDebt ? '-' : '+'}
+                    </span>
+                  );
+                })()}
                 <input
                   type="text"
                   inputMode="numeric"
@@ -749,7 +883,15 @@ const AccountsManager = ({
                   value={calNewBalance}
                   onChange={(e) => setCalNewBalance(formatInputMoney(e.target.value))}
                   placeholder="$0"
-                  style={{ fontSize: '1.15rem', fontWeight: '800' }}
+                  style={{
+                    fontSize: '1.15rem',
+                    fontWeight: '800',
+                    color: (() => {
+                      const target = accounts.find(a => a.id === calAcc);
+                      if (target?.type === 'credit') return calIsDebt ? '#ff9f0a' : '#30d158';
+                      return undefined;
+                    })()
+                  }}
                 />
               </span>
             </div>
@@ -875,17 +1017,24 @@ const AccountsManager = ({
                 <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '3px', fontWeight: '700' }}>
-                      {accType === 'credit' ? '💳 目前未繳帳單金額' : '💵 目前帳戶餘額'}
+                      {accType === 'credit' ? (accIsDebt ? '💳 目前未繳帳單 (負債 -)' : '💰 銷貨退回/溢繳款 (正數 +)') : '💵 目前帳戶餘額'}
                     </label>
-                    <input
-                      disabled={isReadOnly}
-                      type="text"
-                      value={formatInputMoney(accBalance)}
-                      onChange={(e) => setAccBalance(e.target.value)}
-                      placeholder="$0"
-                      className="glass-input tabular-nums"
-                      style={{ width: '100%', height: '42px', borderRadius: '10px', padding: '0 12px', fontSize: '1.25rem', fontWeight: '850', color: accType === 'credit' ? '#ff9f0a' : '#30d158' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {accType === 'credit' && (
+                        <span style={{ fontSize: '1.25rem', fontWeight: '850', color: accIsDebt ? '#ff9f0a' : '#30d158' }}>
+                          {accIsDebt ? '-' : '+'}
+                        </span>
+                      )}
+                      <input
+                        disabled={isReadOnly}
+                        type="text"
+                        value={formatInputMoney(accBalance)}
+                        onChange={(e) => setAccBalance(e.target.value)}
+                        placeholder="$0"
+                        className="glass-input tabular-nums"
+                        style={{ width: '100%', height: '42px', borderRadius: '10px', padding: '0 12px', fontSize: '1.25rem', fontWeight: '850', color: accType === 'credit' ? (accIsDebt ? '#ff9f0a' : '#30d158') : '#30d158' }}
+                      />
+                    </div>
                   </div>
 
                   <div style={{ width: '100px' }}>
@@ -902,6 +1051,63 @@ const AccountsManager = ({
                     </select>
                   </div>
                 </div>
+
+                {/* Credit Card Positive/Negative Selector in Modal */}
+                {accType === 'credit' && (
+                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => setAccIsDebt(true)}
+                        style={{
+                          flex: 1,
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: accIsDebt ? '1px solid #ff9f0a' : '1px solid rgba(255,255,255,0.1)',
+                          background: accIsDebt ? 'rgba(255,159,10,0.18)' : 'rgba(255,255,255,0.04)',
+                          color: accIsDebt ? '#ffb94f' : 'var(--text-secondary)',
+                          fontWeight: '800',
+                          fontSize: '0.74rem',
+                          cursor: isReadOnly ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        💳 尚有欠款 (負數 -)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => setAccIsDebt(false)}
+                        style={{
+                          flex: 1,
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: !accIsDebt ? '1px solid #30d158' : '1px solid rgba(255,255,255,0.1)',
+                          background: !accIsDebt ? 'rgba(48,209,88,0.18)' : 'rgba(255,255,255,0.04)',
+                          color: !accIsDebt ? '#30d158' : 'var(--text-secondary)',
+                          fontWeight: '800',
+                          fontSize: '0.74rem',
+                          cursor: isReadOnly ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        💰 溢繳/退款 (正數 +)
+                      </button>
+                    </div>
+                    <div style={{
+                      padding: '6px 10px',
+                      background: accIsDebt ? 'rgba(255,159,10,0.08)' : 'rgba(48,209,88,0.08)',
+                      border: `1px solid ${accIsDebt ? 'rgba(255,159,10,0.2)' : 'rgba(48,209,88,0.2)'}`,
+                      borderRadius: '6px',
+                      fontSize: '0.68rem',
+                      lineHeight: '1.4',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      {accIsDebt 
+                        ? '💳 欠款負債 (-)：代表未繳信用卡帳款或刷卡負債（您欠銀行錢）。' 
+                        : '💰 溢繳/退款 (+)：代表銷貨退回折抵款或溢繳款（銀行倒欠您錢，為正資產）。'}
+                    </div>
+                  </div>
+                )}
 
               </div>
 
@@ -978,47 +1184,56 @@ const AccountsManager = ({
 
               </div>
 
-              {/* SECTION 3: CREDIT CARD LINKED BANK ACCOUNT (僅信用卡顯示) */}
+              {/* SECTION 3: CREDIT CARD DUE DATE & REMINDER SETTINGS (僅信用卡顯示) */}
               {accType === 'credit' && (
                 <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(255,159,10,0.06)', border: '1px solid rgba(255,159,10,0.2)', display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
-                  <div style={{ fontSize: '0.72rem', color: '#ff9f0a', fontWeight: '800' }}>
-                    🤖 信用卡自動扣款與帳單設定
+                  <div style={{ fontSize: '0.74rem', color: '#ff9f0a', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span>⏰</span>
+                    <span>信用卡繳款截止日與到期提醒設定</span>
                   </div>
 
-                  <div>
+                  <p style={{ margin: 0, fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)', lineHeight: '1.4' }}>
+                    💡 系統將在截止日前 3 天發送推播通知提醒您至網銀繳納真實帳單，不影響 App 內部其他記帳邏輯。
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
+                    <div>
+                      <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: '4px', fontWeight: '750' }}>⏰ 每月繳款截止日</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>每月</span>
+                        <input
+                          disabled={isReadOnly}
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={billingDay}
+                          onChange={(e) => setBillingDay(e.target.value)}
+                          className="glass-input"
+                          style={{ width: '60px', height: '36px', borderRadius: '8px', padding: '0 8px', fontSize: '0.88rem', textAlign: 'center', fontWeight: '800' }}
+                        />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>號</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-end', height: '100%' }}>
+                      <div style={{ width: '100%', marginTop: '14px' }}>
+                        {renderToggleRow("到期推播提醒", autoPay, setAutoPay, isReadOnly)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '2px' }}>
                     <IOSAccountMenuPicker
-                      label="💳 綁定自動扣繳活儲帳戶"
+                      label="🏦 預設劃撥扣繳活儲帳戶 (選填，結清時自動預選)"
                       accounts={accounts}
                       selectedValue={linkedBankId}
                       onChange={setLinkedBankId}
                       filterFn={a => (a.type === 'bank' || a.type === 'cash') && (a.owner === accOwner || a.owner === 'joint')}
                       currentUser={operatorName}
                       themeColor="#ff9f0a"
-                      placeholder="請選擇自動扣款活儲帳戶"
-                      modalTitle="選擇扣款活儲帳戶"
+                      placeholder="請選擇常用劃撥活儲帳戶"
+                      modalTitle="選擇常用劃撥活儲帳戶"
                     />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>📅 每月結帳日</label>
-                      <input
-                        disabled={isReadOnly}
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={billingDay}
-                        onChange={(e) => setBillingDay(e.target.value)}
-                        className="glass-input"
-                        style={{ width: '100%', height: '36px', borderRadius: '8px', padding: '0 8px', fontSize: '0.8rem' }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                      <div style={{ width: '100%' }}>
-                        {renderToggleRow("自動劃撥扣繳", autoPay, setAutoPay, isReadOnly)}
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}

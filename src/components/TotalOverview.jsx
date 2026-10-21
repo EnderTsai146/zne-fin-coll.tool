@@ -73,38 +73,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
     const todayStr = formatDate(today);
 
     // ----------------------------------------------------
-    // 0. 自動無感備份引擎
+    // 0. 自動無感備份引擎已提升至 App.jsx 根節點集中管理 (支援 Google Drive + Firestore 快照)
     // ----------------------------------------------------
-    useEffect(() => {
-        if (!assets.monthlyExpenses || assets.monthlyExpenses.length === 0) return;
-        if (assets.lastBackupDate === todayStr) return;
-
-        const timer = setTimeout(async () => {
-            if (isBackingUpRef.current) return;
-            isBackingUpRef.current = true;
-            try {
-                fetch(MY_GOOGLE_API_URL, {
-                    method: 'POST',
-                    headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify({
-                        action: 'backup',
-                        date: todayStr,
-                        fileName: `自動備份_${todayStr}.json`,
-                        assets: assets
-                    }),
-                    redirect: 'follow'
-                }).catch(e => console.log('Background backup error (usually cors/redirect thrown by browser):', e));
-
-                setBackupWarning(false);
-                // ★ Fix: 使用 functional update 確保狀態更新順序正確
-                setAssets(prev => ({ ...prev, lastBackupDate: todayStr }));
-            } finally {
-                isBackingUpRef.current = false;
-            }
-        }, 3000);
-
-        return () => clearTimeout(timer);
-    }, [todayStr, setAssets, assets, assets.monthlyExpenses?.length, assets.lastBackupDate]);
 
     // ----------------------------------------------------
     // 1. 雙幣別資產計算 (直覺相加邏輯)
@@ -1258,7 +1228,8 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                         {(assets.accounts || []).map(acc => {
                             const isCredit = acc.type === 'credit';
                             const ownerLabel = acc.owner === 'joint' ? '共同' : (acc.owner === 'userA' ? '大狗狗' : '阿陞');
-                            const balanceColor = isCredit ? '#ff9500' : '#8effa2';
+                            const isPositiveCredit = isCredit && acc.balance > 0;
+                            const balanceColor = isCredit ? (isPositiveCredit ? '#8effa2' : '#ff9500') : '#8effa2';
                             
                             let typeIcon = '🏦';
                             if (acc.type === 'cash') typeIcon = '💵';
@@ -1282,16 +1253,16 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                                         <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{acc.icon || typeIcon}</span>
                                         <div style={{ minWidth: 0 }}>
                                             <div style={{ fontWeight: '700', fontSize: '0.82rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {acc.nickname}
+                                                {acc.nickname || acc.name || '未命名帳戶'}
                                             </div>
                                             <div style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)', marginTop: '1px' }}>
-                                                {ownerLabel} · {acc.name || '帳戶'}
+                                                {ownerLabel} · {acc.name || '帳戶'} {isPositiveCredit && <span style={{ color: '#8effa2', fontWeight: '700' }}>(溢繳/退款)</span>}
                                             </div>
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '8px' }}>
                                         <span style={{ display: 'block', fontWeight: '800', fontSize: '0.86rem', color: balanceColor }}>
-                                            ${acc.balance.toLocaleString()} <span style={{ fontSize: '0.64rem', opacity: 0.8 }}>{acc.currency}</span>
+                                            {acc.balance < 0 ? `-$${Math.abs(acc.balance).toLocaleString()}` : (isPositiveCredit ? `+$${acc.balance.toLocaleString()}` : `$${acc.balance.toLocaleString()}`)} <span style={{ fontSize: '0.64rem', opacity: 0.8 }}>{acc.currency}</span>
                                         </span>
                                         {acc.currency === 'USD' && (
                                             <span style={{ display: 'block', fontSize: '0.66rem', color: 'var(--text-tertiary)', marginTop: '2px', fontWeight: '600' }}>
@@ -1411,7 +1382,7 @@ const TotalOverview = ({ assets, combinedHistory, loadArchiveMonth, isFetchingAr
                                     return (
                                         <div key={i} style={{ padding: '10px 12px', borderRadius: '10px', border: '0.5px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                                <strong style={{ fontSize: '0.82rem', color: '#fff' }}>{c.nickname}</strong>
+                                                <strong style={{ fontSize: '0.82rem', color: '#fff' }}>{c.nickname || c.name || '帳戶'}</strong>
                                                 <span style={{ fontSize: '0.64rem', color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: '4px' }}>{ownerLabel}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
