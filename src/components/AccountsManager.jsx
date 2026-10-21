@@ -134,16 +134,16 @@ const AccountsManager = ({
 
   const handleOpenEdit = (acc) => {
     setEditingAccount(acc);
-    setAccOwner(acc.owner);
-    setAccType(acc.type);
-    setAccName(acc.name);
-    setAccNickname(acc.nickname);
+    setAccOwner(acc.owner || 'userA');
+    setAccType(acc.type || 'bank');
+    setAccName(acc.name || acc.nickname || '');
+    setAccNickname(acc.nickname || acc.name || '');
     setAccIcon(acc.icon || '');
-    setAccNumber(acc.accountNumber);
+    setAccNumber(acc.accountNumber || '');
     const rawVal = acc.balance;
-    setAccBalance(acc.type === 'credit' ? Math.abs(rawVal).toString() : rawVal.toString());
-    setAccIsDebt(acc.type === 'credit' ? rawVal <= 0 : true);
-    setAccCurrency(acc.currency);
+    setAccBalance((rawVal !== undefined && rawVal !== null) ? (acc.type === 'credit' ? Math.abs(rawVal).toString() : rawVal.toString()) : '0');
+    setAccIsDebt(acc.type === 'credit' ? (rawVal <= 0) : true);
+    setAccCurrency(acc.currency || 'TWD');
     setIsDefaultExpense(acc.isDefaultExpense || false);
     setIsDefaultIncome(acc.isDefaultIncome || false);
     setIsDefaultSettle(acc.isDefaultSettle || false);
@@ -151,8 +151,8 @@ const AccountsManager = ({
     setBillingDay((acc.billingDay || 10).toString());
     setAutoPay(acc.autoPay !== undefined ? acc.autoPay : true);
 
-    const cannotEdit = acc.owner !== userKey && acc.owner !== 'joint';
-    setIsReadOnly(cannotEdit);
+    // 允許完全自由編輯與維護所有帳戶名稱、暱稱、圖示及設定
+    setIsReadOnly(false);
     setShowModal(true);
   };
 
@@ -160,152 +160,162 @@ const AccountsManager = ({
   const handleSaveAccount = async () => {
     if (isReadOnly) return;
 
-    const finalNickname = accNickname.trim() || accName.trim();
-    const finalName = accName.trim() || accNickname.trim() || (accType === 'cash' ? '現金錢包' : '一般帳戶');
+    try {
+      const finalNickname = (accNickname || '').trim() || (accName || '').trim();
+      const finalName = (accName || '').trim() || (accNickname || '').trim() || (accType === 'cash' ? '現金錢包' : '一般帳戶');
 
-    if (!finalNickname) {
-      await customAlert("請輸入帳戶暱稱或名稱！", "欄位未填寫");
-      return;
-    }
+      if (!finalNickname) {
+        await customAlert("請輸入帳戶暱稱或名稱！", "欄位未填寫");
+        return;
+      }
 
-    const isAutoPay = autoPay;
-    
-    let val = parseMoney(accBalance);
-    if (accType === 'credit') {
-      val = accIsDebt ? -Math.abs(val) : Math.abs(val); // Debt is negative, refund/overpayment is positive
-    }
-
-    let defaultTypeIcon = '🏦';
-    if (accType === 'cash') defaultTypeIcon = '💵';
-    else if (accType === 'credit') defaultTypeIcon = '💳';
-    else if (accType === 'virtual') defaultTypeIcon = '📱';
-
-    const finalIcon = cleanIconInput(accIcon) || defaultTypeIcon;
-
-    let updatedAccounts = [...accounts];
-
-    // Reset default flags if this one is selected as default
-    if (isDefaultExpense) {
-      updatedAccounts = updatedAccounts.map(a => {
-        if (a.owner === accOwner && a.currency === accCurrency) {
-          return { ...a, isDefaultExpense: false };
-        }
-        return a;
-      });
-    }
-    if (isDefaultIncome) {
-      updatedAccounts = updatedAccounts.map(a => {
-        if (a.owner === accOwner && a.currency === accCurrency) {
-          return { ...a, isDefaultIncome: false };
-        }
-        return a;
-      });
-    }
-    if (isDefaultSettle) {
-      updatedAccounts = updatedAccounts.map(a => {
-        if (a.owner === accOwner && a.currency === accCurrency) {
-          return { ...a, isDefaultSettle: false };
-        }
-        return a;
-      });
-    }
-
-    const nextId = editingAccount ? editingAccount.id : ('acc_' + Date.now());
-    const prevBalance = editingAccount ? editingAccount.balance : 0;
-    const balanceDiff = val - prevBalance;
-
-    let txRecord = null;
-    if (balanceDiff !== 0) {
-      const isUs = accCurrency === 'USD';
-      const prevDisplay = editingAccount 
-        ? (editingAccount.type === 'credit' && editingAccount.balance < 0 ? `-$${Math.abs(editingAccount.balance).toLocaleString()}` : `$${editingAccount.balance.toLocaleString()}`)
-        : '$0';
-      const valDisplay = accType === 'credit' && val < 0 ? `-$${Math.abs(val).toLocaleString()}` : `$${val.toLocaleString()}`;
-      const changeText = balanceDiff > 0 ? `增加 $${balanceDiff.toLocaleString()}` : `減少 $${Math.abs(balanceDiff).toLocaleString()}`;
+      const isAutoPay = autoPay;
       
-      const confirmMessage = editingAccount
-        ? `⚠️ 偵測到帳戶餘額變更！\n【${accNickname}】的餘額將由 ${prevDisplay} ${accCurrency} 變更為 ${valDisplay} ${accCurrency}（${changeText}）。\n\n系統將自動產生一筆「餘額校正」紀錄以留下審計軌跡，是否確定儲存？`
-        : `🆕 您為新帳戶【${accNickname}】設定了初始餘額 ${valDisplay} ${accCurrency}。\n\n系統將自動產生一筆「餘額校正」紀錄作為初始帳面軌跡，是否確定儲存？`;
+      let val = parseMoney(accBalance);
+      if (accType === 'credit') {
+        val = accIsDebt ? -Math.abs(val) : Math.abs(val); // Debt is negative, refund/overpayment is positive
+      }
 
-      const confirmSave = await customConfirm(confirmMessage, "儲存變更確認");
-      if (!confirmSave) return;
+      let defaultTypeIcon = '🏦';
+      if (accType === 'cash') defaultTypeIcon = '💵';
+      else if (accType === 'credit') defaultTypeIcon = '💳';
+      else if (accType === 'virtual') defaultTypeIcon = '📱';
 
-      const totalTwd = isUs ? Math.round(balanceDiff * (currentFxRate || 31.5)) : balanceDiff;
+      const finalIcon = cleanIconInput(accIcon) || defaultTypeIcon;
 
-      txRecord = {
-        date: new Date().toISOString().split('T')[0],
-        month: new Date().toISOString().slice(0, 7),
-        type: 'calibrate',
-        category: '餘額校正',
-        total: Math.abs(totalTwd),
-        twdDiff: totalTwd,
-        usdAmount: isUs ? Math.abs(balanceDiff) : 0,
-        usdDiff: isUs ? balanceDiff : 0,
-        accountId: nextId,
-        payer: accOwner === 'joint' ? '共同帳戶' : (accOwner === 'userA' ? '大狗狗🐕' : '阿陞🐶'),
-        note: editingAccount
-          ? `📝 編輯帳戶餘額自動調整: ${accNickname} (${prevDisplay} ➔ ${valDisplay} ${accCurrency})`
-          : `🆕 新增帳戶設定初始餘額: ${accNickname} (初始餘額: ${valDisplay} ${accCurrency})`,
-        timestamp: new Date().toISOString()
-      };
+      let updatedAccounts = [...accounts];
+
+      // Reset default flags if this one is selected as default
+      if (isDefaultExpense) {
+        updatedAccounts = updatedAccounts.map(a => {
+          if (a.owner === accOwner && a.currency === accCurrency) {
+            return { ...a, isDefaultExpense: false };
+          }
+          return a;
+        });
+      }
+      if (isDefaultIncome) {
+        updatedAccounts = updatedAccounts.map(a => {
+          if (a.owner === accOwner && a.currency === accCurrency) {
+            return { ...a, isDefaultIncome: false };
+          }
+          return a;
+        });
+      }
+      if (isDefaultSettle) {
+        updatedAccounts = updatedAccounts.map(a => {
+          if (a.owner === accOwner && a.currency === accCurrency) {
+            return { ...a, isDefaultSettle: false };
+          }
+          return a;
+        });
+      }
+
+      const nextId = editingAccount ? editingAccount.id : ('acc_' + Date.now());
+      const prevBalance = editingAccount ? editingAccount.balance : 0;
+      const balanceDiff = val - prevBalance;
+
+      let txRecord = null;
+      if (balanceDiff !== 0) {
+        const isUs = accCurrency === 'USD';
+        const prevDisplay = editingAccount 
+          ? (editingAccount.type === 'credit' && editingAccount.balance < 0 ? `-$${Math.abs(editingAccount.balance).toLocaleString()}` : `$${editingAccount.balance.toLocaleString()}`)
+          : '$0';
+        const valDisplay = accType === 'credit' && val < 0 ? `-$${Math.abs(val).toLocaleString()}` : `$${val.toLocaleString()}`;
+        const changeText = balanceDiff > 0 ? `增加 $${balanceDiff.toLocaleString()}` : `減少 $${Math.abs(balanceDiff).toLocaleString()}`;
+        
+        const confirmMessage = editingAccount
+          ? `⚠️ 偵測到帳戶餘額變更！\n【${finalNickname}】的餘額將由 ${prevDisplay} ${accCurrency} 變更為 ${valDisplay} ${accCurrency}（${changeText}）。\n\n系統將自動產生一筆「餘額校正」紀錄以留下審計軌跡，是否確定儲存？`
+          : `🆕 您為新帳戶【${finalNickname}】設定了初始餘額 ${valDisplay} ${accCurrency}。\n\n系統將自動產生一筆「餘額校正」紀錄作為初始帳面軌跡，是否確定儲存？`;
+
+        const confirmSave = await customConfirm(confirmMessage, "儲存變更確認");
+        if (!confirmSave) return;
+
+        const totalTwd = isUs ? Math.round(balanceDiff * (currentFxRate || 31.5)) : balanceDiff;
+
+        txRecord = {
+          date: new Date().toISOString().split('T')[0],
+          month: new Date().toISOString().slice(0, 7),
+          type: 'calibrate',
+          category: '餘額校正',
+          total: Math.abs(totalTwd),
+          twdDiff: totalTwd,
+          usdAmount: isUs ? Math.abs(balanceDiff) : 0,
+          usdDiff: isUs ? balanceDiff : 0,
+          accountId: nextId,
+          payer: accOwner === 'joint' ? '共同帳戶' : (accOwner === 'userA' ? '大狗狗🐕' : '阿陞🐶'),
+          note: editingAccount
+            ? `📝 編輯帳戶餘額自動調整: ${finalNickname} (${prevDisplay} ➔ ${valDisplay} ${accCurrency})`
+            : `🆕 新增帳戶設定初始餘額: ${finalNickname} (初始餘額: ${valDisplay} ${accCurrency})`,
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      const cleanNum = (accNumber || '').trim();
+      const cleanBillingDay = accType === 'credit' ? (parseInt(billingDay, 10) || 10) : null;
+      const cleanLinkedBank = accType === 'credit' ? (isAutoPay ? (linkedBankId || null) : null) : null;
+      const cleanAutoPay = accType === 'credit' ? Boolean(isAutoPay) : null;
+
+      if (editingAccount) {
+        // Edit mode
+        updatedAccounts = updatedAccounts.map(a => {
+          if (a.id === editingAccount.id) {
+            return {
+              ...a,
+              owner: accOwner,
+              type: accType,
+              name: finalName,
+              nickname: finalNickname,
+              icon: finalIcon,
+              accountNumber: cleanNum,
+              balance: val,
+              currency: accCurrency,
+              isDefaultExpense,
+              isDefaultIncome,
+              isDefaultSettle,
+              linkedBankAccountId: cleanLinkedBank,
+              billingDay: cleanBillingDay,
+              autoPay: cleanAutoPay
+            };
+          }
+          return a;
+        });
+      } else {
+        // Add mode
+        const newAcc = {
+          id: nextId,
+          owner: accOwner,
+          type: accType,
+          name: finalName,
+          nickname: finalNickname,
+          icon: finalIcon,
+          accountNumber: cleanNum,
+          balance: val,
+          currency: accCurrency,
+          isDefaultExpense,
+          isDefaultIncome,
+          isDefaultSettle,
+          linkedBankAccountId: cleanLinkedBank,
+          billingDay: cleanBillingDay,
+          autoPay: cleanAutoPay,
+          createdAt: new Date().toISOString()
+        };
+        updatedAccounts.push(newAcc);
+      }
+
+      const finalAssets = { ...assets, accounts: updatedAccounts };
+      if (txRecord) {
+        onTransaction(finalAssets, txRecord);
+      } else {
+        setAssets(finalAssets);
+      }
+      setShowModal(false);
+      await customAlert(editingAccount ? "🎉 帳戶編輯成功！" : "🎉 帳戶新增成功！", editingAccount ? "編輯帳戶" : "新增帳戶");
+    } catch (err) {
+      console.error("[AccountsManager] 儲存帳戶發生錯誤:", err);
+      logger.addLog('ERROR', `儲存帳戶失敗: ${err.message}`, err);
+      await customAlert("❌ 儲存帳戶失敗：" + err.message, "儲存錯誤");
     }
-
-    if (editingAccount) {
-      // Edit mode
-      updatedAccounts = updatedAccounts.map(a => {
-        if (a.id === editingAccount.id) {
-          return {
-            ...a,
-            owner: accOwner,
-            type: accType,
-            name: finalName,
-            nickname: finalNickname,
-            icon: finalIcon,
-            accountNumber: accNumber.trim(),
-            balance: val,
-            currency: accCurrency,
-            isDefaultExpense,
-            isDefaultIncome,
-            isDefaultSettle,
-            linkedBankAccountId: accType === 'credit' ? (isAutoPay ? linkedBankId : null) : null,
-            billingDay: accType === 'credit' ? Number(billingDay) : null,
-            autoPay: accType === 'credit' ? isAutoPay : null
-          };
-        }
-        return a;
-      });
-      await customAlert("🎉 帳戶編輯成功！", "編輯帳戶");
-    } else {
-      // Add mode
-      const newAcc = {
-        id: nextId,
-        owner: accOwner,
-        type: accType,
-        name: finalName,
-        nickname: finalNickname,
-        icon: finalIcon,
-        accountNumber: accNumber.trim(),
-        balance: val,
-        currency: accCurrency,
-        isDefaultExpense,
-        isDefaultIncome,
-        isDefaultSettle,
-        linkedBankAccountId: accType === 'credit' ? (isAutoPay ? linkedBankId : null) : null,
-        billingDay: accType === 'credit' ? Number(billingDay) : null,
-        autoPay: accType === 'credit' ? isAutoPay : null,
-        createdAt: new Date().toISOString()
-      };
-      updatedAccounts.push(newAcc);
-      await customAlert("🎉 帳戶新增成功！", "新增帳戶");
-    }
-
-    const finalAssets = { ...assets, accounts: updatedAccounts };
-    if (txRecord) {
-      onTransaction(finalAssets, txRecord);
-    } else {
-      setAssets(finalAssets);
-    }
-    setShowModal(false);
   };
 
   // Delete Account with Safeguard
@@ -726,7 +736,7 @@ const AccountsManager = ({
           {/* Section 3: PARTNER ACCOUNTS */}
           {renderOwnerSection(
             partnerKey,
-            partnerKey === 'userA' ? "🐕 大狗狗的個人帳戶 (伴侶唯讀)" : "🐶 阿陞的個人帳戶 (伴侶唯讀)",
+            partnerKey === 'userA' ? "🐕 大狗狗的個人帳戶" : "🐶 阿陞的個人帳戶",
             partnerKey === 'userA' ? '#AF52DE' : '#30D158'
           )}
         </div>

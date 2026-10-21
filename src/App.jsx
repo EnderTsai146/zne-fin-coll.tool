@@ -907,10 +907,6 @@ function App() {
       }
     }
 
-    if (window.location.hostname === 'localhost') {
-      console.log("[DEV MOCK] saveToCloud:", cleanAssets);
-      return;
-    }
     const docRef = doc(db, "finance", "data");
     setDoc(docRef, cleanAssets, { merge: true }).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
   };
@@ -3210,12 +3206,8 @@ function App() {
           } catch (e) { /* ignore */ }
         }
 
-        if (window.location.hostname === 'localhost') {
-          console.log("[DEV MOCK] saveToCloud:", cleanAssets);
-        } else {
-          const docRef = doc(db, "finance", "data");
-          setDoc(docRef, cleanAssets, { merge: true }).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
-        }
+        const docRef = doc(db, "finance", "data");
+        setDoc(docRef, cleanAssets, { merge: true }).catch(async (err) => await customAlert("連線錯誤：" + err.message, "連線錯誤"));
       }
       return cleanAssets;
     });

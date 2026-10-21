@@ -111,11 +111,16 @@ function parseSingleBlock(text, accounts, defaultUserKey, categories) {
     }
     // C. 帳戶辨識 (#帳戶名稱)
     else if (token.startsWith('#')) {
-      const accQuery = token.substring(1).toLowerCase();
-      const matched = accounts.find(a => 
-        (a.nickname && a.nickname.toLowerCase().includes(accQuery)) || 
-        (a.name && a.name.toLowerCase().includes(accQuery))
-      );
+      const accQuery = token.substring(1).toLowerCase().replace(/[\s_]/g, '');
+      const matched = accounts.find(a => {
+        const anick = (a.nickname || '').toLowerCase().replace(/[\s_]/g, '');
+        const aname = (a.name || '').toLowerCase().replace(/[\s_]/g, '');
+        return anick === accQuery || aname === accQuery;
+      }) || accounts.find(a => {
+        const anick = (a.nickname || '').toLowerCase().replace(/[\s_]/g, '');
+        const aname = (a.name || '').toLowerCase().replace(/[\s_]/g, '');
+        return anick.includes(accQuery) || accQuery.includes(anick) || aname.includes(accQuery) || accQuery.includes(aname);
+      });
       if (matched) accountId = matched.id;
     }
     // D. 金額辨識
@@ -195,6 +200,10 @@ const MarkdownQuickEntry = ({
   const [markdownText, setMarkdownText] = useState('');
   const textareaRef = useRef(null);
 
+  // 💡 Mention 索引選單狀態 (@對象/日期 或 #帳戶)
+  const [activeMention, setActiveMention] = useState(null); // { symbol: '@' | '#', query: '', startIndex: number, endIndex: number }
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   // 每次載入或點開即自動聚焦輸入框彈出鍵盤
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -205,6 +214,36 @@ const MarkdownQuickEntry = ({
     return () => clearTimeout(timer);
   }, []);
 
+  // 偵測游標前是否正在輸入 @ 或 #
+  const detectMention = (text, cursor) => {
+    const textBeforeCursor = text.substring(0, cursor);
+    const match = textBeforeCursor.match(/(?:^|[\s\n])([@#])([^\s\n]*)$/);
+    if (!match) return null;
+    const symbol = match[1];
+    const query = match[2];
+    const startIndex = cursor - query.length - 1;
+    return { symbol, query, startIndex, endIndex: cursor };
+  };
+
+  // 文字變更處理
+  const handleTextChange = (e) => {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setMarkdownText(val);
+    const m = detectMention(val, cursor);
+    setActiveMention(m);
+    setSelectedIndex(0);
+  };
+
+  // 游標移動或點擊時更新 Mention 狀態
+  const handleSelectOrClick = () => {
+    if (!textareaRef.current) return;
+    const cursor = textareaRef.current.selectionStart;
+    const m = detectMention(markdownText, cursor);
+    setActiveMention(m);
+    setSelectedIndex(0);
+  };
+
   // 解析 Markdown
   const parsedRecords = useMemo(() => {
     return parseMarkdownExpenses(markdownText, accounts, userKey, expenseCategories);
@@ -213,7 +252,73 @@ const MarkdownQuickEntry = ({
   const activeRecord = parsedRecords[0] || null;
   const isMultiple = parsedRecords.length > 1;
 
-  // 插入標籤文字輔助函式
+  // Mention 選項清單 (實時依 query 模糊篩選)
+  const mentionOptions = useMemo(() => {
+    if (!activeMention) return [];
+    const q = (activeMention.query || '').toLowerCase();
+
+    if (activeMention.symbol === '@') {
+      const allAt = [
+        { label: '@共同', value: '@共同', desc: '🏫 共同公費分攤 (50/50)', icon: '🏫', keywords: '共同 公費 joint 50/50' },
+        { label: '@阿陞', value: '@阿陞', desc: '🐶 阿陞個人支出', icon: '🐶', keywords: '阿陞 阿升 陞 userb' },
+        { label: '@小得', value: '@小得', desc: '🐕 大狗狗 / 小得個人支出', icon: '🐕', keywords: '小得 大狗狗 得 狗 usera' },
+        { label: '@今日', value: '@今日', desc: '📅 今日消費 (預設)', icon: '📅', keywords: '今日 今天 today' },
+        { label: '@昨日', value: '@昨日', desc: '📅 昨天消費', icon: '📅', keywords: '昨日 昨天 yesterday' },
+        { label: '@前天', value: '@前天', desc: '📅 前天消費', icon: '📅', keywords: '前天 beforeyesterday' },
+      ];
+      if (!q) return allAt;
+      return allAt.filter(item =>
+        item.label.toLowerCase().includes(q) ||
+        item.desc.toLowerCase().includes(q) ||
+        (item.keywords && item.keywords.toLowerCase().includes(q))
+      );
+    }
+
+    if (activeMention.symbol === '#') {
+      const allHash = accounts.map(acc => {
+        const nick = acc.nickname || acc.name;
+        const cleanTag = nick.replace(/\s+/g, '');
+        const icon = acc.icon || (acc.type === 'credit' ? '💳' : (acc.type === 'cash' ? '💵' : '🏦'));
+        const typeLabel = acc.type === 'credit' ? '信用卡' : (acc.type === 'cash' ? '現金' : '活儲');
+        const ownerLabel = acc.owner === 'joint' ? '共同' : (acc.owner === 'userA' ? '小得' : '阿陞');
+        const balText = `$${(Number(acc.balance) || 0).toLocaleString()} ${acc.currency}`;
+        return {
+          label: `#${nick}`,
+          value: `#${cleanTag}`,
+          desc: `${ownerLabel} · ${typeLabel} · 餘額 ${balText}`,
+          icon: icon,
+          account: acc,
+          searchStr: `${nick} ${acc.name || ''} ${cleanTag} ${ownerLabel} ${typeLabel} ${acc.currency}`.toLowerCase()
+        };
+      });
+      if (!q) return allHash;
+      return allHash.filter(item => item.searchStr.includes(q));
+    }
+
+    return [];
+  }, [activeMention, accounts]);
+
+  // 套用 Mention 選項到輸入框
+  const applyMentionOption = (option) => {
+    if (!textareaRef.current || !activeMention) return;
+    const el = textareaRef.current;
+    const val = el.value;
+    const before = val.substring(0, activeMention.startIndex);
+    const after = val.substring(activeMention.endIndex);
+    // 檢查後面是否已經有空白
+    const trailingSpace = after.startsWith(' ') ? '' : ' ';
+    const inserted = option.value + trailingSpace;
+    const nextVal = before + inserted + after;
+    setMarkdownText(nextVal);
+    setActiveMention(null);
+    setTimeout(() => {
+      el.focus();
+      const newPos = before.length + inserted.length;
+      el.setSelectionRange(newPos, newPos);
+    }, 20);
+  };
+
+  // 插入標籤文字輔助函式 (點擊下方 chips)
   const insertText = (str) => {
     if (!textareaRef.current) return;
     const el = textareaRef.current;
@@ -224,14 +329,11 @@ const MarkdownQuickEntry = ({
     setMarkdownText(newVal);
     setTimeout(() => {
       el.focus();
-      el.setSelectionRange(start + str.length, start + str.length);
+      const newPos = start + str.length;
+      el.setSelectionRange(newPos, newPos);
+      const m = detectMention(newVal, newPos);
+      setActiveMention(m);
     }, 20);
-  };
-
-  // 快捷範例帶入
-  const handleLoadRamenExample = () => {
-    setMarkdownText(`500 晚餐 @共同 #Cube卡\n- 220 牛肉拉麵\n- 280 螃蟹拉麵`);
-    setTimeout(() => textareaRef.current?.focus(), 50);
   };
 
   // 執行送出
@@ -386,8 +488,33 @@ const MarkdownQuickEntry = ({
     });
   };
 
-  // 鍵盤快捷鍵 (⌘ + Enter 或 Ctrl + Enter 直接送出)
+  // 鍵盤快捷鍵處理 (含 Mention 選單上下導覽與 Enter 送出)
   const handleKeyDown = (e) => {
+    // 若 Mention 選單正在顯示且有候選項
+    if (activeMention && mentionOptions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(i => (i + 1) % mentionOptions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(i => (i - 1 + mentionOptions.length) % mentionOptions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        applyMentionOption(mentionOptions[selectedIndex] || mentionOptions[0]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setActiveMention(null);
+        return;
+      }
+    }
+
+    // 鍵盤快速送出記帳 (⌘ + Enter 或 Ctrl + Enter)
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       handleSubmit();
@@ -402,7 +529,7 @@ const MarkdownQuickEntry = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontSize: '1.05rem', fontWeight: '850', color: '#fff' }}>⚡ Markdown 便籤速記</span>
           <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '12px', background: 'rgba(10, 132, 255, 0.2)', color: '#0a84ff', border: '0.5px solid rgba(10, 132, 255, 0.3)' }}>
-            直覺輸入
+            輸入 @ 或 # 喚醒選單
           </span>
         </div>
         <button
@@ -432,16 +559,20 @@ const MarkdownQuickEntry = ({
           border: '1px solid rgba(255, 255, 255, 0.12)',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)',
           padding: '16px',
-          marginBottom: '16px'
+          marginBottom: '16px',
+          position: 'relative'
         }}
       >
         {/* 多行輸入框 */}
         <textarea
           ref={textareaRef}
           value={markdownText}
-          onChange={(e) => setMarkdownText(e.target.value)}
+          onChange={handleTextChange}
+          onSelect={handleSelectOrClick}
+          onClick={handleSelectOrClick}
+          onKeyUp={handleSelectOrClick}
           onKeyDown={handleKeyDown}
-          placeholder="💡 輸入格式範例：&#10;500 晚餐 @共同 #Cube卡&#10;- 220 牛肉拉麵&#10;- 280 螃蟹拉麵&#10;&#10;（若不打 500，系統會自動加總小票；輸入 --- 可一次記多筆）"
+          placeholder="💡 輸入格式範例：&#10;500 晚餐 @共同 #Cube卡&#10;- 220 牛肉拉麵&#10;- 280 螃蟹拉麵&#10;&#10;（打 @ 喚醒對象與日期，打 # 喚醒扣款帳戶選單）"
           style={{
             width: '100%',
             minHeight: '130px',
@@ -458,22 +589,99 @@ const MarkdownQuickEntry = ({
           }}
         />
 
+        {/* 🌟 實時動態索引選單 (Mention Autocomplete Dropdown) */}
+        {activeMention && mentionOptions.length > 0 && (
+          <div
+            style={{
+              marginTop: '10px',
+              marginBottom: '10px',
+              background: 'rgba(22, 22, 26, 0.96)',
+              backdropFilter: 'blur(25px)',
+              WebkitBackdropFilter: 'blur(25px)',
+              border: '1.5px solid rgba(10, 132, 255, 0.45)',
+              borderRadius: '14px',
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.7), 0 0 16px rgba(10, 132, 255, 0.25)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 12px',
+              background: 'rgba(10, 132, 255, 0.15)',
+              borderBottom: '1px solid rgba(10, 132, 255, 0.2)',
+              fontSize: '0.72rem',
+              fontWeight: '800',
+              color: '#64d2ff'
+            }}>
+              <span>
+                {activeMention.symbol === '@' ? '👥 選擇對象或日期標籤' : '💳 選擇扣款帳戶標籤'}
+                {activeMention.query && <span style={{ opacity: 0.8, marginLeft: '4px' }}>(搜尋: {activeMention.query})</span>}
+              </span>
+              <span style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.45)' }}>
+                ↑↓ 選擇 · Enter 確認 · Esc 關閉
+              </span>
+            </div>
+
+            {/* List */}
+            <div style={{ maxHeight: '210px', overflowY: 'auto' }}>
+              {mentionOptions.map((opt, idx) => {
+                const isSelected = idx === selectedIndex;
+                return (
+                  <div
+                    key={idx}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      applyMentionOption(opt);
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      applyMentionOption(opt);
+                    }}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '9px 12px',
+                      cursor: 'pointer',
+                      background: isSelected ? 'rgba(10, 132, 255, 0.28)' : 'transparent',
+                      borderLeft: isSelected ? '3px solid #0a84ff' : '3px solid transparent',
+                      transition: 'background 0.08s ease',
+                      borderBottom: idx < mentionOptions.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.15rem' }}>{opt.icon}</span>
+                      <span style={{ fontSize: '0.88rem', fontWeight: '800', color: isSelected ? '#fff' : 'rgba(255,255,255,0.9)' }}>
+                        {opt.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: isSelected ? '#a8d5ff' : 'rgba(255,255,255,0.5)', textAlign: 'right' }}>
+                      {opt.desc}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 快捷點擊輸入輔助標籤 (Tap-to-insert chips) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px', paddingTop: '10px', borderTop: '0.5px solid rgba(255, 255, 255, 0.08)' }}>
-          <span style={{ fontSize: '0.72rem', color: 'rgba(255, 255, 255, 0.4)', alignSelf: 'center', marginRight: '2px' }}>快速插入:</span>
+          <span style={{ fontSize: '0.72rem', color: 'rgba(255, 255, 255, 0.4)', alignSelf: 'center', marginRight: '2px' }}>快捷插入:</span>
           <button type="button" onClick={() => insertText(' @共同')} style={chipBtnStyle}>@共同</button>
           <button type="button" onClick={() => insertText(' @阿陞')} style={chipBtnStyle}>@阿陞</button>
           <button type="button" onClick={() => insertText(' @小得')} style={chipBtnStyle}>@小得</button>
           <button type="button" onClick={() => insertText('\n- ')} style={chipBtnStyle}>- 小票</button>
           <button type="button" onClick={() => insertText('\n---\n')} style={chipBtnStyle}>--- 分隔</button>
-          {accounts.slice(0, 3).map(acc => (
+          {accounts.slice(0, 4).map(acc => (
             <button key={acc.id} type="button" onClick={() => insertText(` #${acc.nickname || acc.name}`)} style={chipBtnStyle}>
               #{acc.nickname || acc.name}
             </button>
           ))}
-          <button type="button" onClick={handleLoadRamenExample} style={{ ...chipBtnStyle, color: '#ffd60a', borderColor: 'rgba(255, 214, 10, 0.3)' }}>
-            🍜 填入拉麵範例
-          </button>
         </div>
       </div>
 
