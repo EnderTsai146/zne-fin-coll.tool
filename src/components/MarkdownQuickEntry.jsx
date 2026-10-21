@@ -72,7 +72,8 @@ function parseSingleBlock(text, accounts, defaultUserKey, categories) {
 
   // 2. 解析主行 Meta 資訊 (日期、歸屬、帳戶、金額、類別、備註)
   const metaText = metaLines.join(' ');
-  const tokens = metaText.split(/\s+/).filter(Boolean);
+  const cleanMeta = metaText.replace(/＠/g, '@').replace(/＃/g, '#').replace(/([^\s])([@#])/g, '$1 $2');
+  const tokens = cleanMeta.split(/\s+/).filter(Boolean);
 
   let date = new Date().toISOString().split('T')[0];
   let owner = 'joint'; // 預設共同記帳
@@ -199,6 +200,7 @@ const MarkdownQuickEntry = ({
 }) => {
   const [markdownText, setMarkdownText] = useState('');
   const textareaRef = useRef(null);
+  const mentionMenuRef = useRef(null);
 
   // 💡 Mention 索引選單狀態 (@對象/日期 或 #帳戶)
   const [activeMention, setActiveMention] = useState(null); // { symbol: '@' | '#', query: '', startIndex: number, endIndex: number }
@@ -214,15 +216,36 @@ const MarkdownQuickEntry = ({
     return () => clearTimeout(timer);
   }, []);
 
-  // 偵測游標前是否正在輸入 @ 或 #
+  // 當 Mention 選單喚醒時，平滑滾動至可視區域
+  useEffect(() => {
+    if (activeMention && mentionMenuRef.current) {
+      try {
+        mentionMenuRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (_) {}
+    }
+  }, [activeMention]);
+
+  // 偵測游標前是否正在輸入 @ 或 # (支援半形/全形 ＠ ＃，無須前綴空格，相容繁中注音輸入)
   const detectMention = (text, cursor) => {
+    if (cursor === undefined || cursor === null || cursor < 0) return null;
     const textBeforeCursor = text.substring(0, cursor);
-    const match = textBeforeCursor.match(/(?:^|[\s\n])([@#])([^\s\n]*)$/);
+    
+    // 支援半形 @ # 與全形 ＠ ＃
+    const match = textBeforeCursor.match(/([@#＠＃])([^\s\n@#＠＃]*)$/);
     if (!match) return null;
-    const symbol = match[1];
+
+    const rawSymbol = match[1];
     const query = match[2];
     const startIndex = cursor - query.length - 1;
-    return { symbol, query, startIndex, endIndex: cursor };
+
+    // 排除 email (如 test@gmail.com 不觸發 @)
+    if ((rawSymbol === '@' || rawSymbol === '＠') && startIndex > 0) {
+      const prevChar = textBeforeCursor[startIndex - 1];
+      if (/[a-zA-Z0-9]/.test(prevChar)) return null;
+    }
+
+    const symbol = (rawSymbol === '＠') ? '@' : ((rawSymbol === '＃') ? '#' : rawSymbol);
+    return { symbol, rawSymbol, query, startIndex, endIndex: cursor };
   };
 
   // 文字變更處理
@@ -235,11 +258,12 @@ const MarkdownQuickEntry = ({
     setSelectedIndex(0);
   };
 
-  // 游標移動或點擊時更新 Mention 狀態
+  // 游標移動或點擊時更新 Mention 狀態 (直接讀取 DOM 最新值，避免 React 狀態競爭覆蓋)
   const handleSelectOrClick = () => {
     if (!textareaRef.current) return;
+    const val = textareaRef.current.value;
     const cursor = textareaRef.current.selectionStart;
-    const m = detectMention(markdownText, cursor);
+    const m = detectMention(val, cursor);
     setActiveMention(m);
     setSelectedIndex(0);
   };
@@ -305,9 +329,13 @@ const MarkdownQuickEntry = ({
     const val = el.value;
     const before = val.substring(0, activeMention.startIndex);
     const after = val.substring(activeMention.endIndex);
+    
+    // 若前面有字元且非空白/換行，自動補上前置空格
+    const needLeadingSpace = before.length > 0 && !/[\s\n]/.test(before.slice(-1));
+    const leadingSpace = needLeadingSpace ? ' ' : '';
     // 檢查後面是否已經有空白
     const trailingSpace = after.startsWith(' ') ? '' : ' ';
-    const inserted = option.value + trailingSpace;
+    const inserted = leadingSpace + option.value + trailingSpace;
     const nextVal = before + inserted + after;
     setMarkdownText(nextVal);
     setActiveMention(null);
@@ -575,7 +603,7 @@ const MarkdownQuickEntry = ({
           placeholder="💡 輸入格式範例：&#10;500 晚餐 @共同 #Cube卡&#10;- 220 牛肉拉麵&#10;- 280 螃蟹拉麵&#10;&#10;（打 @ 喚醒對象與日期，打 # 喚醒扣款帳戶選單）"
           style={{
             width: '100%',
-            minHeight: '130px',
+            minHeight: '100px',
             background: 'transparent',
             border: 'none',
             outline: 'none',
@@ -592,16 +620,19 @@ const MarkdownQuickEntry = ({
         {/* 🌟 實時動態索引選單 (Mention Autocomplete Dropdown) */}
         {activeMention && mentionOptions.length > 0 && (
           <div
+            ref={mentionMenuRef}
             style={{
-              marginTop: '10px',
-              marginBottom: '10px',
-              background: 'rgba(22, 22, 26, 0.96)',
-              backdropFilter: 'blur(25px)',
-              WebkitBackdropFilter: 'blur(25px)',
-              border: '1.5px solid rgba(10, 132, 255, 0.45)',
-              borderRadius: '14px',
-              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.7), 0 0 16px rgba(10, 132, 255, 0.25)',
-              overflow: 'hidden'
+              marginTop: '12px',
+              marginBottom: '12px',
+              background: 'rgba(20, 20, 26, 0.98)',
+              backdropFilter: 'blur(30px)',
+              WebkitBackdropFilter: 'blur(30px)',
+              border: '2px solid #0a84ff',
+              borderRadius: '16px',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(10, 132, 255, 0.4)',
+              overflow: 'hidden',
+              position: 'relative',
+              zIndex: 50
             }}
           >
             {/* Header */}
